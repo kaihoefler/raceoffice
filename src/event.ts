@@ -1,5 +1,6 @@
 import type { Race } from "./race";
 import type { Athlete } from "./athlete";
+import type { AgeGroup } from "./agegroup";
 
 
 export type Event = {
@@ -12,6 +13,7 @@ export type Event = {
 export type FullEvent = Event & {
   
   races: Race[];
+  ageGroups: AgeGroup[];
   athletes: Athlete[];
 };
 

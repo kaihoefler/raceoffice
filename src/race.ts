@@ -1,9 +1,10 @@
-
+import type { AgeGroup } from "./agegroup";
 
 export type Race = {
   id: string;
   name: string;
   slug: string;
+  ageGroup: AgeGroup;
   eventId: string;
   resutls: RaceResults[];
 
