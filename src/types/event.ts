@@ -7,13 +7,13 @@ export type Event = {
   id: string;
   slug: string;
   name: string;
+  ageGroups: AgeGroup[];
   isActive: boolean;
 };
 
 export type FullEvent = Event & {
   
   races: Race[];
-  ageGroups: AgeGroup[];
   athletes: Athlete[];
 };
 
