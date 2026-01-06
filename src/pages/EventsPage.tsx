@@ -17,6 +17,7 @@ import {
   IconButton,
 } from "@mui/material";
 import EventEditor, { type EventDraft } from "../components/EventEditor";
+import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
 import type { Event, EventList } from "../types/event";
 import type { AgeGroup } from "../types/agegroup";
 
@@ -24,10 +25,7 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 
 export default function EventsPage() {
-  const [eventList, setEventList] = useState<EventList>({
-    activeEventId: null,
-    events: [],
-  });
+  const { data: eventList, update } = useRealtimeDoc<EventList>("eventList");
 
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -37,6 +35,10 @@ export default function EventsPage() {
   });
 
   const [showEditor, setShowEditor] = useState(false);
+
+  // solange kein snapshot da ist
+  if (!eventList) return null;
+
 
   function resetForm() {
     setEditingId(null);
@@ -63,10 +65,7 @@ export default function EventsPage() {
   }
 
   function activateEvent(id: string) {
-    setEventList((prev) => ({
-      ...prev,
-      activeEventId: id,
-    }));
+    update((prev) => ({ ...prev, activeEventId: id }));
   }
 
   function handleSave(draft: EventDraft) {
@@ -92,10 +91,7 @@ export default function EventsPage() {
           })),
       };
 
-      setEventList((prev) => ({
-        ...prev,
-        events: [newEvent, ...prev.events],
-      }));
+      update((prev) => ({ ...prev, events: [newEvent, ...prev.events] }));
 
       resetForm();
       return;
@@ -110,7 +106,7 @@ export default function EventsPage() {
         eventId: editingId,
       }));
 
-    setEventList((prev) => ({
+    update((prev) => ({
       ...prev,
       events: prev.events.map((e) =>
         e.id === editingId ? { ...e, name, slug, ageGroups: normalizedAgeGroups } : e
