@@ -1,5 +1,5 @@
 // src/pages/EventsPage.tsx
-import {  useState } from "react";
+import { useState } from "react";
 import {
   Box,
   Button,
@@ -10,45 +10,44 @@ import {
   TableRow,
   Typography,
   Tooltip,
-  Card, CardContent, CardHeader, Divider,
-  IconButton
+  Card,
+  CardContent,
+  CardHeader,
+  Divider,
+  IconButton,
 } from "@mui/material";
 import EventEditor, { type EventDraft } from "../components/EventEditor";
 import type { Event, EventList } from "../types/event";
 import type { AgeGroup } from "../types/agegroup";
 
-
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 
-
-
 export default function EventsPage() {
-  const [events, setEvents] = useState<EventList>([]);
+  const [eventList, setEventList] = useState<EventList>({
+    activeEventId: null,
+    events: [],
+  });
+
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [editorInitial, setEditorInitial] = useState({
     name: "",
-    isActive: false,
     ageGroups: [] as AgeGroup[],
   });
 
-  
   const [showEditor, setShowEditor] = useState(false);
 
-  
   function resetForm() {
     setEditingId(null);
     setShowEditor(false);
-    setEditorInitial({ name: "", isActive: false, ageGroups: [] as AgeGroup[] });
+    setEditorInitial({ name: "", ageGroups: [] as AgeGroup[] });
   }
-
 
   function startEdit(e: Event) {
     setEditingId(e.id);
     setEditorInitial({
       name: e.name,
-      isActive: e.isActive,
       ageGroups: e.ageGroups ?? [],
     });
     setShowEditor(true);
@@ -58,28 +57,25 @@ export default function EventsPage() {
     setEditingId(null);
     setEditorInitial({
       name: "",
-      isActive: false,
       ageGroups: [],
     });
     setShowEditor(true);
   }
 
-
   function activateEvent(id: string) {
-    setEvents((prev) =>
-      prev.map((e) => ({
-        ...e,
-        isActive: e.id === id,
-      }))
-    );
+    setEventList((prev) => ({
+      ...prev,
+      activeEventId: id,
+    }));
   }
 
   function handleSave(draft: EventDraft) {
     const name = draft.name.trim();
     if (!name) return;
 
-    const slug = draft.slug; // bereits im Editor berechnet
+    const slug = draft.slug;
 
+    // CREATE
     if (editingId === null) {
       const newEventId = crypto.randomUUID();
 
@@ -87,7 +83,6 @@ export default function EventsPage() {
         id: newEventId,
         name,
         slug,
-        isActive: draft.isActive,
         ageGroups: draft.ageGroups
           .filter((ag) => ag.name.trim() !== "")
           .map((ag) => ({
@@ -97,15 +92,16 @@ export default function EventsPage() {
           })),
       };
 
-      setEvents((prev) => [
-        newEvent,
-        ...prev.map((e) => ({ ...e, isActive: newEvent.isActive ? false : e.isActive })),
-      ]);
+      setEventList((prev) => ({
+        ...prev,
+        events: [newEvent, ...prev.events],
+      }));
 
       resetForm();
       return;
     }
 
+    // UPDATE
     const normalizedAgeGroups = draft.ageGroups
       .filter((ag) => ag.name.trim() !== "")
       .map((ag) => ({
@@ -114,36 +110,28 @@ export default function EventsPage() {
         eventId: editingId,
       }));
 
-    setEvents((prev) =>
-      prev.map((e) => {
-        const updated =
-          e.id === editingId
-            ? { ...e, name, slug, isActive: draft.isActive, ageGroups: normalizedAgeGroups }
-            : { ...e };
-
-        if (draft.isActive) {
-          updated.isActive = updated.id === editingId;
-        }
-
-        return updated;
-      })
-    );
+    setEventList((prev) => ({
+      ...prev,
+      events: prev.events.map((e) =>
+        e.id === editingId ? { ...e, name, slug, ageGroups: normalizedAgeGroups } : e
+      ),
+    }));
 
     resetForm();
   }
 
-
   return (
     <Box>
-
-
       {/* List Card */}
       <Card variant="outlined">
-        <CardHeader title="Events" action={
-          <IconButton aria-label="New Event" onClick={startNewEvent}>
-            <AddIcon />
-          </IconButton>
-        } />
+        <CardHeader
+          title="Events"
+          action={
+            <IconButton aria-label="New Event" onClick={startNewEvent}>
+              <AddIcon />
+            </IconButton>
+          }
+        />
         <Divider />
         <CardContent>
           <Table size="small">
@@ -151,41 +139,59 @@ export default function EventsPage() {
               <TableRow>
                 <TableCell>Name</TableCell>
                 <TableCell>Slug</TableCell>
-                <TableCell>Active</TableCell>
+                {/* status column and actions at far right */}
+                <TableCell align="right">Status</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
 
             <TableBody>
-              {events.map((e) => (
-                <TableRow key={e.id} sx={{ ...(e.isActive && { backgroundColor: "action.selected", "& td": { fontWeight: 600 }, }), }}>
-                  <TableCell>{e.name}</TableCell>
+              {eventList.events.map((e) => {
+                const isActive = eventList.activeEventId === e.id;
 
-                  <TableCell sx={{ fontFamily: "monospace" }}>
-                    <Tooltip title={`ID: ${e.id}`} arrow>
-                      <span>{e.slug}</span>
-                    </Tooltip>
-                  </TableCell>
+                return (
+                  <TableRow
+                    key={e.id}
+                    sx={{
+                      ...(isActive && {
+                        backgroundColor: "action.selected",
+                        "& td": { fontWeight: 600 },
+                      }),
+                    }}
+                  >
+                    <TableCell>{e.name}</TableCell>
 
-                  <TableCell>{e.isActive ? "Yes" : "No"}</TableCell>
+                    <TableCell sx={{ fontFamily: "monospace" }}>
+                      <Tooltip title={`ID: ${e.id}`} arrow>
+                        <span>{e.slug}</span>
+                      </Tooltip>
+                    </TableCell>
 
-                  <TableCell align="right">
-                    {!e.isActive && (
+                    {/* Status control column */}
+                    <TableCell align="right">
                       <Button
                         size="small"
                         onClick={() => activateEvent(e.id)}
-                        disabled={e.isActive}
+                        disabled={isActive}
+                        variant={isActive ? "contained" : "outlined"}
+                        color={isActive ? "success" : "primary"}
                       >
-                        Activate
+                        {isActive ? "Active" : "Activate"}
                       </Button>
-                    )}
-                    <IconButton size="small" onClick={() => startEdit(e)} aria-label="Edit Event">
-                      <EditIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>))}
+                    </TableCell>
 
-              {events.length === 0 && (
+                    {/* Actions (edit etc.) */}
+                    <TableCell align="right">
+                      <IconButton size="small" onClick={() => startEdit(e)} aria-label="Edit Event">
+                        <EditIcon />
+                      </IconButton>
+                    </TableCell>
+
+                  </TableRow>
+                );
+              })}
+
+              {eventList.events.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4}>
                     <Typography color="text.secondary">No events yet.</Typography>
@@ -207,9 +213,5 @@ export default function EventsPage() {
         onCancel={resetForm}
       />
     </Box>
-
-
-
   );
 }
-

@@ -8,7 +8,6 @@ export type Event = {
   slug: string;
   name: string;
   ageGroups: AgeGroup[];
-  isActive: boolean;
 };
 
 export type FullEvent = Event & {
@@ -17,5 +16,12 @@ export type FullEvent = Event & {
   athletes: Athlete[];
 };
 
-export type EventList = Event[];
-
+/**
+ * EventList ist jetzt ein Container:
+ * - activeEventId: aktuell aktives Event (oder null)
+ * - events: die Event-Liste
+ */
+export type EventList = {
+  activeEventId: string | null;
+  events: Event[];
+};

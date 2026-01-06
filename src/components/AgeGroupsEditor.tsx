@@ -13,6 +13,7 @@ import {
     TableRow,
     TextField,
     Typography,
+    Tooltip,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
@@ -36,9 +37,22 @@ type Props = {
 };
 
 
+function slugify(name: string, gender: string): string {
+    if (!name.trim()) return "";
+    return (name.trim() + "_" + gender.trim())
+        .toLowerCase()
+        .replace(/ä/g, "ae")
+        .replace(/ö/g, "oe")
+        .replace(/ü/g, "ue")
+        .replace(/ß/g, "ss")
+        .replace(/[^a-z0-9_]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+}
+
 export default function AgeGroupsEditor({ value, onChange, eventId, title = "Age Groups" }: Props) {
     const [editingAgeGroupId, setEditingAgeGroupId] = useState<string | null>(null);
     const [editingBackup, setEditingBackup] = useState<AgeGroup | null>(null);
+
 
     function addRow() {
         const id = crypto.randomUUID();
@@ -46,6 +60,7 @@ export default function AgeGroupsEditor({ value, onChange, eventId, title = "Age
             id,
             name: "",
             gender: "mixed",
+            slug: "",
             eventId: eventId ?? "",
         };
 
@@ -92,7 +107,20 @@ export default function AgeGroupsEditor({ value, onChange, eventId, title = "Age
     }
 
     function updateField(id: string, patch: Partial<AgeGroup>) {
-        onChange(value.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+        onChange(
+            value.map((a) => {
+                if (a.id !== id) return a;
+
+                const next: AgeGroup = { ...a, ...patch };
+
+                // Wenn Name oder Gender geändert wird -> slug neu setzen
+                if (patch.name !== undefined || patch.gender !== undefined) {
+                    next.slug = slugify(next.name, next.gender);
+                }
+
+                return next;
+            })
+        );
     }
 
     return (
@@ -110,6 +138,7 @@ export default function AgeGroupsEditor({ value, onChange, eventId, title = "Age
                         <TableRow>
                             <TableCell>Name</TableCell>
                             <TableCell>Gender</TableCell>
+                            <TableCell>Slug</TableCell>
                             <TableCell align="right">Actions</TableCell>
                         </TableRow>
                     </TableHead>
@@ -152,6 +181,12 @@ export default function AgeGroupsEditor({ value, onChange, eventId, title = "Age
                                         ) : (
                                             ag.gender
                                         )}
+                                    </TableCell>
+
+                                    <TableCell sx={{ fontFamily: "monospace" }}>
+                                        <Tooltip title={`ID: ${ag.id}`} arrow>
+                                            <span>{ag.slug}</span>
+                                        </Tooltip>
                                     </TableCell>
 
                                     <TableCell align="right">

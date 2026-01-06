@@ -1,6 +1,6 @@
 // src/components/EventEditor.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Box, Button, Card, CardContent, CardHeader, Checkbox, Divider, FormControlLabel, Stack, TextField } from "@mui/material";
+import { Box, Button, Card, CardContent, CardHeader, Divider, Stack, TextField } from "@mui/material";
 
 import AgeGroupsEditor from "./AgeGroupsEditor";
 import type { AgeGroup } from "../types/agegroup";
@@ -8,7 +8,6 @@ import type { AgeGroup } from "../types/agegroup";
 export type EventDraft = {
   name: string;
   slug: string;
-  isActive: boolean;
   ageGroups: AgeGroup[];
 };
 
@@ -17,7 +16,6 @@ type Props = {
   mode: "new" | "edit";
   initial: {
     name: string;
-    isActive: boolean;
     ageGroups: AgeGroup[];
   };
   eventId?: string | null; // for passing to AgeGroupsEditor (optional)
@@ -39,19 +37,15 @@ function slugify(input: string): string {
 
 export default function EventEditor({ open, mode, initial, eventId, onSave, onCancel }: Props) {
   const [name, setName] = useState(initial.name);
-  const [isActive, setIsActive] = useState(initial.isActive);
   const [ageGroups, setAgeGroups] = useState<AgeGroup[]>(initial.ageGroups);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  // keep state in sync when switching between edit/new or selecting different events
   useEffect(() => {
     setName(initial.name);
-    setIsActive(initial.isActive);
     setAgeGroups(initial.ageGroups);
-  }, [initial.name, initial.isActive, initial.ageGroups]);
+  }, [initial.name, initial.ageGroups]);
 
-  // focus name when the editor opens
   useEffect(() => {
     if (open) {
       setTimeout(() => nameInputRef.current?.focus(), 0);
@@ -60,10 +54,9 @@ export default function EventEditor({ open, mode, initial, eventId, onSave, onCa
 
   const slug = useMemo(() => slugify(name), [name]);
 
-const isDirty =
-  name.trim() !== initial.name.trim() ||
-  isActive !== initial.isActive ||
-  ageGroups !== initial.ageGroups; 
+  const isDirty =
+    name.trim() !== initial.name.trim() ||
+    ageGroups.length !== initial.ageGroups.length;
 
   if (!open) return null;
 
@@ -82,11 +75,6 @@ const isDirty =
               inputRef={nameInputRef}
             />
 
-            <FormControlLabel
-              control={<Checkbox checked={isActive} onChange={(ev) => setIsActive(ev.target.checked)} />}
-              label="Active"
-            />
-
             <TextField
               label="Slug"
               value={slug}
@@ -102,7 +90,7 @@ const isDirty =
           <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
             <Button
               variant="contained"
-              onClick={() => onSave({ name, slug, isActive, ageGroups })}
+              onClick={() => onSave({ name, slug, ageGroups })}
               disabled={!name.trim()}
             >
               {mode === "edit" ? "Update" : "Create"}

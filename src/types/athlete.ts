@@ -1,4 +1,3 @@
-import type { AgeGroup } from "./agegroup";
 
 export type Athlete = {
   id: string;
@@ -6,7 +5,7 @@ export type Athlete = {
   firstName: string;
   lastName: string;
   bib: number | null;
-  ageGroup: AgeGroup | null;
+  ageGroupId: string | null;
   nation: string | null;
 
 };
