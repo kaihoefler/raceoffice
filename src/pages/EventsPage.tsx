@@ -16,16 +16,19 @@ import {
   Divider,
   IconButton,
 } from "@mui/material";
-import EventEditor, { type EventDraft } from "../components/EventEditor";
-import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
-import type { Event, EventList } from "../types/event";
-import type { AgeGroup } from "../types/agegroup";
 
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
+
+import EventEditor, { type EventDraft } from "../components/EventEditor";
+import type { Event } from "../types/event";
+import type { AgeGroup } from "../types/agegroup";
+
+import { useEventList } from "../providers/EventListProvider";
 
 export default function EventsPage() {
-  const { data: eventList, update } = useRealtimeDoc<EventList>("eventList");
+  const { eventList, setActiveEvent, saveEvent, deleteEvent } = useEventList();
 
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -38,7 +41,6 @@ export default function EventsPage() {
 
   // solange kein snapshot da ist
   if (!eventList) return null;
-
 
   function resetForm() {
     setEditingId(null);
@@ -64,54 +66,24 @@ export default function EventsPage() {
     setShowEditor(true);
   }
 
-  function activateEvent(id: string) {
-    update((prev) => ({ ...prev, activeEventId: id }));
+  function handleDelete(e: Event) {
+    const ok = window.confirm(`Event "${e.name}" wirklich löschen?`);
+    if (!ok) return;
+
+    deleteEvent(e);
+
+    // falls gerade dieses Event im Editor offen ist
+    if (editingId === e.id) resetForm();
   }
 
   function handleSave(draft: EventDraft) {
+    // UI-Validierung kann hier bleiben
     const name = draft.name.trim();
     if (!name) return;
 
-    const slug = draft.slug;
-
-    // CREATE
-    if (editingId === null) {
-      const newEventId = crypto.randomUUID();
-
-      const newEvent: Event = {
-        id: newEventId,
-        name,
-        slug,
-        ageGroups: draft.ageGroups
-          .filter((ag) => ag.name.trim() !== "")
-          .map((ag) => ({
-            ...ag,
-            name: ag.name.trim(),
-            eventId: newEventId,
-          })),
-      };
-
-      update((prev) => ({ ...prev, events: [newEvent, ...prev.events] }));
-
-      resetForm();
-      return;
-    }
-
-    // UPDATE
-    const normalizedAgeGroups = draft.ageGroups
-      .filter((ag) => ag.name.trim() !== "")
-      .map((ag) => ({
-        ...ag,
-        name: ag.name.trim(),
-        eventId: editingId,
-      }));
-
-    update((prev) => ({
-      ...prev,
-      events: prev.events.map((e) =>
-        e.id === editingId ? { ...e, name, slug, ageGroups: normalizedAgeGroups } : e
-      ),
-    }));
+    // Provider sollte Normalisierung/Trim etc. final übernehmen,
+    // aber wir geben hier schon den getrimmten Namen weiter.
+    saveEvent(editingId, { ...draft, name });
 
     resetForm();
   }
@@ -135,7 +107,6 @@ export default function EventsPage() {
               <TableRow>
                 <TableCell>Name</TableCell>
                 <TableCell>Slug</TableCell>
-                {/* status column and actions at far right */}
                 <TableCell align="right">Status</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
@@ -167,7 +138,7 @@ export default function EventsPage() {
                     <TableCell align="right">
                       <Button
                         size="small"
-                        onClick={() => activateEvent(e.id)}
+                        onClick={() => setActiveEvent(e.id)}
                         disabled={isActive}
                         variant={isActive ? "contained" : "outlined"}
                         color={isActive ? "success" : "primary"}
@@ -176,13 +147,30 @@ export default function EventsPage() {
                       </Button>
                     </TableCell>
 
-                    {/* Actions (edit etc.) */}
+                    {/* Actions */}
                     <TableCell align="right">
-                      <IconButton size="small" onClick={() => startEdit(e)} aria-label="Edit Event">
-                        <EditIcon />
-                      </IconButton>
-                    </TableCell>
+                      <Tooltip title="Edit" arrow>
+                        <IconButton
+                          size="small"
+                          onClick={() => startEdit(e)}
+                          aria-label="Edit Event"
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
 
+                      <Tooltip title="Delete" arrow>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => handleDelete(e)}
+                          aria-label="Delete Event"
+                          sx={{ ml: 0.5 }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -199,7 +187,7 @@ export default function EventsPage() {
         </CardContent>
       </Card>
 
-      {/* Edit/New Card */}
+      {/* Edit/New */}
       <EventEditor
         open={showEditor}
         mode={editingId ? "edit" : "new"}

@@ -3,14 +3,16 @@ export type Race = {
   id: string;
   name: string;
   slug: string;
+  isPointsRace: boolean; // if true, the race is a points race
+  isEliminationRace: boolean; // if true, the race is an elimination race
   ageGroupId: string;
   eventId: string;
-  resutls: RaceResults[];
+  raceResutls: RaceResult[];
 
 };
 
 
-export type RaceResults = {
+export type RaceResult = {
   bib: string;
   rank: number;
   points: number;
@@ -18,7 +20,6 @@ export type RaceResults = {
   dns: boolean;
   dsq: boolean;
   time: string;
-  raceId: string;
 };
 
 

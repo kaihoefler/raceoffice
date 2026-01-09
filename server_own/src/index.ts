@@ -23,6 +23,7 @@ await app.register(cors, {
 });
 
 // --- SQLite Setup (eine Datei, Windows-friendly) :contentReference[oaicite:6]{index=6}
+// TODO Dateipfad aus Umgebungsvariable auslesen
 const db = new Database("raceoffice.db");
 db.exec(`
   CREATE TABLE IF NOT EXISTS docs (
@@ -155,6 +156,7 @@ app.get("/ws/:docId", { websocket: true }, (socket, req) => {
 
         broadcastPatch(docId, next.rev, patch);
         socket.send(JSON.stringify({ ok: true, rev: next.rev }));
+        console.log("sent patch", docId, next.rev, patch);
     });
 
     socket.on("close", () => {
@@ -165,6 +167,7 @@ app.get("/ws/:docId", { websocket: true }, (socket, req) => {
 function noteSnapshot(socket: any, docId: string) {
     const doc = loadDoc(docId);
     socket.send(JSON.stringify({ type: "snapshot", docId, rev: doc.rev, data: doc.data }));
+    console.log("sent snapshot:", docId, doc.rev, doc.data);
 }
 
 const port = Number(process.env.PORT ?? 8787);

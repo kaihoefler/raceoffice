@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { applyPatch, compare, type Operation } from "fast-json-patch";
+import { useRealtimeConnections } from "./RealtimeConnectionProvider";
 
 type SnapshotMsg<T> = { type: "snapshot"; docId: string; rev: number; data: T };
 type PatchMsg = { docId: string; rev: number; patch: Operation[] };
@@ -16,16 +17,28 @@ Was du als Nächstes brauchst (sonst wirst du es schnell merken)
 
 Wenn du mir sagst, ob du SSE zusätzlich willst (z.B. Read-only Clients ohne WS), gebe ich dir die identische Client-Variante mit EventSource + fallback auf WS für Commands.
 
+
 */
 
 // TODO: Was passiert wenn der Server nicht da ist? --> Application Status muss auf Fehler gehen?
+// TODO: Fehlerhandling wenn error vom server kommt
+
+export type RealtimeStatus = "connecting" | "connected" | "disconnected" | "error";
 
 export function useRealtimeDoc<T>(docId: string) {
     const [data, setData] = useState<T | null>(null);
+    const [status, setStatus] = useState<RealtimeStatus>("connecting");
+    const [error, setError] = useState<string | null>(null);
 
     const dataRef = useRef<T | null>(null);
     const revRef = useRef<number>(0);
     const wsRef = useRef<WebSocket | null>(null);
+
+    const connCtx = useRealtimeConnections();
+
+    const report = (s: RealtimeStatus, e: string | null = null) => {
+        connCtx?.setConnection(docId, s, e);
+    };
 
     // immer den letzten Stand im Ref halten (für update())
     useEffect(() => {
@@ -33,15 +46,47 @@ export function useRealtimeDoc<T>(docId: string) {
     }, [data]);
 
     useEffect(() => {
+
+        setStatus("connecting");
+        setError(null);
+
         const wsUrl = new URL(`/ws/${docId}`, window.location.origin);
         wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
 
         const ws = new WebSocket(wsUrl.toString());
         wsRef.current = ws;
 
+        ws.onopen = () => {
+            setStatus("connected");
+            report("connected");
+            setError(null);
+        };
+
+        ws.onerror = () => {
+            setStatus("error");
+            report("error", "WebSocket error");
+            setError("WebSocket error");
+        };
+
+        ws.onclose = () => {
+            setStatus("disconnected");
+            report("disconnected");
+        };
+
+
         ws.onmessage = (ev) => {
-            const msg = JSON.parse(ev.data);
             console.log("WS msg", ev.data);
+
+            let msg: any;
+            try {
+                msg = JSON.parse(ev.data);
+            } catch {
+                setStatus("error");
+                report("error", "Invalid JSON message");
+                setError("Invalid JSON message");
+                return;
+            }
+
             if (msg?.type === "snapshot") {
                 const s = msg as SnapshotMsg<T>;
                 revRef.current = s.rev;
@@ -83,5 +128,7 @@ export function useRealtimeDoc<T>(docId: string) {
         }
     }, []);
 
-    return { data, update };
+    return { data, update, status, error };
 }
+
+
