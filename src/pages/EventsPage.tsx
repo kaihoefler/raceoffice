@@ -21,48 +21,36 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 
-import EventEditor, { type EventDraft } from "../components/EventEditor";
+import EventEditor from "../components/EventEditor";
 import type { Event } from "../types/event";
-import type { AgeGroup } from "../types/agegroup";
 
 import { useEventList } from "../providers/EventListProvider";
 
 export default function EventsPage() {
-  const { eventList, setActiveEvent, saveEvent, deleteEvent } = useEventList();
+  const { eventList, setActiveEvent, deleteEvent } = useEventList();
 
+  const [editorMode, setEditorMode] = useState<"new" | "edit">("new");
   const [editingId, setEditingId] = useState<string | null>(null);
-
-  const [editorInitial, setEditorInitial] = useState({
-    name: "",
-    ageGroups: [] as AgeGroup[],
-  });
-
   const [showEditor, setShowEditor] = useState(false);
 
-  // solange kein snapshot da ist
   if (!eventList) return null;
 
   function resetForm() {
-    setEditingId(null);
     setShowEditor(false);
-    setEditorInitial({ name: "", ageGroups: [] as AgeGroup[] });
+    setEditingId(null);
+    setEditorMode("new");
   }
 
   function startEdit(e: Event) {
+    setEditorMode("edit");
     setEditingId(e.id);
-    setEditorInitial({
-      name: e.name,
-      ageGroups: e.ageGroups ?? [],
-    });
     setShowEditor(true);
   }
 
   function startNewEvent() {
-    setEditingId(null);
-    setEditorInitial({
-      name: "",
-      ageGroups: [],
-    });
+    const newId = crypto.randomUUID();
+    setEditorMode("new");
+    setEditingId(newId);
     setShowEditor(true);
   }
 
@@ -72,25 +60,11 @@ export default function EventsPage() {
 
     deleteEvent(e);
 
-    // falls gerade dieses Event im Editor offen ist
     if (editingId === e.id) resetForm();
-  }
-
-  function handleSave(draft: EventDraft) {
-    // UI-Validierung kann hier bleiben
-    const name = draft.name.trim();
-    if (!name) return;
-
-    // Provider sollte Normalisierung/Trim etc. final übernehmen,
-    // aber wir geben hier schon den getrimmten Namen weiter.
-    saveEvent(editingId, { ...draft, name });
-
-    resetForm();
   }
 
   return (
     <Box>
-      {/* List Card */}
       <Card variant="outlined">
         <CardHeader
           title="Events"
@@ -134,7 +108,6 @@ export default function EventsPage() {
                       </Tooltip>
                     </TableCell>
 
-                    {/* Status control column */}
                     <TableCell align="right">
                       <Button
                         size="small"
@@ -147,14 +120,9 @@ export default function EventsPage() {
                       </Button>
                     </TableCell>
 
-                    {/* Actions */}
                     <TableCell align="right">
                       <Tooltip title="Edit" arrow>
-                        <IconButton
-                          size="small"
-                          onClick={() => startEdit(e)}
-                          aria-label="Edit Event"
-                        >
+                        <IconButton size="small" onClick={() => startEdit(e)} aria-label="Edit Event">
                           <EditIcon />
                         </IconButton>
                       </Tooltip>
@@ -187,14 +155,13 @@ export default function EventsPage() {
         </CardContent>
       </Card>
 
-      {/* Edit/New */}
       <EventEditor
+        key={`${editingId ?? "none"}:${editorMode}`} // important: reset local editor state when switching events/mode
         open={showEditor}
-        mode={editingId ? "edit" : "new"}
-        initial={editorInitial}
+        mode={editorMode}
         eventId={editingId}
-        onSave={handleSave}
         onCancel={resetForm}
+        onAfterSave={resetForm}
       />
     </Box>
   );

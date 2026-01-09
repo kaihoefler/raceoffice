@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 
+raceoffice.db
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -27,4 +29,4 @@ dist-ssr
 .env
 .env.*
 .DS_Store
-raceoffice.db
+

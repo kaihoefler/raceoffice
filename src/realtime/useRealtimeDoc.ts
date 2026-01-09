@@ -25,9 +25,9 @@ Wenn du mir sagst, ob du SSE zusätzlich willst (z.B. Read-only Clients ohne WS)
 
 export type RealtimeStatus = "connecting" | "connected" | "disconnected" | "error";
 
-export function useRealtimeDoc<T>(docId: string) {
+export function useRealtimeDoc<T>(docId: string | null) {
     const [data, setData] = useState<T | null>(null);
-    const [status, setStatus] = useState<RealtimeStatus>("connecting");
+    const [status, setStatus] = useState<RealtimeStatus>("disconnected");
     const [error, setError] = useState<string | null>(null);
 
     const dataRef = useRef<T | null>(null);
@@ -37,6 +37,7 @@ export function useRealtimeDoc<T>(docId: string) {
     const connCtx = useRealtimeConnections();
 
     const report = (s: RealtimeStatus, e: string | null = null) => {
+        if (!docId) return;
         connCtx?.setConnection(docId, s, e);
     };
 
@@ -46,9 +47,14 @@ export function useRealtimeDoc<T>(docId: string) {
     }, [data]);
 
     useEffect(() => {
-
+        if (!docId) {
+            setStatus("disconnected");
+            setError(null);
+            return;
+        }
         setStatus("connecting");
         setError(null);
+        report("connecting");
 
         const wsUrl = new URL(`/ws/${docId}`, window.location.origin);
         wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
@@ -56,26 +62,30 @@ export function useRealtimeDoc<T>(docId: string) {
         const ws = new WebSocket(wsUrl.toString());
         wsRef.current = ws;
 
+        const isCurrent = () => wsRef.current === ws;
+
         ws.onopen = () => {
+            if (!isCurrent()) return;
             setStatus("connected");
             report("connected");
             setError(null);
         };
 
         ws.onerror = () => {
+            if (!isCurrent()) return;
             setStatus("error");
             report("error", "WebSocket error");
             setError("WebSocket error");
         };
 
         ws.onclose = () => {
+            if (!isCurrent()) return;
             setStatus("disconnected");
             report("disconnected");
         };
 
-
         ws.onmessage = (ev) => {
-            console.log("WS msg", ev.data);
+            if (!isCurrent()) return;
 
             let msg: any;
             try {
@@ -94,13 +104,11 @@ export function useRealtimeDoc<T>(docId: string) {
                 return;
             }
 
-            // patch broadcast
             const p = msg as PatchMsg;
             if (!p?.patch || typeof p.rev !== "number") return;
 
             setData((prev) => {
                 if (prev === null) return prev;
-
                 const next = applyPatch(structuredClone(prev), p.patch, true, true).newDocument as T;
                 revRef.current = p.rev;
                 return next;
@@ -108,8 +116,11 @@ export function useRealtimeDoc<T>(docId: string) {
         };
 
         return () => {
+            // Prevent cleanup of an old effect from nulling the ref of a newer socket
+            if (wsRef.current === ws) {
+                wsRef.current = null;
+            }
             ws.close();
-            wsRef.current = null;
         };
     }, [docId]);
 
