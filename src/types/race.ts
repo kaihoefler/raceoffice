@@ -1,13 +1,20 @@
+import type { Athlete } from "./athlete";
 
 export type Race = {
   id: string;
   name: string;
   slug: string;
-  isPointsRace: boolean; // if true, the race is a points race
-  isEliminationRace: boolean; // if true, the race is an elimination race
+  racemode: {
+    isPointsRace: boolean; // if true, the race is a points race
+    isEliminationRace: boolean; // if true, the race is an elimination race
+  }
+  stage: "" | "heat" | "final" | "qualifying",
+  stage_value: string, // e.g. "1", "2", "3" for heats or qualifying, "A", "B" for final
+  distance_value: string, // e.g. "200m", "1k", "5k"
   ageGroupId: string;
   eventId: string;
-  raceResutls: RaceResult[];
+  raceResults: RaceResult[];
+  raceStarters: Athlete[];
 
 };
 
