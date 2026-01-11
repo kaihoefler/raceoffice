@@ -34,7 +34,7 @@ import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
 import { useEventList } from "../providers/EventListProvider";
 
 import type { FullEvent } from "../types/event";
-import type { Race, RaceResult } from "../types/race";
+import type { Race } from "../types/race";
 
 import RaceEditor, { type RaceDraft } from "../components/RaceEditor";
 
@@ -61,9 +61,6 @@ function formatRaceMode(r: Race): string {
   return "Standard";
 }
 
-function getRaceResults(r: Race): RaceResult[] {
-  return r.raceResults ?? [];
-}
 
 function slugify(input: string): string {
   return input

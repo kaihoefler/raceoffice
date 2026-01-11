@@ -14,7 +14,8 @@ dist-ssr
 tools/
 deploy/
 server_own/dist
-
+public/
+server_own/public
 raceoffice.db
 
 # Editor directories and files

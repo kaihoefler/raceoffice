@@ -38,7 +38,7 @@ jobs:
 
           # --- Portable Node runtime (only node.exe is needed at runtime) ---
           New-Item -ItemType Directory -Force tools\node | Out-Null
-          $nodeVer = "20.11.1"
+          $nodeVer = "22.21.1"
           $zipName = "node-v$nodeVer-win-x64.zip"
           $nodeUrl = "https://nodejs.org/dist/v$nodeVer/$zipName"
           Invoke-WebRequest -Uri $nodeUrl -OutFile $zipName
