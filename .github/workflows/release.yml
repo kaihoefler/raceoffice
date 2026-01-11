@@ -16,7 +16,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node (build runtime)
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -28,22 +28,33 @@ jobs:
       - name: Install server deps
         run: npm --prefix server_own ci
 
-      # Optional: only needed if your deploy expects tools/node/node.exe and/or tools/winsw/*
-      # Otherwise the deploy will still work, just without portable node.exe / WinSW included.
-      - name: Ensure tools folders exist
-        run: |
-          New-Item -ItemType Directory -Force tools\node | Out-Null
-          New-Item -ItemType Directory -Force tools\winsw | Out-Null
+      - name: Download WinSW (v2.12.0) + portable Node.exe
         shell: powershell
+        run: |
+          # --- WinSW ---
+          New-Item -ItemType Directory -Force tools\winsw | Out-Null
+          $winswUrl = "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe"
+          Invoke-WebRequest -Uri $winswUrl -OutFile tools\winsw\RaceOfficeServer.exe
+
+          # --- Portable Node runtime (only node.exe is needed at runtime) ---
+          New-Item -ItemType Directory -Force tools\node | Out-Null
+          $nodeVer = "20.11.1"
+          $zipName = "node-v$nodeVer-win-x64.zip"
+          $nodeUrl = "https://nodejs.org/dist/v$nodeVer/$zipName"
+          Invoke-WebRequest -Uri $nodeUrl -OutFile $zipName
+
+          if (Test-Path nodezip) { Remove-Item nodezip -Recurse -Force }
+          Expand-Archive -Path $zipName -DestinationPath nodezip
+          Copy-Item "nodezip\node-v$nodeVer-win-x64\node.exe" -Destination "tools\node\node.exe" -Force
 
       - name: Build deploy folder
         run: npm run deploy
 
       - name: Create ZIP from deploy folder
+        shell: powershell
         run: |
           if (Test-Path deploy.zip) { Remove-Item deploy.zip -Force }
           Compress-Archive -Path deploy\* -DestinationPath deploy.zip
-        shell: powershell
 
       - name: Create GitHub Release + upload asset
         uses: softprops/action-gh-release@v2
