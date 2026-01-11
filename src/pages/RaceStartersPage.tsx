@@ -29,6 +29,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useEventList } from "../providers/EventListProvider";
 import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
 import RaceStartersImport from "../components/RaceStartersImport";
+import RaceSelector from "../components/RaceSelector";
+
 
 import type { FullEvent } from "../types/event";
 import type { Race } from "../types/race";
@@ -88,8 +90,25 @@ export default function RaceStartersPage() {
         return fullEvent.ageGroups.find((ag) => ag.id === race.ageGroupId) ?? null;
     }, [fullEvent, race]);
 
+    function handleRaceSelect(nextRaceId: string) {
+        if (!nextRaceId || nextRaceId === raceId) return;
+        cancelEdit(); // optional: Edit-State sauber abbrechen
+        navigate(`/races/${nextRaceId}/starters`);
+    }
+
     const starters: Athlete[] = race?.raceStarters ?? [];
     const startersCount = starters.length;
+
+    const startersSorted = useMemo(() => {
+        return [...starters].sort((a, b) => {
+            const ai = a.bib ?? Number.MAX_SAFE_INTEGER; // bib=null ans Ende
+            const bi = b.bib ?? Number.MAX_SAFE_INTEGER;
+            if (ai !== bi) return ai - bi;
+
+            // stabiler Tie-Breaker (optional)
+            return (a.lastName ?? "").localeCompare(b.lastName ?? "", undefined, { sensitivity: "base" });
+        });
+    }, [starters]);
 
     // Focus bib when race is available (initial page load)
     useEffect(() => {
@@ -332,14 +351,25 @@ export default function RaceStartersPage() {
                 <CardHeader
                     title={race.name}
                     action={
-                        <Tooltip title="Back to Active Event" arrow>
-                            <span>
-                                <IconButton onClick={() => navigate("/")} aria-label="Back to Active Event">
-                                    <ArrowBackIcon />
-                                </IconButton>
-                            </span>
-                        </Tooltip>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            <RaceSelector
+                                races={fullEvent.races}
+                                ageGroups={fullEvent.ageGroups}
+                                value={race.id}
+                                onChange={handleRaceSelect}
+                                size="small"
+                            />
+
+                            <Tooltip title="Back to Active Event" arrow>
+                                <span>
+                                    <IconButton onClick={() => navigate("/")} aria-label="Back to Active Event">
+                                        <ArrowBackIcon />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+                        </Box>
                     }
+
                     subheader={
                         <Typography variant="caption" color={error ? "error" : "text.secondary"}>
                             {startersCount} starter(s) • AgeGroup: {ageGroupLabel} • Realtime: {status}
@@ -362,7 +392,7 @@ export default function RaceStartersPage() {
                         </TableHead>
 
                         <TableBody>
-                            {starters.map((a) => {
+                            {startersSorted.map((a) => {
                                 const isEditing = editingAthleteId === a.id;
                                 const d = editingDraft;
 

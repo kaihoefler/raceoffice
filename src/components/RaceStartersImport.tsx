@@ -130,7 +130,7 @@ type ImportMode = "overwrite" | "merge";
 type Props = {
   raceName: string;
   ageGroupLabel: string;
-  onImport: (mode: ImportMode, rows: ImportPreviewRow[]) => void;
+  onImport: (mode: ImportMode, rows: ImportPreviewRow[]) => void | Promise<void>;
 };
 
 type SkippedRowInfo = {
@@ -144,11 +144,43 @@ export default function RaceStartersImport(props: Props ) {
   const [originalMode, setOriginalMode] = useState<"table" | "raw">("table");
   const [dragOver, setDragOver] = useState(false);
 
-  const [encoding, setEncoding] = useState<Encoding>("utf-8");
+  const [encoding, setEncoding] = useState<Encoding>("windows-1252");
   const [fileName, setFileName] = useState<string | null>(null);
   const [rawText, setRawText] = useState<string>("");
   const [parsed, setParsed] = useState<CsvParseResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
+
+  function resetImporter() {
+    setFileName(null);
+    setRawText("");
+    setParsed(null);
+    setParseError(null);
+    setTab("relevant");
+    setOriginalMode("table");
+    setDragOver(false);
+  }
+
+  const handleImport = async (mode: ImportMode) => {
+    if (previewAnalysis.importable.length === 0) return;
+
+    const msg =
+      mode === "overwrite"
+        ? `Overwrite: Alle aktuellen Starter werden gelöscht und durch den Import überschrieben.\n\nImportiere ${previewAnalysis.importable.length} Zeile(n)?`
+        : `Merge: Vorhandene Starter werden aktualisiert (Match über Bib, sonst Name+IOC) und neue hinzugefügt.\n\nVerarbeite ${previewAnalysis.importable.length} Zeile(n)?`;
+
+    const ok = window.confirm(msg);
+    if (!ok) return;
+
+    try {
+      await props.onImport(mode, previewAnalysis.importable);
+      // "erfolgreich" => kein Throw / keine Promise-Rejection
+      resetImporter();
+    } catch (e) {
+      // optional: keine Reset, damit User Daten nicht verliert
+      const m = e instanceof Error ? e.message : "Unbekannter Fehler beim Import.";
+      window.alert(m);
+    }
+  };
 
   async function readFile(file: File) {
     setParseError(null);
@@ -268,7 +300,7 @@ export default function RaceStartersImport(props: Props ) {
               label="Encoding"
               onChange={(e) => setEncoding(e.target.value as Encoding)}
             >
-              <MenuItem value="windows-1252">Windows-1252 (bei “J�ssica” etc.)</MenuItem>
+              <MenuItem value="windows-1252">Windows-1252 (ANSI)</MenuItem>
               <MenuItem value="utf-8">UTF-8</MenuItem>
             </Select>
           </FormControl>
@@ -290,14 +322,7 @@ export default function RaceStartersImport(props: Props ) {
           <Button
             variant="outlined"
             disabled={!parsed && !rawText}
-            onClick={() => {
-              setFileName(null);
-              setRawText("");
-              setParsed(null);
-              setParseError(null);
-              setTab("relevant");
-              setOriginalMode("table");
-            }}
+            onClick={resetImporter}
           >
             Reset
           </Button>
@@ -349,31 +374,29 @@ export default function RaceStartersImport(props: Props ) {
 
         {parsed ? (
           <Box sx={{ mt: 2 }}>
-            <ButtonGroup size="small" variant="contained">
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Import:
+              </Typography>
+
               <Button
+                size="small"
+                variant="contained"
                 disabled={previewAnalysis.importable.length === 0}
-                onClick={() => {
-                  const ok = window.confirm(
-                    `Overwrite: Alle aktuellen Starter werden gelöscht und durch den Import überschrieben.\n\nImportiere ${previewAnalysis.importable.length} Zeile(n)?`
-                  );
-                  if (ok) props.onImport("overwrite", previewAnalysis.importable);
-                }}
+                onClick={() => void handleImport("overwrite")}
               >
                 Overwrite
               </Button>
 
               <Button
+                size="small"
+                variant="contained"
                 disabled={previewAnalysis.importable.length === 0}
-                onClick={() => {
-                  const ok = window.confirm(
-                    `Merge: Vorhandene Starter werden aktualisiert (Match über Bib, sonst Name+IOC) und neue hinzugefügt.\n\nVerarbeite ${previewAnalysis.importable.length} Zeile(n)?`
-                  );
-                  if (ok) props.onImport("merge", previewAnalysis.importable);
-                }}
+                onClick={() => void handleImport("merge")}
               >
                 Merge
               </Button>
-            </ButtonGroup>
+            </Box>
             <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: "divider" }}>
               <Tab value="relevant" label="Import-Preview (relevante Spalten)" />
               <Tab value="original" label="Original (alle Spalten)" />
@@ -459,10 +482,6 @@ export default function RaceStartersImport(props: Props ) {
                   </Box>
                 ) : null}
 
-                <Alert sx={{ mt: 2 }} severity="info">
-                  Import-Logik (Übernahme in RaceStarters) ist noch nicht implementiert – sag mir nachher,
-                  wie du mappen/mergen willst, dann ergänzen wir Button + Callback.
-                </Alert>
               </Box>
             ) : (
               <Box sx={{ mt: 2 }}>
@@ -542,7 +561,7 @@ export default function RaceStartersImport(props: Props ) {
           </Box>
         ) : (
           <Box sx={{ p: 2, textAlign: "center" }}>
-          ... </Box>
+           </Box>
         )}
       </CardContent>
     </Card>

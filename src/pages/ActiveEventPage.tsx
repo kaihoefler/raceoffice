@@ -411,8 +411,8 @@ const filteredRaces = useMemo(() => {
               {filteredRaces.map((r) => {
                 const ag = fullEvent.ageGroups.find((x) => x.id === r.ageGroupId) ?? null;
 
-                const results = getRaceResults(r);
-                const athletesCount = results.length || fullEvent.athletes.filter((a) => a.ageGroupId === r.ageGroupId).length;
+                //const results = getRaceResults(r);
+                const athletesCount = r.raceStarters ? r.raceStarters.length : 0;
 
                 return (
                   <TableRow key={r.id}>
