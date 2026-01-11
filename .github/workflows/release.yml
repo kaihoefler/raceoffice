@@ -1,0 +1,52 @@
+name: Build & Release (deploy folder)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Install server deps
+        run: npm --prefix server_own ci
+
+      # Optional: only needed if your deploy expects tools/node/node.exe and/or tools/winsw/*
+      # Otherwise the deploy will still work, just without portable node.exe / WinSW included.
+      - name: Ensure tools folders exist
+        run: |
+          New-Item -ItemType Directory -Force tools\node | Out-Null
+          New-Item -ItemType Directory -Force tools\winsw | Out-Null
+        shell: powershell
+
+      - name: Build deploy folder
+        run: npm run deploy
+
+      - name: Create ZIP from deploy folder
+        run: |
+          if (Test-Path deploy.zip) { Remove-Item deploy.zip -Force }
+          Compress-Archive -Path deploy\* -DestinationPath deploy.zip
+        shell: powershell
+
+      - name: Create GitHub Release + upload asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: deploy.zip
+          generate_release_notes: true

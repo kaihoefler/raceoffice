@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
+tools/
+deploy/
+server_own/dist
 
 raceoffice.db
 

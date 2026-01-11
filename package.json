@@ -1,13 +1,17 @@
 {
   "name": "raceoffice",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:server": "npm --prefix server_own run build",
+    "build:all": "npm run build && npm run build:server",
+    "start:server": "npm --prefix server_own run start",
+    "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

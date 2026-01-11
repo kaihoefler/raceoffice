@@ -2,17 +2,35 @@ import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import { FastifySSEPlugin } from "fastify-sse-v2";
 import Database from "better-sqlite3";
-import { compare, applyPatch  } from "fast-json-patch/index.mjs";
+import { applyPatch  } from "fast-json-patch/index.mjs";
 import type { Operation } from "fast-json-patch/index.mjs";
 import cors from "@fastify/cors";
 
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+import fastifyStatic from "@fastify/static";
 
 type Doc = {
     rev: number;
     data: any; // später sauber typisieren
 };
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function readArg(name: string): string | null {
+  const idx = process.argv.indexOf(name);
+  if (idx < 0) return null;
+
+  const value = process.argv[idx + 1];
+  return value ?? null;
+}
+
+
 const app = Fastify({ logger: true });
+
+
 
 // WICHTIG: websocket vor den Routen registrieren. :contentReference[oaicite:4]{index=4}
 await app.register(websocket);
@@ -22,9 +40,27 @@ await app.register(cors, {
     credentials: true,
 });
 
+const publicDir = path.resolve(__dirname, "../public");
+
+await app.register(fastifyStatic, {
+  root: publicDir,
+  prefix: "/", // assets unter /
+});
+
 // --- SQLite Setup (eine Datei, Windows-friendly) :contentReference[oaicite:6]{index=6}
 // TODO Dateipfad aus Umgebungsvariable auslesen
-const db = new Database("raceoffice.db");
+
+const dbPath =
+    readArg("--db") ??
+    process.env.RACEOFFICE_DB ??
+    path.resolve(process.cwd(), "data", "raceoffice.db");
+
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+
+const db = new Database(dbPath);
+app.log.info({ dbPath }, "Using sqlite db");
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS docs (
     id TEXT PRIMARY KEY,
@@ -163,6 +199,23 @@ app.get("/ws/:docId", { websocket: true }, (socket, req) => {
         wsClients.get(docId)?.delete(socket);
     });
 });
+ 
+app.setNotFoundHandler((req, reply) => {
+  if (req.method !== "GET") return reply.code(404).send({ error: "not_found" });
+
+  const accept = String(req.headers.accept ?? "");
+  if (!accept.includes("text/html")) return reply.code(404).send({ error: "not_found" });
+
+  const indexPath = path.join(publicDir, "index.html");
+  if (!fs.existsSync(indexPath)) {
+    return reply.code(404).send({
+      error: "client_not_built",
+      hint: "Run `vite build` so server_own/public/index.html exists.",
+    });
+  }
+
+  return reply.type("text/html").sendFile("index.html");
+});
 
 function noteSnapshot(socket: any, docId: string) {
     const doc = loadDoc(docId);
@@ -170,5 +223,7 @@ function noteSnapshot(socket: any, docId: string) {
     console.log("sent snapshot:", docId, doc.rev, doc.data);
 }
 
-const port = Number(process.env.PORT ?? 8787);
-await app.listen({ port, host: "0.0.0.0" });
+const port = Number(readArg("--port") ?? process.env.PORT ?? 8787);
+const host = readArg("--host") ?? process.env.HOST ?? "0.0.0.0";
+await app.listen({ port, host });
+

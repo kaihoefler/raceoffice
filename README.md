@@ -11,6 +11,114 @@ This document explains the core data model, the realtime protocol, and how the c
 
 ---
 
+## Build, Deploy & Install (Windows Service)
+
+### Prerequisites
+- Node.js (recommended: current LTS) + npm
+- For service installation on Windows: an elevated (Administrator) shell
+
+### Install dependencies
+This repository contains **two** npm projects: the root SPA and the backend in `server_own/`.
+
+```sh
+npm install
+npm --prefix server_own install
+```
+
+### Development
+Run backend + frontend in separate terminals.
+
+Backend (Fastify + WS + SQLite):
+```sh
+npm --prefix server_own run dev
+```
+
+Frontend (Vite dev server):
+```sh
+npm run dev
+```
+
+The dev server proxies `/ws`, `/sse` and `/health` to the backend on `http://localhost:8787` (see `vite.config.ts`).
+
+### Production build (server serves the SPA)
+The backend serves static files from `server_own/public` (see `server_own/src/index.ts` via `@fastify/static`).
+
+Build everything:
+
+```sh
+npm run build:all
+```
+
+Run the server (network reachable, port 8787):
+
+```sh
+npm --prefix server_own run start -- --host 0.0.0.0 --port 8787 --db "C:\\ProgramData\\RaceOffice\\data\\raceoffice.db"
+```
+
+Open:
+- UI: `http://<server-host>:8787/`
+- Health: `http://<server-host>:8787/health`
+
+### Deploy folder (copy-only deployment)
+Create a self-contained deployment folder under `./deploy/`:
+
+```sh
+npm run deploy
+```
+
+This creates (at least):
+- `deploy/server/dist/` (compiled server)
+- `deploy/server/public/` (built SPA)
+- `deploy/server/node_modules/` (production dependencies)
+- `deploy/server/RaceOfficeServer.xml` (WinSW service config; auto-generated if not provided)
+- `deploy/DEPLOY-NEXT-STEPS.txt`
+
+Optional (recommended for “copy-only” installs):
+- Put a portable Node runtime at `tools/node/node.exe` (will be copied to `deploy/server/node/node.exe`)
+- Put WinSW at `tools/winsw/RaceOfficeServer.exe` (and optionally `RaceOfficeServer.xml`)
+
+### Server configuration (CLI / ENV)
+Backend configuration (see `server_own/src/index.ts`) is read in this order:
+
+1) CLI args:
+- `--db <path>`: SQLite file path
+- `--host <host>`: bind address (default `0.0.0.0`)
+- `--port <port>`: listen port (default `8787`)
+
+2) Environment variables:
+- `RACEOFFICE_DB`, `HOST`, `PORT`
+
+3) Defaults:
+- DB defaults to `./data/raceoffice.db` relative to the current working directory
+
+Recommended DB locations:
+- Development: `./data/raceoffice.db`
+- Windows Service: `C:\\ProgramData\\RaceOffice\\data\\raceoffice.db`
+
+### Install as Windows Service (WinSW)
+This project is designed to run as a standard Node process (no single-file EXE required). For Windows Services, use **WinSW**.
+
+Typical service installation (run in an elevated shell) from the deployment folder:
+
+```sh
+cd deploy\server
+RaceOfficeServer.exe install
+RaceOfficeServer.exe start
+```
+
+Stop / uninstall:
+
+```sh
+RaceOfficeServer.exe stop
+RaceOfficeServer.exe uninstall
+```
+
+Notes:
+- Ensure `C:\\ProgramData\\RaceOffice\\data\\` exists and the service account has read/write permissions.
+- The default service XML binds to `0.0.0.0` and uses port `8787`.
+
+---
+
 ## 1) Frontend (React SPA)
 
 ### UI
@@ -210,15 +318,18 @@ Practical next steps (recommended):
 
 ---
 
-## 6) Running the project (conceptually)
+## 6) Running the project (reference)
 
 Backend (`server_own/package.json`):
-- `npm run dev` starts `tsx watch src/index.ts` (development)
-- `npm run build` compiles TypeScript
-- `npm start` runs `dist/index.js`
+- `npm --prefix server_own run dev` starts `tsx watch src/index.ts` (development)
+- `npm --prefix server_own run build` compiles TypeScript into `server_own/dist/`
+- `npm --prefix server_own run start -- --host 0.0.0.0 --port 8787 --db <path>` runs the server
 
-Frontend (root project uses Vite; see root `README.md` template):
-- run Vite dev server, which connects to backend via `/ws/:docId` (WebSockets).
+Frontend (root `package.json`):
+- `npm run dev` starts the Vite dev server
+- `npm run build` builds the SPA (recommended output dir: `server_own/public`)
 
-> To document the exact dev proxy setup (e.g. Vite proxy to port 8787), I would need to see `vite.config.ts` (not shown here).
+Dev proxy setup is configured in `vite.config.ts`.
+
+
 
