@@ -25,25 +25,32 @@ export type RaceStatusRace = {
 export type RaceStatusState = {
   status: "idle" | "loading" | "ok" | "error" | "paused";
   error: string | null;
+  /** Timestamp (ms) of the last SUCCESSFUL update */
   updatedAt: number | null;
   currentRace: RaceStatusRace | null;
   url: string;
+  /** Base poll interval (ms) configured by the user */
   pollIntervalMs: number;
   paused: boolean;
+  /** How many requests failed in sequence (resets to 0 on successful fetch) */
+  errorCount: number;
 };
 
 export type RaceStatusContextValue = RaceStatusState & {
+  /** Actual poll interval currently used (may be increased after repeated failures) */
+  effectivePollIntervalMs: number;
   setUrl: (nextUrl: string) => void;
   setPollIntervalMs: (nextMs: number) => void;
   setPaused: (paused: boolean) => void;
 };
+
 
 const RaceStatusContext = createContext<RaceStatusContextValue | null>(null);
 
 
 type Props = {
   children: React.ReactNode;
-  /** Override the REST endpoint. Default: VITE_RACE_STATUS_URL or http://localhost:8080/races?filter=current */
+  /** Override the REST endpoint. Default: LIVE_RACE_STATUS_URL or http://localhost:8080/races?filter=current */
   url?: string;
   pollIntervalMs?: number;
 };
@@ -67,7 +74,7 @@ export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Pro
     (import.meta as any).env?.VITE_RACE_STATUS_URL ??
     "http://localhost:8080/races?filter=current";
 
-  const [state, setState] = useState<RaceStatusState>({
+    const [state, setState] = useState<RaceStatusState>({
     status: "loading",
     error: null,
     updatedAt: null,
@@ -75,7 +82,9 @@ export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Pro
     url: defaultUrl,
     pollIntervalMs,
     paused: false,
+    errorCount: 0,
   });
+
 
   const inFlightRef = useRef<AbortController | null>(null);
 
@@ -101,9 +110,17 @@ export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Pro
     }));
   };
 
-  const resolvedUrl = state.url;
-  const resolvedPollMs = state.pollIntervalMs;
+    const resolvedUrl = state.url;
   const paused = state.paused;
+
+  // After 10 successive failures, slow down polling by factor 10.
+  // Resets automatically when a request succeeds (errorCount -> 0).
+  const effectivePollIntervalMs = useMemo(() => {
+    const base = state.pollIntervalMs;
+    if (state.errorCount >= 10 && state.errorCount > 0) return Math.min(60000, base * 10);
+    return base;
+  }, [state.pollIntervalMs, state.errorCount]);
+
 
   useEffect(() => {
     let mounted = true;
@@ -130,13 +147,15 @@ export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Pro
         const activeRace = flag.trim() ? currentRace : null;
 
         if (!mounted) return;
-        setState((prev) => ({
+                setState((prev) => ({
           ...prev,
           status: "ok",
           error: null,
+          errorCount: 0,
           updatedAt: Date.now(),
           currentRace: activeRace,
         }));
+
       } catch (e: any) {
         if (!mounted) return;
         if (e?.name === "AbortError") return;
@@ -144,11 +163,13 @@ export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Pro
                 // Important: do NOT update updatedAt here.
         // updatedAt represents the timestamp of the last SUCCESSFUL update.
         // Otherwise the UI would think we're still connected even when the server is down.
-        setState((prev) => ({
+                setState((prev) => ({
           ...prev,
           status: prev.currentRace ? "ok" : "error",
           error: String(e?.message ?? e),
+          errorCount: (prev.errorCount ?? 0) + 1,
         }));
+
 
       } finally {
         inFlightRef.current = null;
@@ -174,7 +195,8 @@ export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Pro
     // Initial + interval
     setState((prev) => ({ ...prev, status: "loading", error: null }));
     pollOnce();
-    const t = setInterval(pollOnce, resolvedPollMs);
+        const t = setInterval(pollOnce, effectivePollIntervalMs);
+
 
     return () => {
       mounted = false;
@@ -182,9 +204,19 @@ export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Pro
       inFlightRef.current?.abort();
       inFlightRef.current = null;
     };
-  }, [resolvedUrl, resolvedPollMs, paused]);
+    }, [resolvedUrl, effectivePollIntervalMs, paused]);
 
-  const value = useMemo(() => ({ ...state, setUrl, setPollIntervalMs, setPaused }), [state]);
+  const value = useMemo(
+    () => ({
+      ...state,
+      effectivePollIntervalMs,
+      setUrl,
+      setPollIntervalMs,
+      setPaused,
+    }),
+    [state, effectivePollIntervalMs],
+  );
+
   return <RaceStatusContext.Provider value={value}>{children}</RaceStatusContext.Provider>;
 }
 

@@ -8,6 +8,8 @@ import HomeIcon from "@mui/icons-material/Home";
 
 import { useEventList } from "../providers/EventListProvider";
 import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
+import { useRaceStatus } from "../providers/RaceStatusProvider";
+import { useScoringViewModel } from "./scoring/ScoringViewModel";
 import RaceSelector from "../components/RaceSelector";
 import PointsScoring from "../components/PointsScoring";
 import LiveRaceStatus from "../components/LiveRaceStatus";
@@ -17,6 +19,8 @@ import type { Race } from "../types/race";
 import type { RaceActivityPointsSprint } from "../types/raceactivities";
 import RaceActivitiesList from "../components/RaceActivitiesList";
 import type { RaceActivity } from "../types/raceactivities";
+import type { Athlete } from "../types/athlete";
+
 
 
 function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
@@ -65,6 +69,9 @@ export default function ScoringPage() {
         return fullEvent.ageGroups.find((ag) => ag.id === race.ageGroupId) ?? null;
     }, [fullEvent, race]);
 
+    const { currentRace } = useRaceStatus();
+    const vm = useScoringViewModel(race, currentRace);
+
     function handleRaceSelect(nextRaceId: string) {
         if (!nextRaceId || nextRaceId === raceId) return;
         navigate(`/races/${nextRaceId}/scoring`);
@@ -100,7 +107,7 @@ export default function ScoringPage() {
         });
     }
 
-    function handleAddPointsSprintActivity(activity: RaceActivityPointsSprint) {
+        function handleAddPointsSprintActivity(activity: RaceActivityPointsSprint) {
         if (!race) return;
 
         update((prev) => {
@@ -117,6 +124,38 @@ export default function ScoringPage() {
             return next;
         });
     }
+
+    function handleCreateMissingStartersFromLive() {
+        if (!race) return;
+
+        const missing = vm.getMissingStarterBibsFromLive();
+        if (!missing.length) return;
+
+        update((prev) => {
+            const next: any = structuredClone(prev as any);
+            const races = Array.isArray(next?.races) ? next.races : [];
+            const idx = races.findIndex((r: any) => r?.id === race.id);
+            if (idx < 0) return prev;
+
+            const r = { ...races[idx] };
+            const starters: Athlete[] = Array.isArray(r.raceStarters) ? r.raceStarters : [];
+
+            const existingBibs = new Set<number>();
+            for (const s of starters) {
+                const bib = Number((s as any)?.bib);
+                if (Number.isFinite(bib)) existingBibs.add(bib);
+            }
+
+            const toAdd = missing.filter((a) => a.bib != null && !existingBibs.has(a.bib));
+            if (!toAdd.length) return prev;
+
+            r.raceStarters = [...starters, ...toAdd];
+            races[idx] = r;
+            next.races = races;
+            return next;
+        });
+    }
+
 
 
     // ---- Render guards ----
@@ -203,7 +242,12 @@ export default function ScoringPage() {
                         }}
                     >
                                                 {/* Spalte 1: Punkte-Erfassung + kompakte Starterliste */}
-                        <PointsScoring race={race} resetKey={race.id} onAddRaceActivity={handleAddPointsSprintActivity} />
+                        <PointsScoring
+                            race={race}
+                            resetKey={race.id}
+                            onAddRaceActivity={handleAddPointsSprintActivity}
+                            missingInLiveBibs={vm.missingInLiveBibs}
+                        />
 
 
                         <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
@@ -216,7 +260,11 @@ export default function ScoringPage() {
                         </Box>
 
                                                 {/* Spalte 4: Live race status (polled via RaceStatusProvider) */}
-                        <LiveRaceStatus />
+                                                <LiveRaceStatus
+                            unknownLiveBibs={vm.unknownLiveBibs}
+                            onCreateStarters={handleCreateMissingStartersFromLive}
+                        />
+
 
                     </Box>
                 </CardContent>

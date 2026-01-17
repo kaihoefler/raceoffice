@@ -22,7 +22,7 @@ export type Race = {
 
 
 export type RaceResult = {
-  bib: string;
+  bib: number;
   rank: number;
   points: number;
   eliminated: boolean;

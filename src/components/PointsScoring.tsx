@@ -28,6 +28,7 @@ type Props = {
   resetKey?: string;
   /** Add a new RaceActivityPointsSprint to the race (no editing in this component) */
   onAddRaceActivity: (activity: RaceActivityPointsSprint) => void;
+  missingInLiveBibs?: Set<number>;
 };
 
 
@@ -70,7 +71,7 @@ function toPointsSprintActivity(lap: number, results: Array<{ bib: number; point
   };
 }
 
-export default function PointsScoring({ race, resetKey, onAddRaceActivity }: Props) {
+export default function PointsScoring({ race, resetKey, onAddRaceActivity, missingInLiveBibs }: Props) {
   const starters = useMemo(() => {
     const s = race.raceStarters ?? [];
     return [...s].sort((a, b) => {
@@ -499,18 +500,28 @@ export default function PointsScoring({ race, resetKey, onAddRaceActivity }: Pro
           </Typography>
         ) : (
           <List dense sx={{ maxHeight: 420, overflow: "auto", py: 0 }}>
-            {starters.map((a) => (
-              <ListItem
-                key={a.id}
-                sx={{
-                  px: 1,
-                  borderRadius: 1,
-                  bgcolor: selectedIds.has(a.id) ? "action.selected" : "transparent",
-                }}
-              >
-                <ListItemText primaryTypographyProps={{ variant: "body2" }} primary={athleteLabel(a)} />
-              </ListItem>
-            ))}
+              {starters.map((a) => {
+                const bib = a.bib ?? null;
+                const missing = bib != null && missingInLiveBibs?.has(bib);
+                return (
+                  <ListItem
+                    key={a.id}
+                    sx={{
+                      px: 1,
+                      borderRadius: 1,
+                      bgcolor: selectedIds.has(a.id) ? "action.selected" : "transparent",
+                    }}
+                  >
+                    <ListItemText
+                      primaryTypographyProps={{
+                        variant: "body2",
+                        sx: missing ? { color: "error.main", fontWeight: 700 } : undefined,
+                      }}
+                      primary={athleteLabel(a)}
+                    />
+                  </ListItem>
+                );  }
+              )}
           </List>
         )}
       </Box>

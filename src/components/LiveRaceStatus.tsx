@@ -116,14 +116,22 @@ function competitorName(c: RaceStatusCompetitor): string {
   return (ln || fn).trim();
 }
 
-export default function LiveRaceStatus() {
+export default function LiveRaceStatus({
+  unknownLiveBibs,
+  onCreateStarters,
+}: {
+  unknownLiveBibs?: Set<number>;
+  onCreateStarters?: () => void;
+}) {
   const {
     status,
     error,
+    errorCount,
     currentRace,
     updatedAt,
     url,
     pollIntervalMs,
+    effectivePollIntervalMs,
     paused,
     setUrl,
     setPollIntervalMs,
@@ -166,6 +174,8 @@ export default function LiveRaceStatus() {
         : flagKey === "FINISH"
           ? { bgcolor: "common.black", color: "common.white" }
           : undefined;
+
+  const unknownCount = unknownLiveBibs?.size ?? 0;
 
   const rows = useMemo(() => {
     if (!currentRace) return [];
@@ -247,6 +257,8 @@ export default function LiveRaceStatus() {
         {!isConnected && !isPaused ? (
           <Alert severity="warning" sx={{ mb: 1 }}>
             Live status service not responding ({url}){error ? `: ${error}` : ""}
+            {errorCount > 0 ? ` • fails in a row: ${errorCount}` : ""}
+            {errorCount >= 10 ? ` • slowed polling: ${effectivePollIntervalMs}ms` : ""}
           </Alert>
         ) : null}
 
@@ -336,11 +348,14 @@ export default function LiveRaceStatus() {
         </Box>
       </Box>
 
-      {!isConnected && !isPaused ? (
-        <Alert severity="warning" sx={{ mb: 1 }}>
-          Live status service not responding ({url}){error ? `: ${error}` : ""}
-        </Alert>
-      ) : null}
+              {!isConnected && !isPaused ? (
+          <Alert severity="warning" sx={{ mb: 1 }}>
+            Live status service not responding ({url}){error ? `: ${error}` : ""}
+            {errorCount > 0 ? ` • fails in a row: ${errorCount}` : ""}
+            {errorCount >= 10 ? ` • slowed polling: ${effectivePollIntervalMs}ms` : ""}
+          </Alert>
+        ) : null}
+
 
       <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Race status connection</DialogTitle>
@@ -404,6 +419,24 @@ export default function LiveRaceStatus() {
         </Typography>
       </Box>
 
+      {unknownCount > 0 ? (
+        <Box sx={{ display: "flex", justifyContent: "flex-start", mb: 1 }}>
+          <Tooltip title={`Create ${unknownCount} missing starter(s) from live list`} arrow>
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                color="warning"
+                onClick={onCreateStarters}
+                disabled={!onCreateStarters}
+              >
+                create starters ({unknownCount})
+              </Button>
+            </span>
+          </Tooltip>
+        </Box>
+      ) : null}
+
       <Table size="small" stickyHeader>
         <TableHead>
           <TableRow>
@@ -417,7 +450,17 @@ export default function LiveRaceStatus() {
           {rows.map((r) => (
             <TableRow key={r.key} hover>
               <TableCell>{r.position}</TableCell>
-              <TableCell>{r.bib}</TableCell>
+              
+              {(() => {
+                const bibNum = Number(r.bib);
+                const isUnknown = bibNum != null && unknownLiveBibs?.has(bibNum);
+
+                return (
+                  <TableCell sx={isUnknown ? { color: "error.main", fontWeight: 700 } : undefined}>
+                    {r.bib}
+                  </TableCell>
+                );
+              })()}
               <TableCell sx={{ whiteSpace: "nowrap" }}>{r.name}</TableCell>
               <TableCell>{r.timeText}</TableCell>
             </TableRow>
