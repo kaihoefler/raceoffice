@@ -9,25 +9,36 @@ import HomeIcon from "@mui/icons-material/Home";
 import { useEventList } from "../providers/EventListProvider";
 import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
 import RaceSelector from "../components/RaceSelector";
-import PointsScoring, { type PointsEntry } from "../components/PointsScoring";
+import PointsScoring from "../components/PointsScoring";
 import LiveRaceStatus from "../components/LiveRaceStatus";
-
 
 import type { FullEvent } from "../types/event";
 import type { Race } from "../types/race";
+import type { RaceActivityPointsSprint } from "../types/raceactivities";
+import RaceActivitiesList from "../components/RaceActivitiesList";
+import type { RaceActivity } from "../types/raceactivities";
+
 
 function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
     const obj = raw && typeof raw === "object" ? (raw as any) : {};
+
+    const races = Array.isArray(obj.races) ? obj.races : [];
 
     return {
         id: typeof obj.id === "string" ? obj.id : eventId,
         name: typeof obj.name === "string" ? obj.name : "",
         slug: typeof obj.slug === "string" ? obj.slug : "",
         ageGroups: Array.isArray(obj.ageGroups) ? obj.ageGroups : [],
-        races: Array.isArray(obj.races) ? obj.races : [],
+        races: races.map((r: any) => ({
+            ...r,
+            raceResults: Array.isArray(r?.raceResults) ? r.raceResults : [],
+            raceStarters: Array.isArray(r?.raceStarters) ? r.raceStarters : [],
+            raceActivities: Array.isArray(r?.raceActivities) ? r.raceActivities : [],
+        })),
         athletes: Array.isArray(obj.athletes) ? obj.athletes : [],
     };
 }
+
 
 export default function ScoringPage() {
     const navigate = useNavigate();
@@ -36,7 +47,8 @@ export default function ScoringPage() {
 
     const activeEventId = eventList?.activeEventId ?? null;
     const docId = activeEventId ? `Event-${activeEventId}` : null;
-    const { data: raw, status, error } = useRealtimeDoc<Partial<FullEvent>>(docId);
+        const { data: raw, update, status, error } = useRealtimeDoc<Partial<FullEvent>>(docId);
+
 
     const fullEvent = useMemo(() => {
         if (!activeEventId) return null;
@@ -58,20 +70,54 @@ export default function ScoringPage() {
         navigate(`/races/${nextRaceId}/scoring`);
     }
 
-    const startersSorted = useMemo(() => {
-        const starters = race?.raceStarters ?? [];
-        return [...starters].sort((a, b) => {
-            const ai = a.bib ?? Number.MAX_SAFE_INTEGER;
-            const bi = b.bib ?? Number.MAX_SAFE_INTEGER;
-            if (ai !== bi) return ai - bi;
-            return (a.lastName ?? "").localeCompare(b.lastName ?? "", undefined, { sensitivity: "base" });
-        });
-    }, [race?.raceStarters]);
+    function handleUpdateActivity(updated: RaceActivity) {
+        if (!race) return;
 
-    function handleSavePoints(entry: PointsEntry) {
-        // TODO: persistence logic comes next (you said you'll define it)
-        console.log("save points", { raceId: race?.id, ...entry });
+        update((prev) => {
+            const next: any = structuredClone(prev as any);
+
+            const races = Array.isArray(next?.races) ? next.races : [];
+            const rIdx = races.findIndex((r: any) => r?.id === race.id);
+            if (rIdx < 0) return prev;
+
+            const r = { ...races[rIdx] };
+            const activities = Array.isArray(r.raceActivities) ? r.raceActivities : [];
+
+            const aIdx = activities.findIndex((a: any) => a?.id === updated.id);
+            if (aIdx < 0) {
+                // falls du lieber append willst: r.raceActivities = [...activities, updated];
+                return prev;
+            }
+
+            const nextActivities = [...activities];
+            nextActivities[aIdx] = updated;
+
+            r.raceActivities = nextActivities;
+            races[rIdx] = r;
+            next.races = races;
+
+            return next;
+        });
     }
+
+    function handleAddPointsSprintActivity(activity: RaceActivityPointsSprint) {
+        if (!race) return;
+
+        update((prev) => {
+            const next: any = structuredClone(prev as any);
+            const races = Array.isArray(next?.races) ? next.races : [];
+            const idx = races.findIndex((r: any) => r?.id === race.id);
+            if (idx < 0) return prev;
+
+            const r = { ...races[idx] };
+            const activities = Array.isArray(r.raceActivities) ? r.raceActivities : [];
+            r.raceActivities = [...activities, activity];
+            races[idx] = r;
+            next.races = races;
+            return next;
+        });
+    }
+
 
     // ---- Render guards ----
     if (!raceId) return <Typography variant="h6">Missing raceId.</Typography>;
@@ -156,11 +202,12 @@ export default function ScoringPage() {
                             alignItems: "start",
                         }}
                     >
-                        {/* Spalte 1: Punkte-Erfassung + kompakte Starterliste */}
-                        <PointsScoring starters={startersSorted} resetKey={race.id} onSave={handleSavePoints} />
+                                                {/* Spalte 1: Punkte-Erfassung + kompakte Starterliste */}
+                        <PointsScoring race={race} resetKey={race.id} onAddRaceActivity={handleAddPointsSprintActivity} />
+
 
                         <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
-                            <Typography variant="subtitle2">Bereich 2</Typography>
+                            <RaceActivitiesList race={race} onUpdateActivity={handleUpdateActivity} />
                         </Box>
 
 

@@ -41,15 +41,23 @@ import RaceEditor, { type RaceDraft } from "../components/RaceEditor";
 function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
   const obj = raw && typeof raw === "object" ? (raw as any) : {};
 
+  const races = Array.isArray(obj.races) ? obj.races : [];
+
   return {
     id: typeof obj.id === "string" ? obj.id : eventId,
     name: typeof obj.name === "string" ? obj.name : "",
     slug: typeof obj.slug === "string" ? obj.slug : "",
     ageGroups: Array.isArray(obj.ageGroups) ? obj.ageGroups : [],
-    races: Array.isArray(obj.races) ? obj.races : [],
+    races: races.map((r: any) => ({
+      ...r,
+      raceResults: Array.isArray(r?.raceResults) ? r.raceResults : [],
+      raceStarters: Array.isArray(r?.raceStarters) ? r.raceStarters : [],
+      raceActivities: Array.isArray(r?.raceActivities) ? r.raceActivities : [],
+    })),
     athletes: Array.isArray(obj.athletes) ? obj.athletes : [],
   };
 }
+
 
 function formatRaceMode(r: Race): string {
   const isPoints = !!r.racemode?.isPointsRace;
@@ -135,7 +143,7 @@ export default function ActiveEventPage() {
     setRaceEditorOpen(true);
   }
 
-  function openNextRaceFrom(r: Race) {
+    function openNextRaceFrom(r: Race) {
     const nextStageValue = incrementStageValue(r.stage_value);
 
     const template: Race = {
@@ -144,7 +152,9 @@ export default function ActiveEventPage() {
       slug: "",
       stage_value: nextStageValue,
       raceResults: [], // new race starts without results
+      raceActivities: [], // new race starts without activities
     };
+
 
     setRaceEditorMode("new");
     setEditorInitialRace(template);
@@ -165,6 +175,7 @@ export default function ActiveEventPage() {
       const existing = current.races.find((r) => r.id === draft.id);
       const existingResults = existing?.raceResults ?? [];
       const existingStarters = existing?.raceStarters ?? [];
+      const existingActivities = existing?.raceActivities ?? [];
 
       const normalizedStageValue = draft.stage === "" ? "" : draft.stage_value;
 
@@ -180,6 +191,7 @@ export default function ActiveEventPage() {
         distance_value: draft.distance_value,
         raceResults: existingResults,
         raceStarters: existingStarters,
+        raceActivities: existingActivities,
       };
 
       const exists = current.races.some((r) => r.id === nextRace.id);

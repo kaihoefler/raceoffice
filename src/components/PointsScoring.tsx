@@ -12,19 +12,24 @@ import {
 import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
 
 import type { Athlete } from "../types/athlete";
+import type { Race } from "../types/race";
+import type { RaceActivityPointsSprint } from "../types/raceactivities";
+
+
+
 
 export type PointsMode = "lap" | "finish";
 
-export type PointsEntry =
-  | { mode: "lap"; p2Id: string; p1Id: string }
-  | { mode: "finish"; p3Id: string; p2Id: string; p1Id: string };
 
 type Props = {
-  starters: Athlete[];
+  /** Active race (comes from the page) */
+  race: Race;
   /** Use e.g. race.id so the component resets when switching races */
   resetKey?: string;
-  onSave: (entry: PointsEntry) => void;
+  /** Add a new RaceActivityPointsSprint to the race (no editing in this component) */
+  onAddRaceActivity: (activity: RaceActivityPointsSprint) => void;
 };
+
 
 function athleteLabel(a: Athlete) {
   return `${a.bib ?? ""} - ${(a.lastName ?? "").trim()} ${(a.firstName ?? "").trim()}`.trim();
@@ -47,7 +52,36 @@ function PointsRow({
   );
 }
 
-export default function PointsScoring({ starters, resetKey, onSave }: Props) {
+function newId() {
+  return (globalThis.crypto as any)?.randomUUID?.() ?? `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function toPointsSprintActivity(lap: number, results: Array<{ bib: number; points: number }>): RaceActivityPointsSprint {
+  return {
+    id: newId(),
+    createdAt: new Date().toISOString(),
+    type: "pointsSprint",
+    data: {
+      lap,
+      isDeleted: false,
+      results,
+      history: [],
+    },
+  };
+}
+
+export default function PointsScoring({ race, resetKey, onAddRaceActivity }: Props) {
+  const starters = useMemo(() => {
+    const s = race.raceStarters ?? [];
+    return [...s].sort((a, b) => {
+      const ai = a.bib ?? Number.MAX_SAFE_INTEGER;
+      const bi = b.bib ?? Number.MAX_SAFE_INTEGER;
+      if (ai !== bi) return ai - bi;
+      return (a.lastName ?? "").localeCompare(b.lastName ?? "", undefined, { sensitivity: "base" });
+    });
+  }, [race.raceStarters]);
+
+
   const [mode, setMode] = useState<PointsMode>("lap");
 
   const [sel3P, setSel3P] = useState<Athlete | null>(null);
@@ -62,11 +96,41 @@ export default function PointsScoring({ starters, resetKey, onSave }: Props) {
   const ref2P = useRef<HTMLInputElement>(null);
   const ref1P = useRef<HTMLInputElement>(null);
 
+    
   // Used to ensure saving happens "through Enter".
   const enterRequestedRef = useRef(false);
 
-      const filterOptions = useMemo(() => {
+
+    const pointsSprintActivities = useMemo(() => {
+    const activities = (race as any)?.raceActivities;
+    const list = Array.isArray(activities) ? activities : [];
+    return list.filter((a): a is RaceActivityPointsSprint => a?.type === "pointsSprint");
+  }, [race]);
+
+
+  const defaultLap = useMemo(() => {
+    // nur gültige, nicht gelöschte Points-Sprints zählen
+    const maxLap = pointsSprintActivities.reduce((m, a) => {
+      if (a.data?.isDeleted) return m;
+      const lap = Number(a.data?.lap ?? 0);
+      return Number.isFinite(lap) ? Math.max(m, lap) : m;
+    }, 0);
+
+    // gewünschtes Verhalten: nächster Lap = max + 1
+    return Math.max(1, maxLap + 1);
+  }, [pointsSprintActivities]);
+
+  const [lap, setLap] = useState<number>(defaultLap);
+
+    // Reset lap when switching races (or when parent forces a reset)
+  useEffect(() => {
+    setLap(defaultLap);
+  }, [resetKey, race.id, defaultLap]);
+
+
+    const filterOptions = useMemo(() => {
     const base = createFilterOptions<Athlete>({
+
       stringify: (o) => `${o.bib ?? ""} ${(o.lastName ?? "")} ${(o.firstName ?? "")} ${(o.nation ?? "")}`,
       trim: true,
     });
@@ -82,8 +146,13 @@ export default function PointsScoring({ starters, resetKey, onSave }: Props) {
 
 
 
+  
+
+  
+
   const selectedIds = useMemo(() => {
     const ids = new Set<string>();
+
     if (sel3P) ids.add(sel3P.id);
     if (sel2P) ids.add(sel2P.id);
     if (sel1P) ids.add(sel1P.id);
@@ -124,8 +193,11 @@ export default function PointsScoring({ starters, resetKey, onSave }: Props) {
     }
   }, [mode]);
 
-    function trySelectByBib(input: string): Athlete | null {
+    
+
+  function trySelectByBib(input: string): Athlete | null {
     const v = input.trim();
+
     if (!v) return null;
     const bib = Number(v);
     if (!Number.isFinite(bib)) return null;
@@ -152,50 +224,81 @@ export default function PointsScoring({ starters, resetKey, onSave }: Props) {
   }
 
 
+    
+
   function maybeSaveIfComplete() {
+
     if (!enterRequestedRef.current) return;
 
+    const lapNum = Math.max(1, Math.floor(Number(lap)));
+
     if (mode === "lap") {
-      if (sel2P && sel1P) {
+      if (sel2P && sel1P && sel2P.bib != null && sel1P.bib != null) {
         enterRequestedRef.current = false;
-        onSave({ mode: "lap", p2Id: sel2P.id, p1Id: sel1P.id });
+        onAddRaceActivity(
+          toPointsSprintActivity(lapNum, [
+            { bib: sel2P.bib, points: 2 },
+            { bib: sel1P.bib, points: 1 },
+          ]),
+        );
         resetInputs("2P");
       }
       return;
     }
 
     // finish
-    if (sel3P && sel2P && sel1P) {
+    if (sel3P && sel2P && sel1P && sel3P.bib != null && sel2P.bib != null && sel1P.bib != null) {
       enterRequestedRef.current = false;
-      onSave({ mode: "finish", p3Id: sel3P.id, p2Id: sel2P.id, p1Id: sel1P.id });
+      onAddRaceActivity(
+        toPointsSprintActivity(lapNum, [
+          { bib: sel3P.bib, points: 3 },
+          { bib: sel2P.bib, points: 2 },
+          { bib: sel1P.bib, points: 1 },
+        ]),
+      );
       resetInputs("3P");
     }
   }
 
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
       {/* Points entry */}
-      <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+            <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, mb: 1 }}>
+
           <Typography variant="subtitle2">Points</Typography>
 
-          <ToggleButtonGroup
-            size="small"
-            exclusive
-            value={mode}
-            onChange={(_, v) => {
-              if (v) setMode(v);
-            }}
-            aria-label="Points mode"
-          >
-            <ToggleButton value="lap" aria-label="Standard Lap">
-              Standard Lap
-            </ToggleButton>
-            <ToggleButton value="finish" aria-label="Finish">
-              Finish
-            </ToggleButton>
-          </ToggleButtonGroup>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <TextField
+              size="small"
+              label="Lap"
+              value={lap}
+              onChange={(e) => setLap(Number(e.target.value))}
+              type="number"
+              inputProps={{ min: 1, step: 1 }}
+              sx={{ width: 110 }}
+            />
+
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={mode}
+              onChange={(_, v) => {
+                if (v) setMode(v);
+              }}
+              aria-label="Points mode"
+            >
+              <ToggleButton value="lap" aria-label="Standard Lap">
+                Standard Lap
+              </ToggleButton>
+              <ToggleButton value="finish" aria-label="Finish">
+                Finish
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
         </Box>
+
 
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
           {mode === "finish" ? (

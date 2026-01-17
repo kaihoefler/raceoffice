@@ -114,11 +114,12 @@ export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Pro
 
       // Avoid overlapping requests
       if (inFlightRef.current) return;
-      const ac = new AbortController();
+            const ac = new AbortController();
       inFlightRef.current = ac;
 
-            try {
+      try {
         const res = await fetch(resolvedUrl, { signal: ac.signal, headers: { Accept: "application/json" } });
+
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const json = (await res.json()) as unknown;
@@ -140,12 +141,15 @@ export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Pro
         if (!mounted) return;
         if (e?.name === "AbortError") return;
 
+                // Important: do NOT update updatedAt here.
+        // updatedAt represents the timestamp of the last SUCCESSFUL update.
+        // Otherwise the UI would think we're still connected even when the server is down.
         setState((prev) => ({
           ...prev,
           status: prev.currentRace ? "ok" : "error",
           error: String(e?.message ?? e),
-          updatedAt: Date.now(),
         }));
+
       } finally {
         inFlightRef.current = null;
       }

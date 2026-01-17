@@ -39,15 +39,23 @@ import type { Athlete } from "../types/athlete";
 function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
     const obj = raw && typeof raw === "object" ? (raw as any) : {};
 
+    const races = Array.isArray(obj.races) ? obj.races : [];
+
     return {
         id: typeof obj.id === "string" ? obj.id : eventId,
         name: typeof obj.name === "string" ? obj.name : "",
         slug: typeof obj.slug === "string" ? obj.slug : "",
         ageGroups: Array.isArray(obj.ageGroups) ? obj.ageGroups : [],
-        races: Array.isArray(obj.races) ? obj.races : [],
+        races: races.map((r: any) => ({
+            ...r,
+            raceResults: Array.isArray(r?.raceResults) ? r.raceResults : [],
+            raceStarters: Array.isArray(r?.raceStarters) ? r.raceStarters : [],
+            raceActivities: Array.isArray(r?.raceActivities) ? r.raceActivities : [],
+        })),
         athletes: Array.isArray(obj.athletes) ? obj.athletes : [],
     };
 }
+
 
 function normalizeIoc(input: string): string | null {
     const v = input.trim().toUpperCase();

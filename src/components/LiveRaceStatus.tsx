@@ -145,7 +145,7 @@ export default function LiveRaceStatus() {
   // With 1s polling we allow a little jitter; >3s without an update is considered disconnected.
   const isStale = !updatedAt || Date.now() - updatedAt > 3000;
   const isPaused = paused || status === "paused";
-  const isConnected = !isPaused && status === "ok" && !isStale;
+  const isConnected = !isPaused && status === "ok" && !isStale && !error;
 
   const connectionLabel = isPaused ? "paused" : isConnected ? "connected" : "no response";
   const connectionColor = isPaused ? "text.secondary" : isConnected ? "success.main" : "error.main";
@@ -176,6 +176,8 @@ export default function LiveRaceStatus() {
     const leader = competitors[0];
     if (!leader) return [];
 
+    const hideTimes = flagKey === "PURPLE";
+
     const leaderLaps = Number(leader.lapsComplete ?? 0);
     const leaderTimeSec = parseTimeToSeconds(leader.totalTime) ?? 0;
 
@@ -184,15 +186,17 @@ export default function LiveRaceStatus() {
       const timeSec = parseTimeToSeconds(c.totalTime);
 
       let timeText = "";
-      if (c === leader) {
-        timeText = formatLeaderTime(c.totalTime, laps);
-      } else if (laps < leaderLaps) {
-        const diffLaps = leaderLaps - laps;
-        timeText = diffLaps === 1 ? "+1 Lap" : `+${diffLaps} Laps`;
-      } else if (timeSec !== null) {
-        timeText = formatDeltaSeconds(timeSec - leaderTimeSec);
-      } else {
-        timeText = "";
+      if (!hideTimes) {
+        if (c === leader) {
+          timeText = formatLeaderTime(c.totalTime, laps);
+        } else if (laps < leaderLaps) {
+          const diffLaps = leaderLaps - laps;
+          timeText = diffLaps === 1 ? "+1 Lap" : `+${diffLaps} Laps`;
+        } else if (timeSec !== null) {
+          timeText = formatDeltaSeconds(timeSec - leaderTimeSec);
+        } else {
+          timeText = "";
+        }
       }
 
       return {
@@ -203,7 +207,7 @@ export default function LiveRaceStatus() {
         timeText,
       };
     });
-  }, [currentRace]);
+  }, [currentRace, flagKey]);
 
   if (isIdle) {
     return (

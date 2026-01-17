@@ -1,4 +1,5 @@
 import type { Athlete } from "./athlete";
+import type { RaceActivity } from "./raceactivities";
 
 export type Race = {
   id: string;
@@ -15,6 +16,7 @@ export type Race = {
   eventId: string;
   raceResults: RaceResult[];
   raceStarters: Athlete[];
+  raceActivities: RaceActivity[];
 
 };
 
