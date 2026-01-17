@@ -1,10 +1,22 @@
 // src/ui/AppLayout.tsx
 import { AppBar, Box, Container, Toolbar, Typography, Button, Chip, Tooltip } from "@mui/material";
-import { Link, Outlet } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { useEventList } from "../providers/EventListProvider";
+
 
 export default function AppLayout() {
   const { status, error } = useEventList();
+  const location = useLocation();
+
+  const isScoringPage = /^\/races\/[^/]+\/scoring(\/|$)/.test(location.pathname);
+  const isStartersPage = /^\/races\/[^/]+\/starters(\/|$)/.test(location.pathname);
+
+  // Mark "Active Event" as active also while working inside race sub-pages (starters/scoring)
+  const isActiveEvent = location.pathname === "/" || isStartersPage || isScoringPage;
+  const isEvents = location.pathname.startsWith("/events");
+  const isAbout = location.pathname.startsWith("/about");
+
+
 
   const label =
     status === "connected"
@@ -31,14 +43,15 @@ export default function AppLayout() {
           <Typography variant="h6">Race Result Management</Typography>
 
           {/* left-aligned buttons */}
-          <Box sx={{ display: "flex", gap: 1, ml: 2 }}>
-            <Button color="inherit" component={Link} to="/">
+                    <Box sx={{ display: "flex", gap: 1, ml: 2 }}>
+            <Button color="inherit" component={Link} to="/" variant={isActiveEvent ? "outlined" : "text"}>
               Active Event
             </Button>
-            <Button color="inherit" component={Link} to="/events">
+            <Button color="inherit" component={Link} to="/events" variant={isEvents ? "outlined" : "text"}>
               Events
             </Button>
           </Box>
+
 
           {/* spacer */}
           <Box sx={{ flexGrow: 1 }} />
@@ -49,15 +62,23 @@ export default function AppLayout() {
           </Tooltip>
 
           {/* right-aligned button */}
-          <Button color="inherit" component={Link} to="/about">
+                    <Button color="inherit" component={Link} to="/about" variant={isAbout ? "outlined" : "text"}>
             About
           </Button>
+
         </Toolbar>
       </AppBar>
 
-      <Container sx={{ py: 4, flex: 1 }}>
-        <Outlet />
-      </Container>
+      {isScoringPage ? (
+        <Box sx={{ py: 4, flex: 1, width: "100%", px: { xs: 1, sm: 2 } }}>
+          <Outlet />
+        </Box>
+      ) : (
+        <Container sx={{ py: 4, flex: 1 }}>
+          <Outlet />
+        </Container>
+      )}
+
     </Box>
   );
 }

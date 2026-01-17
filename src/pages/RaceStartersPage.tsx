@@ -22,7 +22,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import SaveIcon from "@mui/icons-material/Save";
 import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import HomeIcon from "@mui/icons-material/Home";
 
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -323,7 +323,7 @@ export default function RaceStartersPage() {
                         <Tooltip title="Back to Active Event" arrow>
                             <span>
                                 <IconButton onClick={() => navigate("/")} aria-label="Back to Active Event">
-                                    <ArrowBackIcon />
+                                    <HomeIcon />
                                 </IconButton>
                             </span>
                         </Tooltip>
@@ -363,7 +363,7 @@ export default function RaceStartersPage() {
                             <Tooltip title="Back to Active Event" arrow>
                                 <span>
                                     <IconButton onClick={() => navigate("/")} aria-label="Back to Active Event">
-                                        <ArrowBackIcon />
+                                        <HomeIcon />
                                     </IconButton>
                                 </span>
                             </Tooltip>

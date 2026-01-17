@@ -450,12 +450,12 @@ const filteredRaces = useMemo(() => {
                         </span>
                       </Tooltip>
                       
-                      <Tooltip title="Scoring (TODO)" arrow>
+                      <Tooltip title="Scoring" arrow>
                         <span>
                           <IconButton
                             size="small"
-                            color="primary"
-                            onClick={() => console.log("scoring", r.id)}
+                            //color="primary"
+                            onClick={() => navigate(`/races/${r.id}/scoring`)}
                             aria-label="Race scoring"
                           >
                             <EmojiEventsIcon />

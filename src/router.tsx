@@ -4,7 +4,8 @@ import AppLayout from "./ui/AppLayout";
 import ActiveEventPage from "./pages/ActiveEventPage";
 import AboutPage from "./pages/AboutPage";
 import EventsPage from "./pages/EventsPage";
-import RaceStartersPage from "./pages/RaceStartersPage";
+import RaceStartersPage from "./pages/RaceStartersPage";  
+import ScoringPage from "./pages/ScoringPage";
 
 export const router = createBrowserRouter([
   {
@@ -16,6 +17,7 @@ export const router = createBrowserRouter([
 
       // NEW: race starters page
       { path: "/races/:raceId/starters", element: <RaceStartersPage /> },
+      { path: "/races/:raceId/scoring", element: <ScoringPage /> },
     ],
   },
 ]);
