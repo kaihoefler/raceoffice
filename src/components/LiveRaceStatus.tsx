@@ -458,22 +458,6 @@ export default function LiveRaceStatus({
               }}
               disabled={!onSyncEnabledChange || !canSync}
               aria-label="Activate Sync"
-              sx={{
-                ...(syncEnabled && {
-                  borderColor: "success.main",
-                  color: "success.main",
-                  borderWidth: 2,
-
-                  "&.Mui-selected": {
-                    borderColor: "success.main",
-                    color: "success.main",
-                    backgroundColor: "transparent", // damit er nicht “filled” wirkt
-                  },
-                  "&.Mui-selected:hover": {
-                    backgroundColor: "action.hover",
-                  },
-                }),
-              }}
             >
               Activate Sync
             </ToggleButton>

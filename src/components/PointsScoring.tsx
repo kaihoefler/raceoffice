@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-    Box,
+  Box,
+  Chip,
   Button,
   List,
   ListItem,
@@ -432,13 +433,32 @@ export default function PointsScoring({
             <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, mb: 1 }}>
 
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
             <Typography variant="subtitle2">Points</Typography>
-            
+            {syncEnabled ? (
+              <Chip
+                size="small"
+                color="success"
+                variant="outlined"
+                                label={(() => {
+                  const parts: string[] = ["Sync"];
+
+                  const lapN = Number(liveLapCount);
+                  if (Number.isFinite(lapN)) parts.push(`Lap ${Math.max(1, Math.floor(lapN))}`);
+
+                  const toGoN = Number(liveLapsToGo);
+                  if (Number.isFinite(toGoN)) parts.push(`ToGo ${Math.floor(toGoN)}`);
+
+                  return parts.join(" • ");
+                })()}
+
+              />
+            ) : null}
           </Box>
 
+
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <TextField
+                        <TextField
               size="small"
               label="Lap"
               value={lap}
