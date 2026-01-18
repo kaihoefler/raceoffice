@@ -1,5 +1,6 @@
 // src/pages/ScoringPage.tsx
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+
 import { useNavigate, useParams } from "react-router-dom";
 
 import { Box, Card, CardContent, CardHeader, Divider, IconButton, Tooltip, Typography } from "@mui/material";
@@ -13,11 +14,13 @@ import { useScoringViewModel } from "./scoring/ScoringViewModel";
 import RaceSelector from "../components/RaceSelector";
 import PointsScoring from "../components/PointsScoring";
 import LiveRaceStatus from "../components/LiveRaceStatus";
+import RaceActivitiesList from "../components/RaceActivitiesList";
+import Scoreboard from "../components/Scoreboard";
+
 
 import type { FullEvent } from "../types/event";
 import type { Race } from "../types/race";
 import type { RaceActivityPointsSprint } from "../types/raceactivities";
-import RaceActivitiesList from "../components/RaceActivitiesList";
 import type { RaceActivity } from "../types/raceactivities";
 import type { Athlete } from "../types/athlete";
 
@@ -51,7 +54,7 @@ export default function ScoringPage() {
 
     const activeEventId = eventList?.activeEventId ?? null;
     const docId = activeEventId ? `Event-${activeEventId}` : null;
-        const { data: raw, update, status, error } = useRealtimeDoc<Partial<FullEvent>>(docId);
+    const { data: raw, update, status, error } = useRealtimeDoc<Partial<FullEvent>>(docId);
 
 
     const fullEvent = useMemo(() => {
@@ -69,8 +72,12 @@ export default function ScoringPage() {
         return fullEvent.ageGroups.find((ag) => ag.id === race.ageGroupId) ?? null;
     }, [fullEvent, race]);
 
-    const { currentRace } = useRaceStatus();
-    const vm = useScoringViewModel(race, currentRace);
+        const { currentRace } = useRaceStatus();
+
+    const [syncEnabled, setSyncEnabled] = useState(false);
+
+    const vm = useScoringViewModel(race, currentRace, syncEnabled);
+
 
     function handleRaceSelect(nextRaceId: string) {
         if (!nextRaceId || nextRaceId === raceId) return;
@@ -107,7 +114,7 @@ export default function ScoringPage() {
         });
     }
 
-        function handleAddPointsSprintActivity(activity: RaceActivityPointsSprint) {
+    function handleAddPointsSprintActivity(activity: RaceActivityPointsSprint) {
         if (!race) return;
 
         update((prev) => {
@@ -233,21 +240,27 @@ export default function ScoringPage() {
                     <Box
                         sx={{
                             display: "grid",
-                            gap: 2,
+                            gap: 1,
                             gridTemplateColumns: {
                                 xs: "1fr",
-                                md: "repeat(4, 1fr)",
+                                md: "minmax(300px, 0.8fr) minmax(300px, 1.0fr) minmax(280px, 1fr) minmax(380px, 1.4fr)",
                             },
                             alignItems: "start",
                         }}
                     >
-                                                {/* Spalte 1: Punkte-Erfassung + kompakte Starterliste */}
-                        <PointsScoring
+                        {/* Spalte 1: Punkte-Erfassung + kompakte Starterliste */}
+                                                <PointsScoring
                             race={race}
                             resetKey={race.id}
                             onAddRaceActivity={handleAddPointsSprintActivity}
                             missingInLiveBibs={vm.missingInLiveBibs}
+                            syncEnabled={vm.syncEnabled}
+                            liveLapCount={vm.liveLapCount}
+                                                        liveLapsToGo={vm.liveLapsToGo}
+                            liveTopBibs={vm.liveTopBibs}
                         />
+
+
 
 
                         <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
@@ -255,15 +268,19 @@ export default function ScoringPage() {
                         </Box>
 
 
-                        <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
-                            <Typography variant="subtitle2">Bereich 3</Typography>
-                        </Box>
+                        
 
-                                                {/* Spalte 4: Live race status (polled via RaceStatusProvider) */}
+                        <Scoreboard standings={vm.standings} title="Standings" />
+
+
+                        {/* Spalte 4: Live race status (polled via RaceStatusProvider) */}
                                                 <LiveRaceStatus
                             unknownLiveBibs={vm.unknownLiveBibs}
                             onCreateStarters={handleCreateMissingStartersFromLive}
+                            syncEnabled={syncEnabled}
+                            onSyncEnabledChange={setSyncEnabled}
                         />
+
 
 
                     </Box>
