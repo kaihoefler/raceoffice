@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -16,6 +16,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  ToggleButton,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -119,9 +120,14 @@ function competitorName(c: RaceStatusCompetitor): string {
 export default function LiveRaceStatus({
   unknownLiveBibs,
   onCreateStarters,
+  syncEnabled = false,
+  onSyncEnabledChange,
 }: {
   unknownLiveBibs?: Set<number>;
   onCreateStarters?: () => void;
+  /** If enabled, the page can sync PointsScoring with Live status. */
+  syncEnabled?: boolean;
+  onSyncEnabledChange?: (next: boolean) => void;
 }) {
   const {
     status,
@@ -163,6 +169,26 @@ export default function LiveRaceStatus({
   const isIdle = !currentRace || !flagTrim;
 
   const flagKey = flagTrim.toUpperCase();
+  const canSync = flagKey === "GREEN" || flagKey === "PURPLE";
+
+  // Reset sync when the active race changes (or becomes idle)
+  const raceId = (currentRace as any)?.raceID ?? null;
+  const prevRaceIdRef = useRef<number | null>(raceId);
+
+  useEffect(() => {
+    // keep ref in sync even if we can't control the state
+    if (prevRaceIdRef.current === raceId) return;
+    prevRaceIdRef.current = raceId;
+
+    // requirement: after race changes -> sync off
+    onSyncEnabledChange?.(false);
+  }, [raceId, onSyncEnabledChange]);
+
+  // If flag is not GREEN/PURPLE anymore, force sync off.
+  useEffect(() => {
+    if (!onSyncEnabledChange) return;
+    if (syncEnabled && !canSync) onSyncEnabledChange(false);
+  }, [syncEnabled, canSync, onSyncEnabledChange]);
   const flagChipVariant: "filled" | "outlined" =
     flagKey === "GREEN" || flagKey === "PURPLE" || flagKey === "FINISH" ? "filled" : "outlined";
 
@@ -419,8 +445,42 @@ export default function LiveRaceStatus({
         </Typography>
       </Box>
 
-      {unknownCount > 0 ? (
-        <Box sx={{ display: "flex", justifyContent: "flex-start", mb: 1 }}>
+      <Box sx={{ display: "flex", justifyContent: "flex-start", mb: 1, gap: 1, flexWrap: "wrap" }}>
+        <Tooltip title="Synchronize Live status with PointsScoring" arrow>
+          <span>
+            <ToggleButton
+              size="small"
+              value="sync"
+              selected={Boolean(syncEnabled)}
+              onChange={() => {
+                if (!canSync) return;
+                onSyncEnabledChange?.(!syncEnabled);
+              }}
+              disabled={!onSyncEnabledChange || !canSync}
+              aria-label="Activate Sync"
+              sx={{
+                ...(syncEnabled && {
+                  borderColor: "success.main",
+                  color: "success.main",
+                  borderWidth: 2,
+
+                  "&.Mui-selected": {
+                    borderColor: "success.main",
+                    color: "success.main",
+                    backgroundColor: "transparent", // damit er nicht “filled” wirkt
+                  },
+                  "&.Mui-selected:hover": {
+                    backgroundColor: "action.hover",
+                  },
+                }),
+              }}
+            >
+              Activate Sync
+            </ToggleButton>
+          </span>
+        </Tooltip>
+
+        {unknownCount > 0 ? (
           <Tooltip title={`Create ${unknownCount} missing starter(s) from live list`} arrow>
             <span>
               <Button
@@ -434,8 +494,8 @@ export default function LiveRaceStatus({
               </Button>
             </span>
           </Tooltip>
-        </Box>
       ) : null}
+      </Box>
 
       <Table size="small" stickyHeader>
         <TableHead>

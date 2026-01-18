@@ -307,7 +307,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
               sx={{
                 width: "100%",
                 display: "grid",
-                gridTemplateColumns: "48px 92px 1fr 88px",
+                gridTemplateColumns: "28px 42px 1fr 48px",
                 columnGap: 1,
                 alignItems: "center",
               }}
@@ -372,7 +372,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
                   sx={{
                     width: "100%",
                     display: "grid",
-                    gridTemplateColumns: "48px 92px 1fr 88px",
+                    gridTemplateColumns: "28px 42px 1fr 48px",
                     columnGap: 1,
                     rowGap: 0.25,
                     alignItems: "center",
@@ -390,20 +390,11 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
                     {isDeleted ? <Chip size="small" label="deleted" color="warning" variant="outlined" /> : null}
                   </Box>
 
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      minWidth: 0,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {content}
-                  </Typography>
+                  {/* row 1: keep column 3 empty; content is shown in row 2 together with history */}
+                  <Box />
 
                   <Box sx={{ justifySelf: "end", alignSelf: "start" }}>
-                    <Stack direction="row" spacing={0.5} sx={{ mt: 0.25 }}>
+                    <Stack direction="row" spacing={0.1} sx={{ mt: 0.15 }}>
                       {isEditing ? (
                         <>
                           <Tooltip title="Save" arrow>
@@ -447,13 +438,35 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
                     </Stack>
                   </Box>
 
-                  {/* row 2: history (right-aligned, before icons) */}
-                  <Box sx={{ gridColumn: "1 / 4", justifySelf: "end" }}>
+                  {/* row 2: content (left) + history (right) */}
+                  <Box
+                    sx={{
+                      gridColumn: "2 / 4",
+                      display: "flex",
+                      alignItems: "baseline",
+                      justifyContent: "space-between",
+                      gap: 1,
+                      minWidth: 0,
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        minWidth: 0,
+                        flex: 1,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {content}
+                    </Typography>
+
                     <Tooltip title={historyTitle} arrow placement="top-start">
                       <Typography
                         variant="caption"
                         color="text.secondary"
-                        sx={{ cursor: history.length ? "help" : "default" }}
+                        sx={{ whiteSpace: "nowrap", cursor: history.length ? "help" : "default" }}
                       >
                         History: {history.length}
                       </Typography>

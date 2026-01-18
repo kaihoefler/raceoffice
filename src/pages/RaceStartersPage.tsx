@@ -23,6 +23,9 @@ import SaveIcon from "@mui/icons-material/Save";
 import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import HomeIcon from "@mui/icons-material/Home";
+import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
+import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
+
 
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -190,13 +193,26 @@ export default function RaceStartersPage() {
         cancelEdit();
     }
 
-    function deleteStarter(athleteId: string) {
+        function deleteStarter(athleteId: string) {
         const ok = window.confirm("Delete starter?");
         if (!ok) return;
 
         updateRaceStarters(starters.filter((a) => a.id !== athleteId));
         if (editingAthleteId === athleteId) cancelEdit();
     }
+
+    function deleteAllStarters() {
+        if (!race) return;
+        if (!starters.length) return;
+
+        const ok = window.confirm(`Delete ALL starters (${starters.length})?`);
+        if (!ok) return;
+
+        updateRaceStarters([]);
+        cancelEdit();
+        setTimeout(() => newBibRef.current?.focus(), 0);
+    }
+
 
     function addStarter(): boolean {
         if (!race) return false;
@@ -302,7 +318,14 @@ export default function RaceStartersPage() {
     }
 
 
+        function goToScoring() {
+        if (!race) return;
+        cancelEdit();
+        navigate(`/races/${race.id}/scoring`);
+    }
+
     function handleNewRowKeyDown(ev: React.KeyboardEvent) {
+
         if (ev.key !== "Enter") return;
 
         // optional: Shift+Enter soll NICHT hinzufügen
@@ -359,7 +382,7 @@ export default function RaceStartersPage() {
                 <CardHeader
                     title={race.name}
                     action={
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                                                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                             <RaceSelector
                                 races={fullEvent.races}
                                 ageGroups={fullEvent.ageGroups}
@@ -367,6 +390,27 @@ export default function RaceStartersPage() {
                                 onChange={handleRaceSelect}
                                 size="small"
                             />
+
+                            <Tooltip title="Go to Scoring" arrow>
+                                <span>
+                                    <IconButton onClick={goToScoring} aria-label="Go to Scoring">
+                                        <EmojiEventsIcon />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+
+                            <Tooltip title="Delete all starters" arrow>
+                                <span>
+                                    <IconButton
+                                        onClick={deleteAllStarters}
+                                        aria-label="Delete all starters"
+                                        color="error"
+                                        disabled={startersCount === 0}
+                                    >
+                                        <DeleteSweepIcon />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
 
                             <Tooltip title="Back to Active Event" arrow>
                                 <span>
@@ -376,6 +420,7 @@ export default function RaceStartersPage() {
                                 </span>
                             </Tooltip>
                         </Box>
+
                     }
 
                     subheader={
