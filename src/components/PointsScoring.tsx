@@ -2,31 +2,31 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
-  List,
-  ListItem,
-  ListItemText,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  Stack,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 
-import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
+import { createFilterOptions } from "@mui/material/useAutocomplete";
+
+import PointsBibField, { type AthleteFilterOptions } from "./PointsBibField";
+import ScoringStarterList from "./ScoringStarterList";
 
 import type { Athlete } from "../types/athlete";
 import type { Race } from "../types/race";
 import type { RaceActivityPointsSprint } from "../types/raceactivities";
 
-
-
-
-
-
 const DEFAULT_LIVE_TOP_BIBS = { p1Bib: null, p2Bib: null, p3Bib: null } as const;
 
 export type PointsMode = "lap" | "finish";
-
-
 
 type Props = {
   /** Active race (comes from the page) */
@@ -35,13 +35,16 @@ type Props = {
   resetKey?: string;
   /** Add a new RaceActivityPointsSprint to the race (no editing in this component) */
   onAddRaceActivity: (activity: RaceActivityPointsSprint) => void;
+
+  onCreateStarters?: (bibs: number[]) => Promise<void> | void;
+
   missingInLiveBibs?: Set<number>;
 
   /** If true, PointsScoring can react to live lap changes. */
   syncEnabled?: boolean;
   /** Live lap count (typically RaceStatusRace.lapsComplete). */
   liveLapCount?: number | null;
-    /** Live laps to go (typically RaceStatusRace.lapsToGo). */
+  /** Live laps to go (typically RaceStatusRace.lapsToGo). */
   liveLapsToGo?: number | null;
 
   /** Top bibs by live position (p1..p3). Used for auto-prefill when sync is enabled. */
@@ -50,6 +53,7 @@ type Props = {
     p2Bib: number | null;
     p3Bib: number | null;
   };
+
 };
 
 
@@ -98,16 +102,20 @@ export default function PointsScoring({
   race,
   resetKey,
   onAddRaceActivity,
+  onCreateStarters,
   missingInLiveBibs,
   syncEnabled = false,
   liveLapCount = null,
-    liveLapsToGo = null,
+  liveLapsToGo = null,
   liveTopBibs = DEFAULT_LIVE_TOP_BIBS,
 }: Props) {
 
 
 
-    const starters = useMemo(() => {
+  // ---------------------------------------------------------------------------
+  // Derived data: starters + lookup maps
+  // ---------------------------------------------------------------------------
+  const starters = useMemo(() => {
     const s = race.raceStarters ?? [];
     return [...s].sort((a, b) => {
       const ai = a.bib ?? Number.MAX_SAFE_INTEGER;
@@ -127,6 +135,9 @@ export default function PointsScoring({
 
 
 
+  // ---------------------------------------------------------------------------
+  // State: mode + selected athletes + input strings
+  // ---------------------------------------------------------------------------
   const [mode, setMode] = useState<PointsMode>("lap");
 
   const [sel3P, setSel3P] = useState<Athlete | null>(null);
@@ -137,7 +148,8 @@ export default function PointsScoring({
   const [in2P, setIn2P] = useState("");
   const [in1P, setIn1P] = useState("");
 
-    const ref3P = useRef<HTMLInputElement>(null);
+  const ref3P = useRef<HTMLInputElement>(null);
+
   const ref2P = useRef<HTMLInputElement>(null);
   const ref1P = useRef<HTMLInputElement>(null);
 
@@ -150,9 +162,30 @@ export default function PointsScoring({
   // Used to ensure saving happens "through Enter".
   const enterRequestedRef = useRef(false);
 
+  // ---------------------------------------------------------------------------
+  // State: confirmation dialog for creating missing starters
+  // ---------------------------------------------------------------------------
+  const [missingDialogOpen, setMissingDialogOpen] = useState(false);
+  const [missingDialogBibs, setMissingDialogBibs] = useState<number[]>([]);
+  const [missingDialogBusy, setMissingDialogBusy] = useState(false);
 
+  // Speichert die "eigentliche" Save-Operation, bis der User im Dialog entscheidet.
+  const pendingSaveRef = useRef<null | (() => void)>(null);
 
-    const pointsSprintActivities = useMemo(() => {
+  function openMissingStartersDialog(bibs: number[]) {
+    setMissingDialogBibs(bibs);
+    setMissingDialogOpen(true);
+  }
+
+  function closeMissingStartersDialog() {
+    setMissingDialogOpen(false);
+    setMissingDialogBibs([]);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Existing points activities -> default lap = max(lap) + 1
+  // ---------------------------------------------------------------------------
+  const pointsSprintActivities = useMemo(() => {
     const activities = (race as any)?.raceActivities;
     const list = Array.isArray(activities) ? activities : [];
     return list.filter((a): a is RaceActivityPointsSprint => a?.type === "pointsSprint");
@@ -178,7 +211,9 @@ export default function PointsScoring({
     setLap(defaultLap);
   }, [resetKey, race.id, defaultLap]);
 
-  // ---- Live sync handling ----
+  // ---------------------------------------------------------------------------
+  // Live sync handling (lap + mode)
+  // ---------------------------------------------------------------------------
   const prevLiveLapRef = useRef<number | null>(null);
 
   // When sync is turned off, forget previous live lap (so re-enabling doesn't trigger a stale "change").
@@ -208,7 +243,7 @@ export default function PointsScoring({
 
   // If live says "no laps to go" -> switch to finish mode.
   // We do not auto-switch back to lap mode.
-    useEffect(() => {
+  useEffect(() => {
     if (!syncEnabled) return;
     if (liveLapsToGo == null) return;
 
@@ -218,7 +253,9 @@ export default function PointsScoring({
     }
   }, [syncEnabled, liveLapsToGo, mode]);
 
-  // ---- Live sync: prefill bibs from live positions ----
+  // ---------------------------------------------------------------------------
+  // Live sync: prefill bibs from live positions
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!syncEnabled) return;
 
@@ -226,7 +263,7 @@ export default function PointsScoring({
     const p2 = liveTopBibs?.p2Bib ?? null;
     const p3 = liveTopBibs?.p3Bib ?? null;
 
-        const apply = (
+    const apply = (
       desiredBib: number | null,
       current: Athlete | null,
       currentInput: string,
@@ -239,7 +276,7 @@ export default function PointsScoring({
       const a = starterByBib.get(desiredBib) ?? null;
       if (!a) return;
 
-                        const currentBib = current?.bib ?? null;
+      const currentBib = current?.bib ?? null;
       const shouldUpdate =
         (current == null && !String(currentInput ?? "").trim()) ||
         (autoRef.current != null && currentBib != null && currentBib === autoRef.current);
@@ -251,50 +288,55 @@ export default function PointsScoring({
 
       autoRef.current = a.bib ?? null;
       setCurrent(a);
-      setInput(athleteLabel(a));
+      setInput(a.bib != null ? String(a.bib) : "");
+
     };
 
     if (mode === "finish") {
       // Finish: place 1..3 => 3/2/1 points
-            apply(p1, sel3P, in3P, setSel3P, setIn3P, auto3PBibRef);
+      apply(p1, sel3P, in3P, setSel3P, setIn3P, auto3PBibRef);
       apply(p2, sel2P, in2P, setSel2P, setIn2P, auto2PBibRef);
       apply(p3, sel1P, in1P, setSel1P, setIn1P, auto1PBibRef);
 
     } else {
       // Lap sprint: place 1..2 => 2/1 points
-            apply(p1, sel2P, in2P, setSel2P, setIn2P, auto2PBibRef);
+      apply(p1, sel2P, in2P, setSel2P, setIn2P, auto2PBibRef);
       apply(p2, sel1P, in1P, setSel1P, setIn1P, auto1PBibRef);
 
     }
-      }, [syncEnabled, mode, liveTopBibs, starterByBib, sel1P, sel2P, sel3P, in1P, in2P, in3P]);
+  }, [syncEnabled, mode, liveTopBibs, starterByBib, sel1P, sel2P, sel3P, in1P, in2P, in3P]);
 
 
 
 
 
-  const filterOptions = useMemo(() => {
-
+  // ---------------------------------------------------------------------------
+  // Autocomplete filtering (only show options after typing at least 1 char)
+  // ---------------------------------------------------------------------------
+  const filterOptions: AthleteFilterOptions = useMemo(() => {
     const base = createFilterOptions<Athlete>({
-
       stringify: (o) => `${o.bib ?? ""} ${(o.lastName ?? "")} ${(o.firstName ?? "")} ${(o.nation ?? "")}`,
       trim: true,
     });
 
     // Only show suggestions when at least 1 character was typed.
     // This also prevents showing an empty dropdown / "no options" on focus.
-    return (options: Athlete[], state: { inputValue: string }) => {
+    return (options, state) => {
       if (!state.inputValue.trim()) return [];
-      return base(options, state as any);
+      return base(options, state);
     };
   }, []);
 
 
 
 
-  
 
-  
 
+
+
+  // ---------------------------------------------------------------------------
+  // UI helpers: selectedIds + available options + focus/reset behavior
+  // ---------------------------------------------------------------------------
   const selectedIds = useMemo(() => {
     const ids = new Set<string>();
 
@@ -306,7 +348,7 @@ export default function PointsScoring({
 
   const optionsFor = (exclude: Set<string>) => starters.filter((a) => !exclude.has(a.id));
 
-    function resetInputs(focus: "2P" | "3P" = "2P") {
+  function resetInputs(focus: "2P" | "3P" = "2P") {
     auto3PBibRef.current = null;
     auto2PBibRef.current = null;
     auto1PBibRef.current = null;
@@ -336,7 +378,7 @@ export default function PointsScoring({
   useEffect(() => {
     if (mode === "finish") {
       setTimeout(() => ref3P.current?.focus(), 0);
-        } else {
+    } else {
       auto3PBibRef.current = null;
       setSel3P(null);
       setIn3P("");
@@ -345,16 +387,10 @@ export default function PointsScoring({
 
   }, [mode]);
 
-    
 
-  function trySelectByBib(input: string): Athlete | null {
-    const v = input.trim();
 
-    if (!v) return null;
-    const bib = Number(v);
-    if (!Number.isFinite(bib)) return null;
-    return starters.find((a) => a.bib === bib) ?? null;
-  }
+  // NOTE: Previously there was a `trySelectByBib` helper that only resolved existing starters.
+  // We now use `resolveOrPlaceholder` (see below), so unknown bibs can still be selected.
 
   function tryAutoPickUniqueBib(input: string, candidates: Athlete[]): Athlete | null {
     const v = input.trim();
@@ -376,22 +412,24 @@ export default function PointsScoring({
   }
 
 
-    
 
-    const canSave = useMemo(() => {
+
+  // ---------------------------------------------------------------------------
+  // Save flow (with confirmation dialog for missing starters)
+  // ---------------------------------------------------------------------------
+  const canSave = useMemo(() => {
     if (mode === "finish") {
       return sel3P?.bib != null && sel2P?.bib != null && sel1P?.bib != null;
     }
     return sel2P?.bib != null && sel1P?.bib != null;
   }, [mode, sel1P, sel2P, sel3P]);
 
-  function saveNow() {
-    if (!canSave) return;
-
+  function commitSave() {
     const lapNum = Math.max(1, Math.floor(Number(lap)));
 
+    enterRequestedRef.current = false;
+
     if (mode === "lap") {
-      enterRequestedRef.current = false;
       onAddRaceActivity(
         toPointsSprintActivity(lapNum, [
           { bib: sel2P!.bib!, points: 2 },
@@ -402,8 +440,6 @@ export default function PointsScoring({
       return;
     }
 
-    // finish
-    enterRequestedRef.current = false;
     onAddRaceActivity(
       toPointsSprintActivity(lapNum, [
         { bib: sel3P!.bib!, points: 3 },
@@ -414,6 +450,49 @@ export default function PointsScoring({
     resetInputs("3P");
   }
 
+  async function saveAsync() {
+    if (!canSave) return;
+
+    const selectedBibs = getSelectedBibs();
+    const missing = getMissingStarterBibs(selectedBibs);
+
+    if (missing.length > 0) {
+      if (!onCreateStarters) {
+        console.warn("Missing starters but onCreateStarters is not provided:", missing);
+        return; // nicht speichern
+      }
+
+      pendingSaveRef.current = commitSave;
+      openMissingStartersDialog(missing);
+      return;
+    }
+
+    commitSave();
+  }
+
+  async function handleDialogCreateAndSave() {
+    if (!onCreateStarters) return;
+
+    try {
+      setMissingDialogBusy(true);
+      await onCreateStarters(missingDialogBibs);
+      closeMissingStartersDialog();
+
+      const run = pendingSaveRef.current;
+      pendingSaveRef.current = null;
+      run?.();
+    } finally {
+      setMissingDialogBusy(false);
+    }
+  }
+
+
+
+  function handleDialogCancel() {
+    closeMissingStartersDialog();
+    pendingSaveRef.current = null;
+  }
+
   function clearNow() {
     enterRequestedRef.current = false;
     resetInputs(mode === "finish" ? "3P" : "2P");
@@ -421,24 +500,58 @@ export default function PointsScoring({
 
   function maybeSaveIfComplete() {
     if (!enterRequestedRef.current) return;
-    saveNow();
+    void saveAsync();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Placeholder handling: allow selecting bibs that are not (yet) in race starters
+  // ---------------------------------------------------------------------------
+
+  function makePlaceholderAthlete(bib: number): Athlete {
+    return {
+      id: `placeholder_${bib}_${Date.now()}`,
+      bib,
+      firstName: "",
+      lastName: "",
+      ageGroupId: race.ageGroupId ?? null,
+      nation: null,
+    };
+  }
+
+  function resolveOrPlaceholder(bibText: string): Athlete | null {
+    const v = bibText.trim();
+    if (!/^\d+$/.test(v)) return null;
+    const bib = Number(v);
+    if (!Number.isFinite(bib) || bib <= 0) return null;
+
+    return starterByBib.get(bib) ?? makePlaceholderAthlete(bib);
   }
 
 
 
+  function getSelectedBibs(): number[] {
+    const bibs = [sel1P?.bib, sel2P?.bib, sel3P?.bib].filter((b): b is number => b != null);
+    return Array.from(new Set(bibs));
+  }
+
+  function getMissingStarterBibs(bibs: number[]): number[] {
+    return bibs.filter((bib) => !starterByBib.has(bib));
+  }
+
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
       {/* Points entry */}
-            <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, mb: 1 }}>
-
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
-            <Typography variant="subtitle2">Points</Typography>
-          </Box>
-
-
+      <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, minWidth: 0 }}>
+          <Typography variant="subtitle2">Points</Typography>
+        </Box>
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, mb: 1 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        <TextField
+            <TextField
               size="small"
               label="Lap"
               value={lap}
@@ -465,7 +578,8 @@ export default function PointsScoring({
                   "& .MuiInputLabel-root.Mui-focused": {
                     color: "success.main",
                   },
-                }), }}
+                }),
+              }}
             />
 
 
@@ -492,224 +606,145 @@ export default function PointsScoring({
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
           {mode === "finish" ? (
             <PointsRow label="3 P">
-              <Autocomplete
-                size="small"
-                options={optionsFor(new Set([sel2P?.id, sel1P?.id].filter(Boolean) as string[]))}
-                                value={sel3P}
+              <PointsBibField
+                value={sel3P}
                 inputValue={in3P}
-                                open={Boolean(in3P.trim()) && !sel3P}
-
-                                onInputChange={(_, v, reason) => {
+                inputRef={ref3P}
+                options={optionsFor(new Set([sel2P?.id, sel1P?.id].filter(Boolean) as string[]))}
+                filterOptions={filterOptions}
+                formatOption={athleteLabel}
+                resolveByBib={resolveOrPlaceholder}
+                onInputValueChange={(v, reason) => {
                   setIn3P(v);
                   if (reason !== "input") return;
 
                   auto3PBibRef.current = null;
+                  setSel3P(null);
 
                   const pick = tryAutoPickUniqueBib(v, candidatesFor([sel2P?.id, sel1P?.id]));
                   if (pick) {
                     setSel3P(pick);
-                    setIn3P(athleteLabel(pick));
+                    setIn3P(pick.bib != null ? String(pick.bib) : "");
                     setTimeout(() => ref2P.current?.focus(), 0);
                   }
                 }}
-
-
-                                onChange={(_, v) => {
+                onSelect={(next) => {
                   auto3PBibRef.current = null;
-                  const next = (typeof v === "string" ? trySelectByBib(v) : v) as Athlete | null;
                   setSel3P(next);
-                  setIn3P(next ? athleteLabel(next) : "");
+                  setIn3P(next?.bib != null ? String(next.bib) : "");
+
                   if (next) setTimeout(() => ref2P.current?.focus(), 0);
                 }}
-
-                filterOptions={filterOptions}
-                                autoHighlight
-                openOnFocus={false}
-                freeSolo
-
-                isOptionEqualToValue={(o, v) => o.id === v.id}
-                getOptionLabel={(o) => (typeof o === "string" ? o : athleteLabel(o))}
-                                                renderInput={(params) => {
-                  const { inputProps, InputProps, InputLabelProps, ...rest } = params;
-
-                  return (
-                    <TextField
-                      {...rest}
-                      inputRef={ref3P}
-                      placeholder="Startnummer"
-                      InputProps={InputProps}
-                      InputLabelProps={InputLabelProps}
-                      slotProps={{ htmlInput: { ...inputProps, inputMode: "numeric" } }}
-                      onKeyDown={(ev) => {
-                        if (ev.key !== "Enter") return;
-                        const m = trySelectByBib(in3P);
-                        if (m) {
-                          auto3PBibRef.current = null;
-                          setSel3P(m);
-                          setIn3P(athleteLabel(m));
-                          setTimeout(() => ref2P.current?.focus(), 0);
-                        }
-                      }}
-                    />
-                  );
+                onEnter={() => {
+                  const m = resolveOrPlaceholder(in3P);
+                  if (m) {
+                    auto3PBibRef.current = null;
+                    setSel3P(m);
+                    setIn3P(m.bib != null ? String(m.bib) : "");
+                    setTimeout(() => ref2P.current?.focus(), 0);
+                  }
                 }}
-
-
               />
             </PointsRow>
           ) : null}
 
           <PointsRow label={mode === "finish" ? "2 P" : "2 P"}>
-            <Autocomplete
-              size="small"
+            <PointsBibField
+              value={sel2P}
+              inputValue={in2P}
+              inputRef={ref2P}
               options={
                 mode === "finish"
                   ? optionsFor(new Set([sel3P?.id, sel1P?.id].filter(Boolean) as string[]))
                   : optionsFor(new Set([sel1P?.id].filter(Boolean) as string[]))
               }
-                            value={sel2P}
-              inputValue={in2P}
-                            open={Boolean(in2P.trim()) && !sel2P}
-
-                            onInputChange={(_, v, reason) => {
+              filterOptions={filterOptions}
+              formatOption={athleteLabel}
+              resolveByBib={resolveOrPlaceholder}
+              onInputValueChange={(v, reason) => {
                 setIn2P(v);
                 if (reason !== "input") return;
 
                 auto2PBibRef.current = null;
+                setSel2P(null);
 
                 const exclude = mode === "finish" ? [sel3P?.id, sel1P?.id] : [sel1P?.id];
                 const pick = tryAutoPickUniqueBib(v, candidatesFor(exclude));
                 if (pick) {
                   setSel2P(pick);
-                  setIn2P(athleteLabel(pick));
+                  setIn2P(pick.bib != null ? String(pick.bib) : "");
                   setTimeout(() => ref1P.current?.focus(), 0);
                 }
               }}
-
-
-                            onChange={(_, v) => {
+              onSelect={(next) => {
                 auto2PBibRef.current = null;
-                const next = (typeof v === "string" ? trySelectByBib(v) : v) as Athlete | null;
                 setSel2P(next);
-                setIn2P(next ? athleteLabel(next) : "");
+                setIn2P(next?.bib != null ? String(next.bib) : "");
+
                 if (next) setTimeout(() => ref1P.current?.focus(), 0);
               }}
-
-              filterOptions={filterOptions}
-                              autoHighlight
-                openOnFocus={false}
-                freeSolo
-
-              isOptionEqualToValue={(o, v) => o.id === v.id}
-              getOptionLabel={(o) => (typeof o === "string" ? o : athleteLabel(o))}
-                                          renderInput={(params) => {
-                const { inputProps, InputProps, InputLabelProps, ...rest } = params;
-
-                return (
-                  <TextField
-                    {...rest}
-                    inputRef={ref2P}
-                    placeholder="Startnummer"
-                    InputProps={InputProps}
-                    InputLabelProps={InputLabelProps}
-                    slotProps={{ htmlInput: { ...inputProps, inputMode: "numeric" } }}
-                    onKeyDown={(ev) => {
-                      if (ev.key !== "Enter") return;
-                      const m = trySelectByBib(in2P);
-                      if (m) {
-                        auto2PBibRef.current = null;
-                        setSel2P(m);
-                        setIn2P(athleteLabel(m));
-                        setTimeout(() => ref1P.current?.focus(), 0);
-                      }
-                    }}
-                  />
-                );
+              onEnter={() => {
+                const m = resolveOrPlaceholder(in2P);
+                if (m) {
+                  auto2PBibRef.current = null;
+                  setSel2P(m);
+                  setIn2P(m.bib != null ? String(m.bib) : "");
+                  setTimeout(() => ref1P.current?.focus(), 0);
+                }
               }}
-
-
             />
           </PointsRow>
 
           <PointsRow label="1 P">
-            <Autocomplete
-              size="small"
-              options={optionsFor(new Set([sel3P?.id, sel2P?.id].filter(Boolean) as string[]))}
-                            value={sel1P}
+            <PointsBibField
+              value={sel1P}
               inputValue={in1P}
-                            open={Boolean(in1P.trim()) && !sel1P}
-
-                            onInputChange={(_, v, reason) => {
+              inputRef={ref1P}
+              options={optionsFor(new Set([sel3P?.id, sel2P?.id].filter(Boolean) as string[]))}
+              filterOptions={filterOptions}
+              formatOption={athleteLabel}
+              resolveByBib={resolveOrPlaceholder}
+              onInputValueChange={(v, reason) => {
                 setIn1P(v);
                 if (reason !== "input") return;
 
                 auto1PBibRef.current = null;
+                setSel1P(null);
 
                 const pick = tryAutoPickUniqueBib(v, candidatesFor([sel3P?.id, sel2P?.id]));
                 if (pick) {
                   setSel1P(pick);
-                  setIn1P(athleteLabel(pick));
+                  setIn1P(pick.bib != null ? String(pick.bib) : "");
                 }
               }}
-
-
-                            onChange={(_, v) => {
+              onSelect={(next) => {
                 auto1PBibRef.current = null;
-                const next = (typeof v === "string" ? trySelectByBib(v) : v) as Athlete | null;
                 setSel1P(next);
-                setIn1P(next ? athleteLabel(next) : "");
+                setIn1P(next?.bib != null ? String(next.bib) : "");
+
                 // saving is intentionally gated by Enter
                 maybeSaveIfComplete();
               }}
+              onEnter={() => {
+                // mark that we want to save via Enter
+                enterRequestedRef.current = true;
 
-              filterOptions={filterOptions}
-                              autoHighlight
-                openOnFocus={false}
-                freeSolo
+                const m = resolveOrPlaceholder(in1P);
+                if (m) {
+                  auto1PBibRef.current = null;
+                  setSel1P(m);
+                  setIn1P(m.bib != null ? String(m.bib) : "");
+                  setTimeout(() => maybeSaveIfComplete(), 0);
+                  return;
+                }
 
-              isOptionEqualToValue={(o, v) => o.id === v.id}
-              getOptionLabel={(o) => (typeof o === "string" ? o : athleteLabel(o))}
-                                          renderInput={(params) => {
-                const { inputProps, InputProps, InputLabelProps, ...rest } = params;
-
-                return (
-                  <TextField
-                    {...rest}
-                    inputRef={ref1P}
-                    placeholder="Startnummer"
-                    InputProps={InputProps}
-                    InputLabelProps={InputLabelProps}
-                    slotProps={{ htmlInput: { ...inputProps, inputMode: "numeric" } }}
-                    onKeyDown={(ev) => {
-                      if (ev.key !== "Enter") return;
-
-                      // mark that we want to save via Enter
-                      enterRequestedRef.current = true;
-
-                      // try to resolve bib if user typed a number and didn't select from dropdown
-                      const m = trySelectByBib(in1P);
-                      if (m) {
-                        auto1PBibRef.current = null;
-                        setSel1P(m);
-                        setIn1P(athleteLabel(m));
-                        // save will happen onChange (state update) or below if already selected
-                        setTimeout(() => maybeSaveIfComplete(), 0);
-                        return;
-                      }
-
-                      // If already selected and user presses Enter -> save
-                      setTimeout(() => maybeSaveIfComplete(), 0);
-                    }}
-                  />
-                );
+                setTimeout(() => maybeSaveIfComplete(), 0);
               }}
-
-
             />
           </PointsRow>
 
-                    <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 0.5 }}>
-            <Button size="small" variant="contained" onClick={saveNow} disabled={!canSave}>
+          <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 0.5 }}>
+            <Button size="small" variant="contained" onClick={() => void saveAsync()} disabled={!canSave}>
               Save
             </Button>
             <Button size="small" variant="outlined" onClick={clearNow}>
@@ -724,49 +759,48 @@ export default function PointsScoring({
         </Box>
       </Box>
 
-      {/* Compact starters list */}
-      <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1, minHeight: 0 }}>
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-          <Typography variant="subtitle2">Starters</Typography>
-          <Typography variant="caption" color="text.secondary">
-            {starters.length}
-          </Typography>
-        </Box>
+      <ScoringStarterList
+        starters={starters}
+        missingInLiveBibs={missingInLiveBibs}
+        selectedIds={selectedIds}
+        formatAthleteLabel={athleteLabel}
+      />
 
-        {starters.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            No starters.
-          </Typography>
-        ) : (
-          <List dense sx={{ maxHeight: 420, overflow: "auto", py: 0 }}>
-              {starters.map((a) => {
-                const bib = a.bib ?? null;
-                const missing = bib != null && missingInLiveBibs?.has(bib);
-                return (
-                  <ListItem
-                    key={a.id}
-                    sx={{
-                      px: 1,
-                      borderRadius: 1,
-                      bgcolor: selectedIds.has(a.id) ? "action.selected" : "transparent",
-                    }}
-                  >
-                                        <ListItemText
-                      primary={athleteLabel(a)}
-                      slotProps={{
-                        primary: {
-                          variant: "body2",
-                          sx: missing ? { color: "error.main", fontWeight: 700 } : undefined,
-                        },
-                      }}
-                    />
+      <Dialog
+        open={missingDialogOpen}
+        onClose={missingDialogBusy ? undefined : handleDialogCancel}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Neue Starter anlegen?</DialogTitle>
 
-                  </ListItem>
-                );  }
-              )}
-          </List>
-        )}
-      </Box>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 1 }}>
+            Folgende Startnummer(n) sind im Rennen noch nicht als Starter enthalten. Sollen diese angelegt werden?
+          </DialogContentText>
+
+          <Stack direction="row" flexWrap="wrap" gap={1}>
+            {missingDialogBibs.map((bib) => (
+              <Chip key={bib} label={bib} />
+            ))}
+          </Stack>
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={handleDialogCancel} disabled={missingDialogBusy}>
+            Abbrechen
+          </Button>
+
+          <Button
+            variant="contained"
+            onClick={() => void handleDialogCreateAndSave()}
+            disabled={missingDialogBusy}
+          >
+            Starter anlegen &amp; speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
+

@@ -1,7 +1,14 @@
+// src/components/RaceActivitiesList.tsx
 import { useMemo, useState } from "react";
 import {
   Box,
+  Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   IconButton,
   List,
   ListItem,
@@ -16,6 +23,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import SaveIcon from "@mui/icons-material/Save";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteIcon from "@mui/icons-material/Delete";
+import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 
 import type { Race } from "../types/race";
 import type { RaceActivity, RaceActivityElimination, RaceActivityPointsSprint } from "../types/raceactivities";
@@ -24,6 +32,12 @@ type Props = {
   race: Race;
   /** Persist the updated activity back into the race (should update realtime doc in the page) */
   onUpdateActivity: (updated: RaceActivity) => void;
+
+  /**
+   * Replace the full activities array (used by "Remove all activities").
+   * Implement in the page by updating race.raceActivities = nextActivities.
+   */
+  onReplaceActivities: (nextActivities: RaceActivity[]) => void;
 };
 
 function lapOf(a: RaceActivity): number {
@@ -40,9 +54,7 @@ function isElimination(a: RaceActivity): a is RaceActivityElimination {
 }
 
 function formatPointsResults(results: Array<{ bib: number; points: number }>): string {
-  return (results ?? [])
-    .map((r) => `${r.bib}:${r.points}`)
-    .join(", ");
+  return (results ?? []).map((r) => `${r.points}P:${r.bib}`).join(", ");
 }
 
 function parsePointsResults(input: string): Array<{ bib: number; points: number }> | null {
@@ -56,7 +68,8 @@ function parsePointsResults(input: string): Array<{ bib: number; points: number 
 
   const out: Array<{ bib: number; points: number }> = [];
   for (const p of parts) {
-    const [bibStr, ptsStr] = p.split(":").map((x) => x.trim());
+    // erwartet: "pointsP:bib" z.B. "1P:334"
+    const [ptsStr, bibStr] = p.split("P:").map((x) => x.trim());
     const bib = Number(bibStr);
     const points = Number(ptsStr);
     if (!Number.isFinite(bib) || !Number.isFinite(points)) return null;
@@ -66,9 +79,7 @@ function parsePointsResults(input: string): Array<{ bib: number; points: number 
 }
 
 function formatEliminationResults(results: Array<{ bib: number }>): string {
-  return (results ?? [])
-    .map((r) => String(r.bib))
-    .join(", ");
+  return (results ?? []).map((r) => String(r.bib)).join(", ");
 }
 
 function parseEliminationResults(input: string): Array<{ bib: number }> | null {
@@ -109,7 +120,7 @@ function formatHistoryLine(a: RaceActivity, h: any): string {
   return `${changedAt} • Lap ${lap}${deletedStr}${resultsStr ? ` • ${resultsStr}` : ""}`;
 }
 
-export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
+export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceActivities }: Props) {
   const activities = useMemo(() => {
     const list = Array.isArray((race as any)?.raceActivities) ? ((race as any).raceActivities as RaceActivity[]) : [];
     return [...list].sort((a, b) => {
@@ -124,18 +135,17 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
   const [draftLap, setDraftLap] = useState<number>(1);
   const [draftDeleted, setDraftDeleted] = useState<boolean>(false);
   const [draftResults, setDraftResults] = useState<string>("");
-
   const [error, setError] = useState<string | null>(null);
+
+  // NEW: remove-all confirmation
+  const [removeAllOpen, setRemoveAllOpen] = useState(false);
 
   function startEdit(a: RaceActivity) {
     setEditingId(a.id);
     setError(null);
 
-    const lap = lapOf(a) || 1;
-    const isDeleted = Boolean((a as any)?.data?.isDeleted);
-
-    setDraftLap(lap);
-    setDraftDeleted(isDeleted);
+    setDraftLap(lapOf(a) || 1);
+    setDraftDeleted(Boolean((a as any)?.data?.isDeleted));
 
     if (isPointsSprint(a)) {
       setDraftResults(formatPointsResults(a.data?.results ?? []));
@@ -143,7 +153,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
     }
 
     if (isElimination(a)) {
-      setDraftResults(formatEliminationResults(a.data?.results ?? []));
+      setDraftResults(formatEliminationResults((a.data as any)?.results ?? []));
       return;
     }
 
@@ -171,7 +181,6 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
         isDeleted: a.data.isDeleted,
         results: a.data.results,
       };
-
       const prevHistory = Array.isArray(a.data.history) ? a.data.history : [];
 
       const updated: RaceActivityPointsSprint = {
@@ -193,23 +202,22 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
     if (isElimination(a)) {
       const nextResults = parseEliminationResults(draftResults);
       if (nextResults === null) {
-        setError("Invalid results format. Use: bib, bib, bib");
+        setError("Invalid results format. Use: pointsP:bib, pointsP:bib");
         return;
       }
 
       const prevSnapshot = {
         changedAt: new Date().toISOString(),
-        lap: a.data.lap,
-        isDeleted: a.data.isDeleted,
-        results: a.data.results,
+        lap: (a.data as any).lap,
+        isDeleted: (a.data as any).isDeleted,
+        results: (a.data as any).results,
       };
-
       const prevHistory = Array.isArray((a.data as any).history) ? (a.data as any).history : [];
 
       const updated: RaceActivityElimination = {
         ...a,
         data: {
-          ...a.data,
+          ...(a.data as any),
           lap: nextLap,
           isDeleted: draftDeleted,
           results: nextResults,
@@ -235,7 +243,6 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
         isDeleted: a.data.isDeleted,
         results: a.data.results,
       };
-
       const prevHistory = Array.isArray(a.data.history) ? a.data.history : [];
 
       const updated: RaceActivityPointsSprint = {
@@ -258,7 +265,6 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
         isDeleted: (a.data as any).isDeleted,
         results: (a.data as any).results,
       };
-
       const prevHistory = Array.isArray((a.data as any).history) ? (a.data as any).history : [];
 
       const updated: RaceActivityElimination = {
@@ -274,14 +280,59 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
     }
   }
 
+  function removeAllActivities() {
+    // do NOT mark deleted; actually remove from race
+    cancelEdit();
+    onReplaceActivities([]);
+    setRemoveAllOpen(false);
+  }
+
   return (
     <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1, minHeight: 0 }}>
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-        <Typography variant="subtitle2">Scoring Activities</Typography>
-        <Typography variant="caption" color="text.secondary">
-          {activities.length}
-        </Typography>
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1, gap: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
+          <Typography variant="subtitle2">Scoring Activities</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {activities.length}
+          </Typography>
+        </Box>
+
+        {/* NEW: remove all activities */}
+        <Tooltip title="Remove all activities from this race" arrow>
+          <span>
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteSweepIcon />}
+              disabled={activities.length === 0 || editingId != null}
+              onClick={() => setRemoveAllOpen(true)}
+            >
+              Remove all
+            </Button>
+          </span>
+        </Tooltip>
       </Box>
+
+      {/* NEW: confirmation dialog */}
+      <Dialog open={removeAllOpen} onClose={() => setRemoveAllOpen(false)}>
+        <DialogTitle>Remove all activities?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will permanently remove <b>all</b> scoring activities from this race (count:{" "}
+            <b>{activities.length}</b>).
+            <br />
+            <br />
+            This does <b>not</b> mark them as deleted — it removes them from the race.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRemoveAllOpen(false)}>Cancel</Button>
+          <Button onClick={removeAllActivities} color="error" variant="contained" disabled={activities.length === 0}>
+            Remove
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {activities.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
@@ -307,7 +358,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
               sx={{
                 width: "100%",
                 display: "grid",
-                gridTemplateColumns: "28px 42px 1fr 48px",
+                gridTemplateColumns: "28px 42px 1fr auto",
                 columnGap: 1,
                 alignItems: "center",
               }}
@@ -319,7 +370,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
                 Type
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Inhalt
+                Content
               </Typography>
               <Box />
             </Box>
@@ -335,7 +386,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
             const content = isPointsSprint(a)
               ? formatPointsResults(a.data?.results ?? [])
               : isElimination(a)
-                ? formatEliminationResults(a.data?.results ?? [])
+                ? formatEliminationResults((a.data as any)?.results ?? [])
                 : "";
 
             const history = historyOf(a);
@@ -372,7 +423,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
                   sx={{
                     width: "100%",
                     display: "grid",
-                    gridTemplateColumns: "28px 42px 1fr 48px",
+                    gridTemplateColumns: "28px 42px 1fr auto",
                     columnGap: 1,
                     rowGap: 0.25,
                     alignItems: "center",
@@ -383,15 +434,12 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
                     {lap}
                   </Typography>
 
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
+                  <Box sx={{ gridColumn: "2 / 4", display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
                     <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
                       {label}
                     </Typography>
                     {isDeleted ? <Chip size="small" label="deleted" color="warning" variant="outlined" /> : null}
                   </Box>
-
-                  {/* row 1: keep column 3 empty; content is shown in row 2 together with history */}
-                  <Box />
 
                   <Box sx={{ justifySelf: "end", alignSelf: "start" }}>
                     <Stack direction="row" spacing={0.1} sx={{ mt: 0.15 }}>
@@ -438,30 +486,28 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
                     </Stack>
                   </Box>
 
-                  {/* row 2: content (left) + history (right) */}
-                  <Box
-                    sx={{
-                      gridColumn: "2 / 4",
-                      display: "flex",
-                      alignItems: "baseline",
-                      justifyContent: "space-between",
-                      gap: 1,
-                      minWidth: 0,
-                    }}
-                  >
+                  {/* row 2: content */}
+                  <Box sx={{ gridColumn: "1 / 4", minWidth: 0 }}>
                     <Typography
                       variant="body2"
                       sx={{
                         minWidth: 0,
-                        flex: 1,
                         whiteSpace: "nowrap",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
+
+                        ...(isDeleted && {
+                          textDecoration: "line-through",
+                          color: "warning.main",
+                        }),
                       }}
                     >
                       {content}
                     </Typography>
+                  </Box>
 
+                  {/* row 2: history (column 4) */}
+                  <Box sx={{ gridColumn: "4 / 5", justifySelf: "end", alignSelf: "start" }}>
                     <Tooltip title={historyTitle} arrow placement="top-start">
                       <Typography
                         variant="caption"
@@ -493,7 +539,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity }: Props) {
 
                       <TextField
                         size="small"
-                        label={isPointsSprint(a) ? "Results (bib:points, ...)" : "Results (bib, ...)"}
+                        label={isPointsSprint(a) ? "Results (pointsP:bib, ...)" : "Results (bib, ...)"}
                         value={draftResults}
                         onChange={(e) => setDraftResults(e.target.value)}
                         fullWidth

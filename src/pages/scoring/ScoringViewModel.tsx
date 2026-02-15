@@ -1,7 +1,10 @@
 // src/pages/scoring/ScoringViewModel.tsx
 import { useMemo } from "react";
 
-import type { RaceStatusRace } from "../../providers/RaceStatusProvider";
+import { useRaceStatusBibs } from "../../providers/RaceStatusBibProvider";
+import { useRaceStatusMeta } from "../../providers/RaceStatusMetaProvider";
+import { useRaceStatusCompetitors } from "../../providers/RaceStatusCompetitorsProvider";
+
 import type { Athlete } from "../../types/athlete";
 import type { RaceActivity, RaceActivityPointsSprint } from "../../types/raceactivities";
 import type { Race } from "../../types/race";
@@ -17,7 +20,7 @@ export type ScoringViewModel = {
   /** bibs from race.raceStarters */
   starterBibs: Set<number>;
   /** bibs from live status */
-  liveBibs: Set<number>;
+  liveBibs: ReadonlySet<number>;
 
   /** bibs seen in live status but not in starters list */
   unknownLiveBibs: Set<number>;
@@ -34,7 +37,7 @@ export type ScoringViewModel = {
   /** Current lap from live status (if available). */
   liveLapCount: number | null;
 
-    /** Laps to go from live status (if available). */
+  /** Laps to go from live status (if available). */
   liveLapsToGo: number | null;
 
   /** Top bibs by live position (ascending). Used for PointsScoring prefill when sync is enabled. */
@@ -49,9 +52,15 @@ export type ScoringViewModel = {
    * Can be used by the page to append them to the race starters list.
    */
   getMissingStarterBibsFromLive: () => Athlete[];
+
+  /* create a new starter with the given Bib. 
+  * If the bib is in competitors, it will be used to create the starter. If not, it will be created with the bib and empty name.
+ */
+
+  buildStartersForBibs: (bibs: number[]) => Athlete[];
+
+
 };
-
-
 
 function bibToInt(bib: unknown): number | null {
   if (bib == null) return null;
@@ -62,16 +71,11 @@ function bibToInt(bib: unknown): number | null {
 }
 
 function newId() {
-  return (
-    (globalThis.crypto as any)?.randomUUID?.() ?? `id_${Date.now()}_${Math.random().toString(16).slice(2)}`
-  );
+  return (globalThis.crypto as any)?.randomUUID?.() ?? `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
 function extractNationFromLastName(lastNameRaw: string): { lastName: string; nation: string | null } {
   const s = String(lastNameRaw ?? "").trim();
-
-  // Common pattern from timing feeds: "Lastname (GER)".
-  // Accept 3-letter code in parentheses, optionally at the end with whitespace.
   const m = s.match(/\(([A-Z]{3})\)\s*$/);
   if (!m) return { lastName: s, nation: null };
 
@@ -84,27 +88,31 @@ function isPointsSprintActivity(a: unknown): a is RaceActivityPointsSprint {
   return (a as any)?.type === "pointsSprint";
 }
 
-export function useScoringViewModel(
-  race: Race | null,
-  liveRace: RaceStatusRace | null,
-  syncEnabled: boolean,
-): ScoringViewModel {
+/**
+ * Optimized: uses BibProvider + MetaProvider + CompetitorsProvider
+ *
+ * IMPORTANT provider tree:
+ * RaceStatusProvider
+ *   -> RaceStatusMetaProvider
+ *   -> RaceStatusCompetitorsProvider
+ *   -> RaceStatusBibProvider
+ */
+export function useScoringViewModel(race: Race | null, syncEnabled: boolean): ScoringViewModel {
+  const { bibSet } = useRaceStatusBibs(); // live bibs (stable)
+  const meta = useRaceStatusMeta(); // lapsComplete/lapsToGo (primitive/stable)
+  const { competitors } = useRaceStatusCompetitors(); // competitors with structural sharing (stable)
 
   return useMemo(() => {
+    // ---- Starters ----
     const starterBibs = new Set<number>();
-    const liveBibs = new Set<number>();
-
     const starters = race?.raceStarters ?? [];
     for (const s of starters) {
       const bib = bibToInt((s as any)?.bib);
       if (bib != null) starterBibs.add(bib);
     }
 
-    const competitors = liveRace?.competitors ?? [];
-    for (const c of competitors) {
-      const bib = bibToInt((c as any)?.number);
-      if (bib != null) liveBibs.add(bib);
-    }
+    // ---- Live bibs ----
+    const liveBibs = bibSet;
 
     const unknownLiveBibs = new Set<number>();
     for (const bib of liveBibs) {
@@ -112,10 +120,13 @@ export function useScoringViewModel(
     }
 
     const missingInLiveBibs = new Set<number>();
-    for (const bib of starterBibs) {
-      if (!liveBibs.has(bib)) missingInLiveBibs.add(bib);
+    if (liveBibs.size > 0) {
+      for (const bib of starterBibs) {
+        if (!liveBibs.has(bib)) missingInLiveBibs.add(bib);
+      }
     }
 
+    // ---- Competitor lookup (by numeric bib) ----
     const competitorByBib = new Map<number, any>();
     for (const c of competitors) {
       const bib = bibToInt((c as any)?.number);
@@ -146,25 +157,24 @@ export function useScoringViewModel(
         });
     };
 
-        const liveLapRaw = (liveRace as any)?.lapsComplete;
-    const liveLapCount = Number.isFinite(Number(liveLapRaw)) ? Number(liveLapRaw) : null;
+    // ---- Meta ----
+    const liveLapCount = meta.lapsComplete ?? null;
+    const liveLapsToGo = meta.lapsToGo ?? null;
 
-        const liveLapsToGoRaw = (liveRace as any)?.lapsToGo;
-    const liveLapsToGo = Number.isFinite(Number(liveLapsToGoRaw)) ? Number(liveLapsToGoRaw) : null;
+    // ---- Top bibs by position ----
+    const sortedByPos = [...competitors].sort(
+      (a: any, b: any) => (a?.position ?? 9999) - (b?.position ?? 9999),
+    );
 
-    const sortedByPos = [...competitors].sort((a: any, b: any) => (a?.position ?? 9999) - (b?.position ?? 9999));
     const liveTopBibs = {
       p1Bib: bibToInt(sortedByPos[0]?.number),
       p2Bib: bibToInt(sortedByPos[1]?.number),
       p3Bib: bibToInt(sortedByPos[2]?.number),
     };
 
-
     // ---- Standings (Points) ----
     const activities = ((race as any)?.raceActivities ?? []) as RaceActivity[];
-
     const pointsByBib = new Map<number, number>();
-
 
     for (const a of activities) {
       if (!isPointsSprintActivity(a)) continue;
@@ -179,7 +189,6 @@ export function useScoringViewModel(
       }
     }
 
-    // Include all starters (0 points) in the standings.
     const allBibs = new Set<number>(starterBibs);
     for (const bib of pointsByBib.keys()) allBibs.add(bib);
 
@@ -206,28 +215,63 @@ export function useScoringViewModel(
       standings.push({ ...r, place });
     }
 
+        const buildStartersForBibs = (bibs: number[]): Athlete[] => {
+      const ageGroupId = (race as any)?.ageGroupId ?? null;
 
-        return {
+      const uniqueMissing = Array.from(
+        new Set(
+          (Array.isArray(bibs) ? bibs : [])
+            .map((b) => bibToInt(b))
+            .filter((b): b is number => b != null),
+        ),
+      )
+        // nur die, die noch nicht in Startern existieren
+        .filter((bib) => !starterBibs.has(bib))
+        .sort((a, b) => a - b);
+
+      return uniqueMissing.map((bib) => {
+        const c = competitorByBib.get(bib);
+
+        const firstName = String(c?.firstName ?? "").trim();
+        const { lastName, nation } = extractNationFromLastName(String(c?.lastName ?? ""));
+
+        const athlete: Athlete = {
+          id: newId(),
+          firstName,
+          lastName,
+          bib,
+          ageGroupId: typeof ageGroupId === "string" ? ageGroupId : null,
+          nation,
+        };
+
+        return athlete;
+      });
+    };
+
+    return {
       starterBibs,
       liveBibs,
-
       unknownLiveBibs,
       missingInLiveBibs,
       standings,
-
-            syncEnabled,
+      syncEnabled,
       liveLapCount,
       liveLapsToGo,
       liveTopBibs,
-
       getMissingStarterBibsFromLive,
+      buildStartersForBibs,
     };
   }, [
     race?.raceStarters,
     (race as any)?.raceActivities,
-    liveRace?.competitors,
-    (liveRace as any)?.lapsComplete,
-    (liveRace as any)?.lapsToGo,
+
+    // optimized providers
+    bibSet,
+    meta.lapsComplete,
+    meta.lapsToGo,
+    competitors,
+
+    // ui state
     syncEnabled,
   ]);
 }

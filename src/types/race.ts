@@ -17,9 +17,16 @@ export type Race = {
   raceResults: RaceResult[];
   raceStarters: Athlete[];
   raceActivities: RaceActivity[];
+  finishLineResults: FinishLineResult[];
 
 };
 
+export type FinishLineResult = {
+  bib: number;
+  rank: number;
+  lapsComplete: number;
+  totalTime: string; // e.g. "0:15" or "0:15.032"
+};
 
 export type RaceResult = {
   bib: number;

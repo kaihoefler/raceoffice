@@ -19,7 +19,11 @@ import {
   ToggleButton,
   Tooltip,
   Typography,
+  IconButton,
 } from "@mui/material";
+
+import PauseIcon from "@mui/icons-material/Pause";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 
 import { useRaceStatus, type RaceStatusCompetitor } from "../providers/RaceStatusProvider";
 
@@ -253,26 +257,46 @@ export default function LiveRaceStatus({
             <Typography variant="subtitle2" noWrap>
               Live status
             </Typography>
-            <Tooltip title={url} placement="top" arrow>
-              <Typography
-                variant="caption"
-                noWrap
-                role="button"
-                tabIndex={0}
-                onClick={() => setSettingsOpen(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") setSettingsOpen(true);
-                }}
-                sx={{
-                  cursor: "pointer",
-                  color: connectionColor,
-                  opacity: 0.9,
-                  userSelect: "none",
-                }}
-              >
-                {connectionLabel}
-              </Typography>
-            </Tooltip>
+
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
+              <Tooltip title={url} placement="top" arrow>
+                <Typography
+                  variant="caption"
+                  noWrap
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSettingsOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") setSettingsOpen(true);
+                  }}
+                  sx={{
+                    cursor: "pointer",
+                    color: connectionColor,
+                    opacity: 0.9,
+                    userSelect: "none",
+                  }}
+                >
+                  {connectionLabel}
+                </Typography>
+              </Tooltip>
+
+              <Tooltip title={paused ? "Resume polling" : "Pause polling"} arrow>
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPaused(!paused);
+                    }}
+                    aria-label={paused ? "Resume live polling" : "Pause live polling"}
+                    color={paused ? "success" : "inherit"}
+                    sx={{ p: 0.25 }}
+                  >
+                    {paused ? <PlayArrowIcon fontSize="small" /> : <PauseIcon fontSize="small" />}
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Box>
           </Box>
 
           <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
@@ -347,26 +371,46 @@ export default function LiveRaceStatus({
           <Typography variant="subtitle2" noWrap>
             Live status
           </Typography>
-          <Tooltip title={url} placement="top" arrow>
-            <Typography
-              variant="caption"
-              noWrap
-              role="button"
-              tabIndex={0}
-              onClick={() => setSettingsOpen(true)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") setSettingsOpen(true);
-              }}
-              sx={{
-                cursor: "pointer",
-                color: connectionColor,
-                opacity: 0.9,
-                userSelect: "none",
-              }}
-            >
-              {connectionLabel}
-            </Typography>
-          </Tooltip>
+
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
+            <Tooltip title={url} placement="top" arrow>
+              <Typography
+                variant="caption"
+                noWrap
+                role="button"
+                tabIndex={0}
+                onClick={() => setSettingsOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") setSettingsOpen(true);
+                }}
+                sx={{
+                  cursor: "pointer",
+                  color: connectionColor,
+                  opacity: 0.9,
+                  userSelect: "none",
+                }}
+              >
+                {connectionLabel}
+              </Typography>
+            </Tooltip>
+
+            <Tooltip title={paused ? "Resume polling" : "Pause polling"} arrow>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPaused(!paused);
+                  }}
+                  aria-label={paused ? "Resume live polling" : "Pause live polling"}
+                  color={paused ? "success" : "inherit"}
+                  sx={{ p: 0.25 }}
+                >
+                  {paused ? <PlayArrowIcon fontSize="small" /> : <PauseIcon fontSize="small" />}
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
         </Box>
 
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
@@ -374,13 +418,13 @@ export default function LiveRaceStatus({
         </Box>
       </Box>
 
-              {!isConnected && !isPaused ? (
-          <Alert severity="warning" sx={{ mb: 1 }}>
-            Live status service not responding ({url}){error ? `: ${error}` : ""}
-            {errorCount > 0 ? ` • fails in a row: ${errorCount}` : ""}
-            {errorCount >= 10 ? ` • slowed polling: ${effectivePollIntervalMs}ms` : ""}
-          </Alert>
-        ) : null}
+      {!isConnected && !isPaused ? (
+        <Alert severity="warning" sx={{ mb: 1 }}>
+          Live status service not responding ({url}){error ? `: ${error}` : ""}
+          {errorCount > 0 ? ` • fails in a row: ${errorCount}` : ""}
+          {errorCount >= 10 ? ` • slowed polling: ${effectivePollIntervalMs}ms` : ""}
+        </Alert>
+      ) : null}
 
 
       <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth>
@@ -494,7 +538,7 @@ export default function LiveRaceStatus({
               </Button>
             </span>
           </Tooltip>
-      ) : null}
+        ) : null}
       </Box>
 
       <Table size="small" stickyHeader>
@@ -510,7 +554,7 @@ export default function LiveRaceStatus({
           {rows.map((r) => (
             <TableRow key={r.key} hover>
               <TableCell>{r.position}</TableCell>
-              
+
               {(() => {
                 const bibNum = Number(r.bib);
                 const isUnknown = bibNum != null && unknownLiveBibs?.has(bibNum);

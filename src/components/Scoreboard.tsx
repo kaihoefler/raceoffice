@@ -41,12 +41,18 @@ export default function Scoreboard({ standings, title = "Scoreboard", maxHeight 
         </Typography>
       ) : (
         <TableContainer sx={{ maxHeight, overflow: "auto" }}>
-          <Table size="small" stickyHeader aria-label="scoreboard">
+            <Table size="small" stickyHeader aria-label="scoreboard"
+              sx={{
+                "& th, & td": {
+                  px: 0.5, // horizontal padding (default is ~2)
+                  py: 0.5, // vertical padding
+                },
+              }}>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ width: 70, fontWeight: 700 }}>Place</TableCell>
-                <TableCell sx={{ width: 90, fontWeight: 700 }}>BIB</TableCell>
-                <TableCell sx={{ width: 90, fontWeight: 700 }} align="right">
+                <TableCell sx={{ width: 44, fontWeight: 700 }}>Place</TableCell>
+                <TableCell sx={{ width: 52, fontWeight: 700 }}>BIB</TableCell>
+                <TableCell sx={{ width: 52, fontWeight: 700 }} align="right">
                   Points
                 </TableCell>
               </TableRow>
