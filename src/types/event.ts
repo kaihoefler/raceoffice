@@ -10,11 +10,14 @@ export type Event = {
 };
 
 export type FullEvent = Event & {
-  
+  /** Optional: aktuell aktives Race innerhalb dieses Events (oder null). */
+  activeRaceId: string | null;
+
   races: Race[];
   athletes: Athlete[];
   ageGroups: AgeGroup[];
 };
+
 
 /**
  * EventList ist jetzt ein Container:

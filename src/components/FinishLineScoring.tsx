@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -56,17 +56,62 @@ function athleteLabel(a: Athlete) {
   return `${a.bib ?? ""} - ${(a.lastName ?? "").trim()} ${(a.firstName ?? "").trim()}`.trim();
 }
 
-function normalizeFinishRanks(list: RaceResult[]): RaceResult[] {
-  // Only for finishers. Normalizes finishRank to 1..N by array order.
-  return list.map((r, idx) => ({ ...r, finishRank: idx + 1 }));
+function groupFinishersByFinishRank(sortedFinishers: RaceResult[]): RaceResult[][] {
+  // Expects finishers sorted by (finishRank asc, bib asc)
+  const groups: RaceResult[][] = [];
+  let lastRank: number | null = null;
+
+  for (const r of sortedFinishers) {
+    const rank = Number(r?.finishRank ?? 0) || 0;
+    if (!groups.length || rank !== lastRank) {
+      groups.push([r]);
+      lastRank = rank;
+    } else {
+      groups[groups.length - 1].push(r);
+    }
+  }
+
+  return groups;
 }
 
-function move<T>(arr: T[], from: number, to: number): T[] {
-  const next = [...arr];
-  const [item] = next.splice(from, 1);
-  next.splice(to, 0, item);
-  return next;
+function applyCompetitionRanking(groups: RaceResult[][]): RaceResult[] {
+  // Competition ranking: ranks jump by the size of a tie group, e.g. 1,1,3
+  let nextRank = 1;
+  const out: RaceResult[] = [];
+
+  for (const g of groups) {
+    const items = [...g].sort((a, b) => Number(a.bib ?? 0) - Number(b.bib ?? 0));
+    for (const r of items) out.push({ ...r, finishRank: nextRank });
+    nextRank += items.length;
+  }
+
+  return out;
 }
+
+function rankToInt(input: string): number | null {
+  const v = String(input ?? "").trim();
+  if (!v) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  const i = Math.floor(n);
+  return i > 0 ? i : null;
+}
+
+function computeNextSuggestedRank(finishers: RaceResult[]): number {
+  if (!finishers.length) return 1;
+
+  let maxRank = 0;
+  for (const r of finishers) {
+    const fr = Number(r?.finishRank ?? 0);
+    if (Number.isFinite(fr) && fr > maxRank) maxRank = fr;
+  }
+
+  if (maxRank <= 0) return 1;
+
+  const countAtMax = finishers.filter((r) => Number(r?.finishRank ?? 0) === maxRank).length;
+  return maxRank + Math.max(1, countAtMax);
+}
+
 
 function tryAutoPickUniqueBib(input: string, candidates: Athlete[]): Athlete | null {
   const v = input.trim();
@@ -113,7 +158,7 @@ export default function FinishLineScoring({
   }, [race]);
 
   const finishers = useMemo(() => {
-    const list = raceResults
+    return raceResults
       .filter((r) => Number(r?.finishRank ?? 0) !== 0)
       .sort((a, b) => {
         const ar = Number(a.finishRank ?? 0) || 9999;
@@ -121,9 +166,6 @@ export default function FinishLineScoring({
         if (ar !== br) return ar - br;
         return Number(a.bib ?? 0) - Number(b.bib ?? 0);
       });
-
-    // Display with normalized ranks (does not persist unless user reorders/adds/removes)
-    return normalizeFinishRanks(list);
   }, [raceResults]);
 
   const selectedIds = useMemo(() => {
@@ -137,6 +179,7 @@ export default function FinishLineScoring({
 
   const finishBibSet = useMemo(() => new Set(finishers.map((r) => Number(r.bib))), [finishers]);
 
+  const [rankInput, setRankInput] = useState("");
   const [bibInput, setBibInput] = useState("");
   const [selBib, setSelBib] = useState<Athlete | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -153,6 +196,7 @@ export default function FinishLineScoring({
   // to roundtrip from the server (this app is non-optimistic).
   // Otherwise the subsequent "add finish result" patch may be rejected due to rev mismatch.
   const [pendingAddBib, setPendingAddBib] = useState<number | null>(null);
+  const [pendingAddRank, setPendingAddRank] = useState<number | null>(null);
 
   const filterOptions: AthleteFilterOptions = useMemo(() => {
     const base = createFilterOptions<Athlete>({
@@ -195,14 +239,26 @@ export default function FinishLineScoring({
   }
 
   useEffect(() => {
+    setRankInput(String(computeNextSuggestedRank(finishers)));
     setBibInput("");
     setSelBib(null);
     setError(null);
     closeMissingStartersDialog();
     setPendingAddBib(null);
+    setPendingAddRank(null);
 
     setTimeout(() => bibRef.current?.focus(), 0);
   }, [resetKey, race.id]);
+
+  // After saving (raceResults update comes back in via props), update the suggested next rank,
+  // but don't overwrite the user's in-progress input.
+  useEffect(() => {
+    if (bibInput.trim()) return;
+    if (missingDialogOpen) return;
+    if (pendingAddBib != null) return;
+
+    setRankInput(String(computeNextSuggestedRank(finishers)));
+  }, [finishers, bibInput, missingDialogOpen, pendingAddBib]);
 
   function makeDefaultRaceResult(bib: number): RaceResult {
     return {
@@ -219,20 +275,22 @@ export default function FinishLineScoring({
     };
   }
 
-  function commitAddBib(bib: number) {
+  function commitAddBib(bib: number, finishRank: number) {
     const existing = raceResults.find((r) => Number(r?.bib) === bib) ?? null;
     const base: RaceResult = existing ? { ...existing } : makeDefaultRaceResult(bib);
 
-    const nextFinishers = normalizeFinishRanks([
-      ...finishers,
-      {
-        ...base,
-        finishRank: finishers.length + 1,
-        // keep any existing laps/time if present
-        lapsCompleted: Number.isFinite(Number(base.lapsCompleted)) ? Number(base.lapsCompleted) : 0,
-        finishTime: String(base.finishTime ?? ""),
-      },
-    ]);
+    const nextFinishers = [...finishers, {
+      ...base,
+      finishRank,
+      // keep any existing laps/time if present
+      lapsCompleted: Number.isFinite(Number(base.lapsCompleted)) ? Number(base.lapsCompleted) : 0,
+      finishTime: String(base.finishTime ?? ""),
+    }].sort((a, b) => {
+      const ar = Number(a.finishRank ?? 0) || 9999;
+      const br = Number(b.finishRank ?? 0) || 9999;
+      if (ar !== br) return ar - br;
+      return Number(a.bib ?? 0) - Number(b.bib ?? 0);
+    });
 
     // Merge finishers back into the full raceResults list
     const nextByBib = new Map<number, RaceResult>();
@@ -253,14 +311,22 @@ export default function FinishLineScoring({
     for (const r of nextByBib.values()) nextRaceResults.push(r);
 
     onChangeRaceResults(nextRaceResults);
+
+    setRankInput(String(computeNextSuggestedRank(nextFinishers)));
     setBibInput("");
     setSelBib(null);
     setError(null);
     setTimeout(() => bibRef.current?.focus(), 0);
   }
 
-  function requestAddBibFromText(text: string) {
-    const bib = bibToInt(text);
+  function requestAddBibFromText(bibText: string, rankText: string) {
+    const finishRank = rankToInt(rankText);
+    if (finishRank == null) {
+      setError("Bitte einen gültigen Rank eingeben");
+      return;
+    }
+
+    const bib = bibToInt(bibText);
     if (bib == null) {
       setError("Bitte eine gültige Startnummer eingeben");
       return;
@@ -279,12 +345,13 @@ export default function FinishLineScoring({
       }
 
       setPendingAddBib(bib);
+      setPendingAddRank(finishRank);
       setMissingDialogBibs([bib]);
       setMissingDialogOpen(true);
       return;
     }
 
-    commitAddBib(bib);
+    commitAddBib(bib, finishRank);
   }
 
   async function handleDialogCreateAndAdd() {
@@ -303,6 +370,7 @@ export default function FinishLineScoring({
   function handleDialogCancel() {
     closeMissingStartersDialog();
     setPendingAddBib(null);
+    setPendingAddRank(null);
   }
 
   // After the missing-starter creation patch arrived (starter now exists), add the bib to the finish list.
@@ -312,6 +380,7 @@ export default function FinishLineScoring({
     // If it was added elsewhere in the meantime, stop waiting.
     if (finishers.some((r) => Number(r.bib) === pendingAddBib)) {
       setPendingAddBib(null);
+      setPendingAddRank(null);
       return;
     }
 
@@ -319,15 +388,17 @@ export default function FinishLineScoring({
     if (!starterByBib.has(pendingAddBib)) return;
 
     const bib = pendingAddBib;
+    const rank = pendingAddRank;
     setPendingAddBib(null);
-    commitAddBib(bib);
-  }, [pendingAddBib, finishers, starterByBib]);
+    setPendingAddRank(null);
+
+    // rank should always be set (we only set pendingAddBib together with pendingAddRank)
+    commitAddBib(bib, rank ?? computeNextSuggestedRank(finishers));
+  }, [pendingAddBib, pendingAddRank, finishers, starterByBib]);
 
   function commitFinishers(nextFinishers: RaceResult[], removedBibs: Set<number> = new Set()) {
-    const normalized = normalizeFinishRanks(nextFinishers);
-
     const nextByBib = new Map<number, RaceResult>();
-    for (const r of normalized) nextByBib.set(Number(r.bib), r);
+    for (const r of nextFinishers) nextByBib.set(Number(r.bib), r);
 
     const nextRaceResults: RaceResult[] = [];
 
@@ -371,13 +442,52 @@ export default function FinishLineScoring({
     dragFromIndexRef.current = idx;
   }
 
-  function onDrop(idx: number) {
+  function onDrop(e: DragEvent<HTMLElement>, idx: number) {
     const from = dragFromIndexRef.current;
     dragFromIndexRef.current = null;
+
     if (from == null) return;
     if (from === idx) return;
 
-    commitFinishers(move(finishers, from, idx));
+    const dragged = finishers[from];
+    const target = finishers[idx];
+    if (!dragged || !target) return;
+
+    const draggedBib = Number(dragged.bib);
+    const targetBib = Number(target.bib);
+    if (!Number.isFinite(draggedBib) || !Number.isFinite(targetBib)) return;
+
+    const withShift = e.shiftKey;
+
+    // Build tie groups from current state.
+    const groups = groupFinishersByFinishRank(finishers);
+
+    // Remove dragged from its current group.
+    for (let gi = 0; gi < groups.length; gi++) {
+      const g = groups[gi];
+      const nextG = g.filter((r) => Number(r.bib) !== draggedBib);
+      if (nextG.length !== g.length) {
+        if (nextG.length === 0) groups.splice(gi, 1);
+        else groups[gi] = nextG;
+        break;
+      }
+    }
+
+    // Find target group (after removal).
+    const targetGroupIndex = groups.findIndex((g) => g.some((r) => Number(r.bib) === targetBib));
+    if (targetGroupIndex < 0) return;
+
+    if (withShift) {
+      // Shift+Drop: create a tie by putting the dragged athlete into the target's tie group.
+      groups[targetGroupIndex] = [...groups[targetGroupIndex], dragged];
+    } else {
+      // Normal Drop: insert the dragged athlete as its own group BEFORE the target's tie group.
+      // This keeps existing ties (for non-moved athletes) intact.
+      groups.splice(targetGroupIndex, 0, [dragged]);
+    }
+
+    const nextFinishers = applyCompetitionRanking(groups);
+    commitFinishers(nextFinishers);
   }
 
   return (
@@ -392,6 +502,25 @@ export default function FinishLineScoring({
         </Box>
 
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+          <TextField
+            value={rankInput}
+            onChange={(e) => {
+              setRankInput((e.target as HTMLInputElement).value);
+              setError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                setTimeout(() => bibRef.current?.focus(), 0);
+              }
+            }}
+            placeholder="Rank"
+            size="small"
+            variant="outlined"
+            inputProps={{ inputMode: "numeric", pattern: "[0-9]*" }}
+            sx={{ width: 80 }}
+          />
+
           <Box sx={{ width: 140 }}>
             <PointsBibField
               value={selBib}
@@ -431,12 +560,12 @@ export default function FinishLineScoring({
                   setBibInput(m.bib != null ? String(m.bib) : "");
                 }
 
-                requestAddBibFromText(bibInput);
+                requestAddBibFromText(bibInput, rankInput);
               }}
             />
           </Box>
 
-          <Button size="small" variant="contained" onClick={() => requestAddBibFromText(bibInput)}>
+          <Button size="small" variant="contained" onClick={() => requestAddBibFromText(bibInput, rankInput)}>
             Add
           </Button>
 
@@ -495,7 +624,7 @@ export default function FinishLineScoring({
                     draggable
                     onDragStart={() => onDragStart(idx)}
                     onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => onDrop(idx)}
+                    onDrop={(e) => onDrop(e, idx)}
                     sx={{ cursor: "grab" }}
                     title={a ? athleteLabel(a) : undefined}
                   >
@@ -503,7 +632,7 @@ export default function FinishLineScoring({
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.1 }}>
                         <DragIndicatorIcon fontSize="small" color="action" />
                         <Typography variant="body2" sx={{ fontVariantNumeric: "tabular-nums" }}>
-                          {idx + 1}
+                          {Number(r.finishRank ?? idx + 1)}
                         </Typography>
                       </Box>
                     </TableCell>
@@ -536,7 +665,12 @@ export default function FinishLineScoring({
                     <TableCell padding="checkbox">
                       <Tooltip title="Remove" arrow>
                         <span>
-                          <IconButton size="small" color="error" onClick={() => removeAt(idx)} aria-label="Remove">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => removeAt(idx)}
+                            aria-label="Remove"
+                          >
                             <DeleteIcon fontSize="small" />
                           </IconButton>
                         </span>
@@ -550,7 +684,7 @@ export default function FinishLineScoring({
         )}
 
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-          Tip: You can drag rows to adjust the rank. Rank is persisted via finishRank (re-numbered).
+          Tip: Drag rows to change the rank order. Hold Shift while dropping to create a tie (same rank).
         </Typography>
       </Box>
 

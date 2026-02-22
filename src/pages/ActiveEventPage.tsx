@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import {
   Box,
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -47,6 +48,8 @@ function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
     id: typeof obj.id === "string" ? obj.id : eventId,
     name: typeof obj.name === "string" ? obj.name : "",
     slug: typeof obj.slug === "string" ? obj.slug : "",
+    // ID des aktiven Race (oder null); wird im UI als "Active" markiert.
+    activeRaceId: typeof obj.activeRaceId === "string" ? obj.activeRaceId : null,
     ageGroups: Array.isArray(obj.ageGroups) ? obj.ageGroups : [],
     races: races.map((r: any) => ({
       ...r,
@@ -216,7 +219,28 @@ export default function ActiveEventPage() {
 
     update((prev) => {
       const current = normalizeFullEvent(prev, activeEventId);
-      return { ...current, races: current.races.filter((x) => x.id !== raceId) } as Partial<FullEvent>;
+      const nextActiveRaceId = current.activeRaceId === raceId ? null : current.activeRaceId;
+      return {
+        ...current,
+        activeRaceId: nextActiveRaceId,
+        races: current.races.filter((x) => x.id !== raceId),
+      } as Partial<FullEvent>;
+    });
+  }
+
+  /**
+   * Markiert ein Race als "aktiv" innerhalb des Events.
+   * Wird im Table als "Active" hervorgehoben und kann später z.B. als Default-Navigation dienen.
+   */
+  function setActiveRace(raceId: string) {
+    const id = String(raceId ?? "").trim();
+    if (!id) return;
+
+    update((prev) => {
+      const current = normalizeFullEvent(prev, activeEventId);
+      const exists = current.races.some((r) => r.id === id);
+      if (!exists) return prev as any;
+      return { ...current, activeRaceId: id } as Partial<FullEvent>;
     });
   }
 
@@ -416,6 +440,8 @@ const filteredRaces = useMemo(() => {
                 <TableCell>Stage</TableCell>
                 <TableCell>Age Group</TableCell>
                 <TableCell align="right">Athletes</TableCell>
+                {/* Status-Spalte: Race als aktiv setzen (analog EventsPage -> Active/Activate) */}
+                <TableCell align="center">Status</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -423,9 +449,8 @@ const filteredRaces = useMemo(() => {
             <TableBody>
               {filteredRaces.map((r) => {
                 const ag = fullEvent.ageGroups.find((x) => x.id === r.ageGroupId) ?? null;
-
-                //const results = getRaceResults(r);
                 const athletesCount = r.raceStarters ? r.raceStarters.length : 0;
+                const isActiveRace = fullEvent.activeRaceId === r.id;
 
                 return (
                   <TableRow key={r.id}>
@@ -436,6 +461,33 @@ const filteredRaces = useMemo(() => {
                     </TableCell>
                     <TableCell>{ag ? `${ag.name} (${ag.gender})` : r.ageGroupId}</TableCell>
                     <TableCell align="right">{athletesCount}</TableCell>
+
+                    {/* Activate / Active (setzt fullEvent.activeRaceId) */}
+                    <TableCell align="center">
+                      <Button
+                        size="small"
+                        onClick={() => setActiveRace(r.id)}
+                        disabled={isActiveRace}
+                        // Active soll NICHT als "filled" erscheinen, sondern nur grün (Text + Rahmen)
+                        variant="outlined"
+                        color={isActiveRace ? "success" : "primary"}
+                        sx={
+                          isActiveRace
+                            ? {
+                                // MUI disabled Buttons werden standardmäßig ausgegraut.
+                                // Wir überschreiben das, damit "Active" weiterhin grün bleibt.
+                                "&.Mui-disabled": {
+                                  color: "success.main",
+                                  borderColor: "success.main",
+                                  opacity: 1,
+                                },
+                              }
+                            : undefined
+                        }
+                      >
+                        {isActiveRace ? "Active" : "Activate"}
+                      </Button>
+                    </TableCell>
 
                     <TableCell align="right">
                       <Tooltip title="Next race (copy + stage value +1)" arrow>
@@ -494,7 +546,7 @@ const filteredRaces = useMemo(() => {
 
               {filteredRaces.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                     <Typography color="text.secondary">No races match the current filters.</Typography>
                   </TableCell>
                 </TableRow>

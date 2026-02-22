@@ -144,7 +144,7 @@ export default function EventsPage() {
               <TableRow>
                 <TableCell>Name</TableCell>
                 <TableCell>Slug</TableCell>
-                <TableCell align="right">Status</TableCell>
+                <TableCell align="center">Status</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -155,16 +155,7 @@ export default function EventsPage() {
                 const isActive = eventList.activeEventId === e.id;
 
                 return (
-                  <TableRow
-                    key={e.id}
-                    // Active-Event optisch hervorheben
-                    sx={{
-                      ...(isActive && {
-                        backgroundColor: "action.selected",
-                        "& td": { fontWeight: 600 },
-                      }),
-                    }}
-                  >
+                  <TableRow key={e.id}>
                     {/* Event-Name */}
                     <TableCell>{e.name}</TableCell>
 
@@ -177,13 +168,27 @@ export default function EventsPage() {
                     </TableCell>
 
                     {/* Status-Aktion: aktivieren oder aktiv */}
-                    <TableCell align="right">
+                    <TableCell align="center">
                       <Button
                         size="small"
                         onClick={() => setActiveEvent(e.id)}
                         disabled={isActive} // aktive Events nicht erneut aktivieren
-                        variant={isActive ? "contained" : "outlined"}
+                        // Active soll NICHT als "filled" erscheinen, sondern nur grün (Text + Rahmen)
+                        variant="outlined"
                         color={isActive ? "success" : "primary"}
+                        sx={
+                          isActive
+                            ? {
+                                // MUI disabled Buttons werden standardmäßig ausgegraut.
+                                // Wir überschreiben das, damit "Active" weiterhin grün bleibt.
+                                "&.Mui-disabled": {
+                                  color: "success.main",
+                                  borderColor: "success.main",
+                                  opacity: 1,
+                                },
+                              }
+                            : undefined
+                        }
                       >
                         {isActive ? "Active" : "Activate"}
                       </Button>

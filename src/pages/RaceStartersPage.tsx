@@ -48,6 +48,7 @@ function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
         id: typeof obj.id === "string" ? obj.id : eventId,
         name: typeof obj.name === "string" ? obj.name : "",
         slug: typeof obj.slug === "string" ? obj.slug : "",
+        activeRaceId: typeof obj.activeRaceId === "string" ? obj.activeRaceId : null,
         ageGroups: Array.isArray(obj.ageGroups) ? obj.ageGroups : [],
         races: races.map((r: any) => ({
             ...r,
