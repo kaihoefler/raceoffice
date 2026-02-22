@@ -17,25 +17,22 @@ export type Race = {
   raceResults: RaceResult[];
   raceStarters: Athlete[];
   raceActivities: RaceActivity[];
-  finishLineResults: FinishLineResult[];
 
 };
 
-export type FinishLineResult = {
-  bib: number;
-  rank: number;
-  lapsComplete: number;
-  totalTime: string; // e.g. "0:15" or "0:15.032"
-};
 
 export type RaceResult = {
   bib: number;
-  rank: number;
-  points: number;
+  rank: number; // current rank in the race, 0 if not yet ranked
+  points: number; // current points in the race
   eliminated: boolean;
+  eliminationLap: number; // 0 if not eliminated
   dns: boolean;
   dsq: boolean;
-  time: string;
+  lapsCompleted: number; // 0 or number of laps completed when the race is finished
+  finishTime: string; // e.g. "0:15" or "0:15,032" and "" if not finished
+  finishRank: number; // 0 if not finished
+
 };
 
 

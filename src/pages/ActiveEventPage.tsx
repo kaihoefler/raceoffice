@@ -52,8 +52,8 @@ function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
       ...r,
       raceResults: Array.isArray(r?.raceResults) ? r.raceResults : [],
       raceStarters: Array.isArray(r?.raceStarters) ? r.raceStarters : [],
-      raceActivities: Array.isArray(r?.raceActivities) ? r.raceActivities : [],
-      finishLineResults: Array.isArray(r?.finishLineResults) ? r.finishLineResults : [],
+            raceActivities: Array.isArray(r?.raceActivities) ? r.raceActivities : [],
+
     })),
     athletes: Array.isArray(obj.athletes) ? obj.athletes : [],
   };
@@ -177,7 +177,7 @@ export default function ActiveEventPage() {
       const existingResults = existing?.raceResults ?? [];
       const existingStarters = existing?.raceStarters ?? [];
       const existingActivities = existing?.raceActivities ?? [];
-      const existingFinishLineResults = existing?.finishLineResults ?? []; 
+       
 
       const normalizedStageValue = draft.stage === "" ? "" : draft.stage_value;
 
@@ -194,7 +194,7 @@ export default function ActiveEventPage() {
         raceResults: existingResults,
         raceStarters: existingStarters,
         raceActivities: existingActivities,
-        finishLineResults: existingFinishLineResults,
+        
         
       };
 

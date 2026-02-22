@@ -1,4 +1,28 @@
 // src/components/EventEditor.tsx
+//
+// EventEditor
+// -----------
+// Zweck:
+// - UI zum Erstellen/Bearbeiten eines Events
+// - Speichert "lightweight" Daten (name/slug) in der globalen EventList (für EventsPage Tabelle)
+// - Speichert "heavy" Daten (FullEvent: ageGroups, races, athletes, ...) in einem per-Event Realtime-Dokument
+//
+// Datenquellen:
+// - EventListProvider (useEventList):
+//   - liefert listEntry für name/slug (das ist die Quelle, die die Events-Liste anzeigt)
+//   - saveEvent(...) aktualisiert/erstellt den EventList-Eintrag
+//   - setActiveEvent(...) setzt optional das neue Event als aktiv
+// - useRealtimeDoc<Partial<FullEvent>>(Event-{eventId}):
+//   - liefert raw Snapshot des FullEvent Dokuments (ageGroups etc.)
+//   - update(...) persistiert Änderungen am FullEvent Dokument
+//
+// Wichtige UI/State-Details:
+// - slug wird immer aus name abgeleitet (slugify)
+// - "dirty detection": lokale Änderungen werden nicht durch neue Remote-Snapshots überschrieben
+// - beim Speichern werden:
+//   1) EventList aktualisiert
+//   2) FullEvent-Dokument aktualisiert (ageGroups normalisiert)
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
@@ -19,19 +43,33 @@ import type { FullEvent } from "../types/event";
 import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
 import { useEventList } from "../providers/EventListProvider";
 
+/**
+ * Draft, der an EventListProvider.saveEvent(...) übergeben wird.
+ * (Nur die Felder, die im globalen EventList-Dokument gespeichert werden.)
+ */
 export type EventDraft = {
   name: string;
   slug: string;
 };
 
 type Props = {
+  /** Wenn false: Editor rendert null (kein Dialog/Panel sichtbar). */
   open: boolean;
+  /** "new" -> neues Event anlegen, "edit" -> bestehendes Event bearbeiten. */
   mode: "new" | "edit";
+  /** Event-ID, auf die sich der Editor bezieht. (Wird von EventsPage vergeben.) */
   eventId: string | null;
   onCancel: () => void;
   onAfterSave?: () => void;
 };
 
+/**
+ * Slug-Generator:
+ * - lower-case
+ * - deutsche Umlaute vereinheitlichen
+ * - alle Non-Alnum als "-"
+ * - führende/trailing "-" entfernen
+ */
 function slugify(input: string): string {
   return input
     .trim()
@@ -44,6 +82,17 @@ function slugify(input: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+/**
+ * Defensive Normalisierung eines per-event Realtime-Dokuments.
+ *
+ * Hintergrund:
+ * - useRealtimeDoc ist hier als Partial<FullEvent> typisiert
+ * - Realtime-Dokumente können "halb initialisiert" sein (Arrays fehlen, falscher Typ, etc.)
+ *
+ * Ziel:
+ * - der Editor und nachfolgende Updates können sicher mit Arrays arbeiten
+ *   (ageGroups, races, raceResults, raceStarters, raceActivities, athletes)
+ */
 function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
   const obj = raw && typeof raw === "object" ? (raw as any) : {};
 
@@ -56,53 +105,93 @@ function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
     ageGroups: Array.isArray(obj.ageGroups) ? obj.ageGroups : [],
     races: races.map((r: any) => ({
       ...r,
+      // Defensive: Nested arrays normalisieren
       raceResults: Array.isArray(r?.raceResults) ? r.raceResults : [],
       raceStarters: Array.isArray(r?.raceStarters) ? r.raceStarters : [],
       raceActivities: Array.isArray(r?.raceActivities) ? r.raceActivities : [],
-      finishLineResults: Array.isArray(r?.finishLineResults) ? r.finishLineResults : [],
-      
     })),
     athletes: Array.isArray(obj.athletes) ? obj.athletes : [],
   };
 }
 
-
 export default function EventEditor({ open, mode, eventId, onCancel, onAfterSave }: Props) {
+  /**
+   * Zugriff auf globale EventList:
+   * - listEntry ist maßgeblich für Name/Slug Anzeige in der Event-Liste
+   * - saveEvent schreibt in die EventList
+   */
   const { eventList, saveEvent, setActiveEvent } = useEventList();
 
+  /**
+   * Per-event Realtime-Dokument:
+   * - docId: "Event-{eventId}"
+   * - raw: Snapshot des FullEvent Dokuments
+   * - update: persistiert Änderungen (funktionaler Update)
+   * - status/error: Realtime Statusanzeige (nur informativ fürs UI)
+   */
   const docId = eventId ? `Event-${eventId}` : null;
   const { data: raw, update, status, error } = useRealtimeDoc<Partial<FullEvent>>(docId);
 
+  /**
+   * Normalisiertes FullEvent (aus raw) für die UI.
+   * - null wenn eventId fehlt
+   */
   const normalized = useMemo(() => {
     if (!eventId) return null;
     return normalizeFullEvent(raw, eventId);
   }, [raw, eventId]);
 
-  // Prefer the EventList entry for name/slug (it’s what the list UI shows).
+  /**
+   * Prefer EventList entry for name/slug:
+   * - EventsPage zeigt genau diese Werte an
+   * - deshalb nutzen wir listEntry als primäre Quelle für name
+   */
   const listEntry = useMemo(() => {
     if (!eventId) return null;
     return eventList?.events.find((e) => e.id === eventId) ?? null;
   }, [eventList, eventId]);
 
-  // Editor-local state
+  // -----------------------
+  // Editor-lokaler Zustand
+  // -----------------------
   const [name, setName] = useState("");
   const [ageGroups, setAgeGroups] = useState<AgeGroup[]>([]);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  // Baseline used for dirty detection (what we last "synced in")
+  /**
+   * Baseline für Dirty-Detection:
+   * - baseName/baseAgeGroupsJson repräsentieren den letzten "synchronisierten" Zustand
+   * - solange isDirty true ist, überschreiben wir lokale Edits NICHT durch Remote-Updates
+   */
   const [baseName, setBaseName] = useState("");
   const [baseAgeGroupsJson, setBaseAgeGroupsJson] = useState("[]");
 
+  /**
+   * Der Slug wird rein aus dem aktuellen name abgeleitet.
+   * (Der Slug ist hier bewusst read-only.)
+   */
   const slug = useMemo(() => slugify(name), [name]);
 
+  /**
+   * Dirty-Detection:
+   * - nameDirty: lokaler name weicht von baseName ab
+   * - ageGroupsDirty: JSON-Vergleich (einfacher Snapshot-Vergleich; für sehr große Daten evtl. optimieren)
+   */
   const isDirty = useMemo(() => {
     const nameDirty = name.trim() !== baseName.trim();
     const ageGroupsDirty = JSON.stringify(ageGroups) !== baseAgeGroupsJson;
     return nameDirty || ageGroupsDirty;
   }, [name, ageGroups, baseName, baseAgeGroupsJson]);
 
-  // Hydrate from remote sources when opening / switching docs / receiving updates,
-  // but do NOT overwrite if the user has local edits (isDirty).
+  /**
+   * Hydration/Sync-Effekt:
+   * - wenn Editor geöffnet wird oder neue Daten reinkommen,
+   *   übernehmen wir die Remote-Werte in den lokalen State
+   *
+   * ABER:
+   * - wenn der User bereits lokal editiert (isDirty), überschreiben wir NICHT
+   *   (verhindert "stomping" bei Realtime-Updates)
+   */
   useEffect(() => {
     if (!open) return;
     if (!eventId) return;
@@ -130,13 +219,22 @@ export default function EventEditor({ open, mode, eventId, onCancel, onAfterSave
     isDirty,
   ]);
 
+  /**
+   * Autofokus auf Name-Feld beim Öffnen.
+   * setTimeout(0) stellt sicher, dass das Input nach dem Render existiert.
+   */
   useEffect(() => {
     if (!open) return;
     setTimeout(() => nameInputRef.current?.focus(), 0);
   }, [open]);
 
+  // Wenn Editor geschlossen, gar nichts rendern (vereinfachtes "Dialog" Pattern)
   if (!open) return null;
 
+  /**
+   * Guard: Editor benötigt eventId.
+   * (Sollte in der Praxis nicht passieren, da EventsPage beim Öffnen eine ID setzt.)
+   */
   if (!eventId) {
     return (
       <Box sx={{ mt: 5 }}>
@@ -154,9 +252,27 @@ export default function EventEditor({ open, mode, eventId, onCancel, onAfterSave
     );
   }
 
+  /**
+   * raw Snapshot:
+   * - raw === null bedeutet hier: noch kein Snapshot geladen
+   *   (je nach useRealtimeDoc-Implementation)
+   */
   const hasSnapshot = raw !== null;
+
+  /**
+   * Save-Button-Enablement:
+   * - erst speichern, wenn Snapshot da ist (damit update(prev=>...) sinnvoll normalisieren kann)
+   * - und Name nicht leer ist
+   */
   const canSave = hasSnapshot && !!name.trim();
 
+  /**
+   * Save-Handler:
+   * 1) Speichert name/slug in die globale EventList (EventsPage Tabelle)
+   * 2) Persistiert FullEvent-Anteile (ageGroups etc.) im per-event Dokument
+   * 3) setzt Dirty-Baseline zurück
+   * 4) im "new" Modus: setzt Event als aktiv
+   */
   function handleSave() {
     const id = eventId;
     if (!id) return;
@@ -169,8 +285,13 @@ export default function EventEditor({ open, mode, eventId, onCancel, onAfterSave
 
     // 2) Update per-event FullEvent doc (ageGroups etc.)
     update((prev) => {
+      // normalize prev snapshot defensively so we can always spread/override safe arrays
       const current = normalizeFullEvent(prev, id);
 
+      // AgeGroups normalisieren:
+      // - leere Namen entfernen
+      // - trimmen
+      // - eventId setzen (wichtig für Referenzen)
       const normalizedAgeGroups = ageGroups
         .filter((ag) => ag.name.trim() !== "")
         .map((ag) => ({
@@ -190,10 +311,11 @@ export default function EventEditor({ open, mode, eventId, onCancel, onAfterSave
       return next;
     });
 
-    // If we stay open (e.g. you remove onAfterSave later), reset baseline now.
+    // Baseline aktualisieren (damit isDirty wieder false wird)
     setBaseName(trimmedName);
     setBaseAgeGroupsJson(JSON.stringify(ageGroups));
 
+    // UX: nach Create das neue Event direkt aktiv setzen
     if (mode === "new") setActiveEvent(id);
 
     onAfterSave?.();
@@ -205,6 +327,7 @@ export default function EventEditor({ open, mode, eventId, onCancel, onAfterSave
         <CardHeader
           title={mode === "edit" ? "Edit Event" : "New Event"}
           subheader={
+            // Debug/Info: Realtime Status + Fehler anzeigen
             <Typography variant="caption" color={error ? "error" : "text.secondary"}>
               Realtime: {status}
               {error ? ` (${error})` : ""}
@@ -214,6 +337,7 @@ export default function EventEditor({ open, mode, eventId, onCancel, onAfterSave
         />
         <Divider />
         <CardContent>
+          {/* Name + Slug */}
           <Stack direction={{ xs: "column", sm: "row" }} spacing={3} sx={{ mb: 3 }}>
             <TextField
               label="Name"
@@ -223,6 +347,7 @@ export default function EventEditor({ open, mode, eventId, onCancel, onAfterSave
               inputRef={nameInputRef}
             />
 
+            {/* Slug ist abgeleitet und nicht editierbar */}
             <TextField
               label="Slug"
               value={slug}
@@ -233,18 +358,18 @@ export default function EventEditor({ open, mode, eventId, onCancel, onAfterSave
             />
           </Stack>
 
+          {/* AgeGroups Editor: verwaltet die Liste lokal, wird beim Save persistiert */}
           <AgeGroupsEditor value={ageGroups} onChange={setAgeGroups} eventId={eventId} title="Age Groups" />
 
+          {/* Actions */}
           <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
             <Button variant="contained" onClick={handleSave} disabled={!canSave}>
               {mode === "edit" ? "Update" : "Create"}
             </Button>
 
-            
-              <Button variant="outlined" onClick={onCancel}>
-                Cancel
-              </Button>
-        
+            <Button variant="outlined" onClick={onCancel}>
+              Cancel
+            </Button>
           </Stack>
         </CardContent>
       </Card>

@@ -29,14 +29,15 @@ import PointsBibField, { type AthleteFilterOptions } from "./PointsBibField";
 import ScoringStarterList from "./ScoringStarterList";
 
 import type { Athlete } from "../types/athlete";
-import type { FinishLineResult, Race } from "../types/race";
+import type { Race, RaceResult } from "../types/race";
 
 type Props = {
   race: Race;
   /** Use e.g. race.id so the component can reset when switching races */
   resetKey?: string;
-  /** Persist the updated finishLineResults back into the race (page updates realtime doc) */
-  onChangeFinishLineResults: (next: FinishLineResult[]) => void;
+
+  /** Persist the updated raceResults back into the race (page updates realtime doc) */
+  onChangeRaceResults: (next: RaceResult[]) => void;
 
   /** Optional: when a bib is not in starters, ask to create it (same flow as PointsScoring). */
   onCreateStarters?: (bibs: number[]) => Promise<void> | void;
@@ -55,8 +56,9 @@ function athleteLabel(a: Athlete) {
   return `${a.bib ?? ""} - ${(a.lastName ?? "").trim()} ${(a.firstName ?? "").trim()}`.trim();
 }
 
-function normalizePositions(list: FinishLineResult[]): FinishLineResult[] {
-  return list.map((r, idx) => ({ ...r, rank: idx + 1 }));
+function normalizeFinishRanks(list: RaceResult[]): RaceResult[] {
+  // Only for finishers. Normalizes finishRank to 1..N by array order.
+  return list.map((r, idx) => ({ ...r, finishRank: idx + 1 }));
 }
 
 function move<T>(arr: T[], from: number, to: number): T[] {
@@ -83,7 +85,7 @@ function tryAutoPickUniqueBib(input: string, candidates: Athlete[]): Athlete | n
 export default function FinishLineScoring({
   race,
   resetKey,
-  onChangeFinishLineResults,
+  onChangeRaceResults,
   onCreateStarters,
 }: Props) {
   const starters = useMemo(() => {
@@ -104,24 +106,36 @@ export default function FinishLineScoring({
     return m;
   }, [starters]);
 
-  const results = useMemo(() => {
-    const raw = Array.isArray((race as any)?.finishLineResults)
-      ? ((race as any).finishLineResults as FinishLineResult[])
-      : [];
-    const sorted = [...raw].sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999));
-    return normalizePositions(sorted);
+  const raceResults = useMemo(() => {
+    const raw = Array.isArray((race as any)?.raceResults) ? ((race as any).raceResults as RaceResult[]) : [];
+    // keep stable order by bib as secondary if finishRank equal
+    return [...raw];
   }, [race]);
+
+  const finishers = useMemo(() => {
+    const list = raceResults
+      .filter((r) => Number(r?.finishRank ?? 0) !== 0)
+      .sort((a, b) => {
+        const ar = Number(a.finishRank ?? 0) || 9999;
+        const br = Number(b.finishRank ?? 0) || 9999;
+        if (ar !== br) return ar - br;
+        return Number(a.bib ?? 0) - Number(b.bib ?? 0);
+      });
+
+    // Display with normalized ranks (does not persist unless user reorders/adds/removes)
+    return normalizeFinishRanks(list);
+  }, [raceResults]);
 
   const selectedIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const r of results) {
+    for (const r of finishers) {
       const a = starterByBib.get(Number(r.bib)) ?? null;
       if (a) ids.add(a.id);
     }
     return ids;
-  }, [results, starterByBib]);
+  }, [finishers, starterByBib]);
 
-  const finishBibSet = useMemo(() => new Set(results.map((r) => Number(r.bib))), [results]);
+  const finishBibSet = useMemo(() => new Set(finishers.map((r) => Number(r.bib))), [finishers]);
 
   const [bibInput, setBibInput] = useState("");
   const [selBib, setSelBib] = useState<Athlete | null>(null);
@@ -190,18 +204,55 @@ export default function FinishLineScoring({
     setTimeout(() => bibRef.current?.focus(), 0);
   }, [resetKey, race.id]);
 
+  function makeDefaultRaceResult(bib: number): RaceResult {
+    return {
+      bib,
+      rank: 0,
+      points: 0,
+      eliminated: false,
+      eliminationLap: 0,
+      dns: false,
+      dsq: false,
+      lapsCompleted: 0,
+      finishTime: "",
+      finishRank: 0,
+    };
+  }
+
   function commitAddBib(bib: number) {
-    const next = normalizePositions([
-      ...results,
+    const existing = raceResults.find((r) => Number(r?.bib) === bib) ?? null;
+    const base: RaceResult = existing ? { ...existing } : makeDefaultRaceResult(bib);
+
+    const nextFinishers = normalizeFinishRanks([
+      ...finishers,
       {
-        bib,
-        rank: results.length + 1,
-        lapsComplete: 0,
-        totalTime: "",
+        ...base,
+        finishRank: finishers.length + 1,
+        // keep any existing laps/time if present
+        lapsCompleted: Number.isFinite(Number(base.lapsCompleted)) ? Number(base.lapsCompleted) : 0,
+        finishTime: String(base.finishTime ?? ""),
       },
     ]);
 
-    onChangeFinishLineResults(next);
+    // Merge finishers back into the full raceResults list
+    const nextByBib = new Map<number, RaceResult>();
+    for (const r of nextFinishers) nextByBib.set(Number(r.bib), r);
+
+    const nextRaceResults: RaceResult[] = [];
+
+    // Update existing entries
+    for (const r of raceResults) {
+      const bibNum = Number((r as any)?.bib);
+      if (!Number.isFinite(bibNum)) continue;
+      const updated = nextByBib.get(bibNum);
+      nextRaceResults.push(updated ? { ...r, ...updated } : r);
+      nextByBib.delete(bibNum);
+    }
+
+    // Append new entries (bib was not present in raceResults before)
+    for (const r of nextByBib.values()) nextRaceResults.push(r);
+
+    onChangeRaceResults(nextRaceResults);
     setBibInput("");
     setSelBib(null);
     setError(null);
@@ -215,7 +266,7 @@ export default function FinishLineScoring({
       return;
     }
 
-    if (results.some((r) => Number(r.bib) === bib)) {
+    if (finishers.some((r) => Number(r.bib) === bib)) {
       setError(`Startnummer ${bib} ist bereits in der Finisher-Liste`);
       return;
     }
@@ -259,7 +310,7 @@ export default function FinishLineScoring({
     if (pendingAddBib == null) return;
 
     // If it was added elsewhere in the meantime, stop waiting.
-    if (results.some((r) => Number(r.bib) === pendingAddBib)) {
+    if (finishers.some((r) => Number(r.bib) === pendingAddBib)) {
       setPendingAddBib(null);
       return;
     }
@@ -270,16 +321,50 @@ export default function FinishLineScoring({
     const bib = pendingAddBib;
     setPendingAddBib(null);
     commitAddBib(bib);
-  }, [pendingAddBib, results, starterByBib]);
+  }, [pendingAddBib, finishers, starterByBib]);
 
-  function removeAt(idx: number) {
-    const next = normalizePositions(results.filter((_, i) => i !== idx));
-    onChangeFinishLineResults(next);
+  function commitFinishers(nextFinishers: RaceResult[], removedBibs: Set<number> = new Set()) {
+    const normalized = normalizeFinishRanks(nextFinishers);
+
+    const nextByBib = new Map<number, RaceResult>();
+    for (const r of normalized) nextByBib.set(Number(r.bib), r);
+
+    const nextRaceResults: RaceResult[] = [];
+
+    for (const r of raceResults) {
+      const bibNum = Number((r as any)?.bib);
+      if (!Number.isFinite(bibNum)) continue;
+
+      if (removedBibs.has(bibNum)) {
+        nextRaceResults.push({
+          ...r,
+          finishRank: 0,
+          finishTime: "",
+        });
+        continue;
+      }
+
+      const updated = nextByBib.get(bibNum);
+      nextRaceResults.push(updated ? { ...r, ...updated } : r);
+      nextByBib.delete(bibNum);
+    }
+
+    for (const r of nextByBib.values()) nextRaceResults.push(r);
+
+    onChangeRaceResults(nextRaceResults);
   }
 
-  function updateAt(idx: number, patch: Partial<FinishLineResult>) {
-    const next = results.map((r, i) => (i === idx ? { ...r, ...patch } : r));
-    onChangeFinishLineResults(normalizePositions(next));
+  function removeAt(idx: number) {
+    const bib = Number(finishers[idx]?.bib);
+    if (!Number.isFinite(bib)) return;
+
+    const nextFinishers = finishers.filter((_, i) => i !== idx);
+    commitFinishers(nextFinishers, new Set([bib]));
+  }
+
+  function updateAt(idx: number, patch: Partial<Pick<RaceResult, "finishTime">>) {
+    const nextFinishers = finishers.map((r, i) => (i === idx ? { ...r, ...patch } : r));
+    commitFinishers(nextFinishers);
   }
 
   function onDragStart(idx: number) {
@@ -292,8 +377,7 @@ export default function FinishLineScoring({
     if (from == null) return;
     if (from === idx) return;
 
-    const next = normalizePositions(move(results, from, idx));
-    onChangeFinishLineResults(next);
+    commitFinishers(move(finishers, from, idx));
   }
 
   return (
@@ -303,7 +387,7 @@ export default function FinishLineScoring({
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 1 }}>
           <Typography variant="subtitle2">Finish</Typography>
           <Typography variant="caption" color="text.secondary">
-            {results.length}
+            {finishers.length}
           </Typography>
         </Box>
 
@@ -370,7 +454,7 @@ export default function FinishLineScoring({
 
       {/* Results table */}
       <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1, minHeight: 0 }}>
-        {results.length === 0 ? (
+        {finishers.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             No finish results yet.
           </Typography>
@@ -393,10 +477,7 @@ export default function FinishLineScoring({
                 <TableCell sx={{ width: 90 }} padding="checkbox">
                   Bib
                 </TableCell>
-                <TableCell sx={{ width: 50 }} padding="checkbox">
-                  Laps
-                </TableCell>
-                <TableCell sx={{ width: 120 }} padding="checkbox">
+                <TableCell sx={{ width: 170 }} padding="checkbox">
                   Time
                 </TableCell>
                 <TableCell sx={{ width: 20 }} padding="checkbox" />
@@ -404,7 +485,7 @@ export default function FinishLineScoring({
             </TableHead>
 
             <TableBody>
-              {results.map((r, idx) => {
+              {finishers.map((r, idx) => {
                 const a = starterByBib.get(Number(r.bib)) ?? null;
 
                 return (
@@ -442,25 +523,8 @@ export default function FinishLineScoring({
                       <TextField
                         variant="standard"
                         size="small"
-                        value={String(r.lapsComplete ?? 0)}
-                        type="number"
-                        onChange={(e) =>
-                          updateAt(idx, { lapsComplete: Math.max(0, Math.floor(Number(e.target.value))) })
-                        }
-                        inputProps={{ min: 0, step: 1 }}
-                        sx={{
-                          width: "100%",
-                          "& .MuiInputBase-input": { fontSize: 13, py: 0.5 },
-                        }}
-                      />
-                    </TableCell>
-
-                    <TableCell>
-                      <TextField
-                        variant="standard"
-                        size="small"
-                        value={String(r.totalTime ?? "")}
-                        onChange={(e) => updateAt(idx, { totalTime: e.target.value })}
+                        value={String(r.finishTime ?? "")}
+                        onChange={(e) => updateAt(idx, { finishTime: (e.target as HTMLInputElement).value })}
                         placeholder="0:15,032"
                         sx={{
                           width: "100%",
@@ -486,7 +550,7 @@ export default function FinishLineScoring({
         )}
 
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-          Tip: You can drag rows to adjust the rank. Rank is persisted via the array order (rank is re-numbered).
+          Tip: You can drag rows to adjust the rank. Rank is persisted via finishRank (re-numbered).
         </Typography>
       </Box>
 

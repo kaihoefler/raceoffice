@@ -46,9 +46,37 @@ export type RaceActivityElimination = GenericRaceActivity<
 >;
 
 
-/*
+// disqualification
+export type RaceActivityDisqualfication = GenericRaceActivity<
+    "DSQ",
+    {
+        //dsqType: DisqualificationType;
+        isDeleted: boolean;
+        bib: number;
+        history: {
+            changedAt: string;
+            isDeleted: boolean;
+        }[];
+    }
+>;
+
+// Did not start
+export type RaceActivityDns = GenericRaceActivity<
+    "DNS",
+    {
+        isDeleted: boolean;
+        bib: number;
+        history: {
+            changedAt: string;
+            isDeleted: boolean;
+        }[];
+    }
+>;
+
+
 // sanctions
 export type DisqualificationType = "DSQ-TF" | "DSQ-SF" | "DSQ-DF";
+/*
 export type Sanction = `W${number}` | `FS${number}` | DisqualificationType;
 
 
@@ -151,6 +179,8 @@ export type RaceActivity =
     // | RaceActivityDNFReorder
     | RaceActivityPointsSprint
     | RaceActivityElimination
+    | RaceActivityDisqualfication
+    | RaceActivityDns
 //    | RaceActivityLapCountChanged
     ;
 

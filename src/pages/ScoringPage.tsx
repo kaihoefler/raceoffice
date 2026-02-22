@@ -23,7 +23,17 @@ import { useEventList } from "../providers/EventListProvider";
 import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
 
 import { useScoringViewModel } from "./scoring/ScoringViewModel";
+
+// raceResults is treated as a consolidated/materialized view:
+// - manual parts come from dedicated UI (e.g. FinishLineScoring writes finishRank/finishTime)
+// - derived parts come from the event log (raceActivities), e.g. points/eliminations
+//
+// Whenever activities or results change, we rebuild the derived fields and recompute rank.
+import { applyActivitiesToRaceResults } from "./scoring/applyActivitiesToRaceResults";
+import { recomputeRaceResults } from "./scoring/recomputeRaceResults";
+
 import RaceSelector from "../components/RaceSelector";
+
 import PointsScoring from "../components/PointsScoring";
 import FinishLineScoring from "../components/FinishLineScoring";
 import LiveRaceStatus from "../components/LiveRaceStatus";
@@ -31,11 +41,11 @@ import RaceActivitiesList from "../components/RaceActivitiesList";
 import Scoreboard from "../components/Scoreboard";
 
 import type { FullEvent } from "../types/event";
-import type { Race, FinishLineResult } from "../types/race";
+import type { Race, RaceResult } from "../types/race";
+
 import type { RaceActivityPointsSprint } from "../types/raceactivities";
 import type { RaceActivity } from "../types/raceactivities";
 import type { Athlete } from "../types/athlete";
-
 
 
 /**
@@ -60,7 +70,7 @@ function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
             raceResults: Array.isArray(r?.raceResults) ? r.raceResults : [],
             raceStarters: Array.isArray(r?.raceStarters) ? r.raceStarters : [],
             raceActivities: Array.isArray(r?.raceActivities) ? r.raceActivities : [],
-            finishLineResults: Array.isArray(r?.finishLineResults) ? r.finishLineResults : [],
+            
         })),
         athletes: Array.isArray(obj.athletes) ? obj.athletes : [],
     };
@@ -108,8 +118,10 @@ export default function ScoringPage() {
     const [syncEnabled, setSyncEnabled] = useState(false);
     const [col1Tab, setCol1Tab] = useState<"points" | "finish">("points");
 
-    // ViewModel computes missing bibs/standings + live-sync meta derived from providers.
+        // ViewModel computes display-only data (standings, missing bibs, live-sync meta) derived from providers.
+    // It does NOT persist anything.
     const vm = useScoringViewModel(race, syncEnabled);
+
 
 
     // -------------------------------------------------------------------------
@@ -123,11 +135,14 @@ export default function ScoringPage() {
     // -------------------------------------------------------------------------
     // Handlers: race activities (points sprint / elimination / etc.)
     // -------------------------------------------------------------------------
-    function handleUpdateActivity(updated: RaceActivity) {
+        function handleUpdateActivity(updated: RaceActivity) {
         if (!race) return;
 
+        // NOTE: This app is non-optimistic (server patch roundtrip). We compute the next state
+        // (activities -> derived raceResults -> rank) before sending the update.
         update((prev) => {
             const next: any = structuredClone(prev as any);
+
 
             const races = Array.isArray(next?.races) ? next.races : [];
             const rIdx = races.findIndex((r: any) => r?.id === race.id);
@@ -145,37 +160,66 @@ export default function ScoringPage() {
             const nextActivities = [...activities];
             nextActivities[aIdx] = updated;
 
-            r.raceActivities = nextActivities;
+                        r.raceActivities = nextActivities;
+
+            // Keep raceResults consistent whenever activities change:
+            // 1) rebuild derived fields (points, eliminated/eliminationLap, ...)
+            // 2) recompute rank using the configured priority rules
+            r.raceResults = recomputeRaceResults(
+                applyActivitiesToRaceResults({
+                    prevResults: Array.isArray(r.raceResults) ? r.raceResults : [],
+                    starters: Array.isArray(r.raceStarters) ? r.raceStarters : [],
+                    activities: Array.isArray(r.raceActivities) ? r.raceActivities : [],
+                }),
+            );
+
+
             races[rIdx] = r;
             next.races = races;
+
 
             return next;
         });
     }
 
-    function handleReplaceActivities(nextActivities: RaceActivity[]) {
+        function handleReplaceActivities(nextActivities: RaceActivity[]) {
         if (!race) return;
 
+        // Replacing the activities list affects derived results, so we recompute raceResults + rank.
         update((prev) => {
             const next: any = structuredClone(prev as any);
+
 
             const races = Array.isArray(next?.races) ? next.races : [];
             const idx = races.findIndex((r: any) => r?.id === race.id);
             if (idx < 0) return prev;
 
             const r = { ...races[idx] };
-            r.raceActivities = Array.isArray(nextActivities) ? nextActivities : [];
+                        r.raceActivities = Array.isArray(nextActivities) ? nextActivities : [];
+
+            // Recompute derived RaceResults (points/elimination/...) from activities, then rank.
+            r.raceResults = recomputeRaceResults(
+                applyActivitiesToRaceResults({
+                    prevResults: Array.isArray(r.raceResults) ? r.raceResults : [],
+                    starters: Array.isArray(r.raceStarters) ? r.raceStarters : [],
+                    activities: Array.isArray(r.raceActivities) ? r.raceActivities : [],
+                }),
+            );
+
             races[idx] = r;
 
             next.races = races;
             return next;
+
         });
     }
 
-    function handleAddPointsSprintActivity(activity: RaceActivityPointsSprint) {
+        function handleAddPointsSprintActivity(activity: RaceActivityPointsSprint) {
         if (!race) return;
 
+        // Adding a points sprint affects derived points and therefore rank.
         update((prev) => {
+
             const next: any = structuredClone(prev as any);
             const races = Array.isArray(next?.races) ? next.races : [];
             const idx = races.findIndex((r: any) => r?.id === race.id);
@@ -183,10 +227,21 @@ export default function ScoringPage() {
 
             const r = { ...races[idx] };
             const activities = Array.isArray(r.raceActivities) ? r.raceActivities : [];
-            r.raceActivities = [...activities, activity];
+                        r.raceActivities = [...activities, activity];
+
+            // Recompute derived RaceResults (points/elimination/...) from activities, then rank.
+            r.raceResults = recomputeRaceResults(
+                applyActivitiesToRaceResults({
+                    prevResults: Array.isArray(r.raceResults) ? r.raceResults : [],
+                    starters: Array.isArray(r.raceStarters) ? r.raceStarters : [],
+                    activities: Array.isArray(r.raceActivities) ? r.raceActivities : [],
+                }),
+            );
+
             races[idx] = r;
             next.races = races;
             return next;
+
         });
     }
 
@@ -250,11 +305,14 @@ export default function ScoringPage() {
         });
     }
 
+        // -------------------------------------------------------------------------
+    // Handlers: race results (manual finish entry)
     // -------------------------------------------------------------------------
-    // Handlers: finish line results
-    // -------------------------------------------------------------------------
-    function handleChangeFinishLineResults(nextResults: FinishLineResult[]) {
-    if (!race) return;
+    // FinishLineScoring edits manual finish fields in raceResults (finishRank/finishTime).
+    // We must merge these manual edits with derived fields from activities and finally recompute rank.
+                                function handleChangeRaceResults(nextResults: RaceResult[]) {
+
+        if (!race) return;
 
         update((prev) => {
             const next: any = structuredClone(prev as any);
@@ -264,13 +322,27 @@ export default function ScoringPage() {
             if (idx < 0) return prev;
 
             const r = { ...races[idx] };
-            r.finishLineResults = Array.isArray(nextResults) ? nextResults : [];
-            races[idx] = r;
 
+                        // Merge manual fields (finishRank/finishTime/...) from UI with derived fields from activities.
+            // Derived fields always win (so editing a points sprint immediately updates points in raceResults).
+            const merged = applyActivitiesToRaceResults({
+                prevResults: Array.isArray(nextResults) ? nextResults : [],
+                starters: Array.isArray(r.raceStarters) ? r.raceStarters : [],
+                activities: Array.isArray(r.raceActivities) ? r.raceActivities : [],
+            });
+
+            // Compute rank after we have a fully-consistent RaceResult view.
+            r.raceResults = recomputeRaceResults(merged);
+
+
+            races[idx] = r;
             next.races = races;
             return next;
         });
     }
+
+
+
 
     // -------------------------------------------------------------------------
     // Render guards
@@ -395,12 +467,13 @@ export default function ScoringPage() {
                                         liveTopBibs={vm.liveTopBibs}
                                     />
                                                                 ) : (
-                                    <FinishLineScoring
+                                                                        <FinishLineScoring
                                         race={race}
                                         resetKey={race.id}
-                                        onChangeFinishLineResults={handleChangeFinishLineResults}
+                                        onChangeRaceResults={handleChangeRaceResults}
                                         onCreateStarters={handleCreateStartersForBibs}
                                     />
+
                                 )}
                             </Box>
                         </Box>
@@ -408,7 +481,7 @@ export default function ScoringPage() {
                         <RaceActivitiesList race={race} onUpdateActivity={handleUpdateActivity} onReplaceActivities={handleReplaceActivities} />
 
                         {/* Spalte 3: Standings */}
-                        <Scoreboard standings={vm.standings} title="Standings" />
+                        <Scoreboard results={race.raceResults} title="Standings" />
 
 
                         {/* Spalte 4: Live race status (polled via RaceStatusProvider) */}

@@ -169,18 +169,39 @@ export default function PointsScoring({
   const [missingDialogBibs, setMissingDialogBibs] = useState<number[]>([]);
   const [missingDialogBusy, setMissingDialogBusy] = useState(false);
 
-  // Speichert die "eigentliche" Save-Operation, bis der User im Dialog entscheidet.
+    // Speichert die "eigentliche" Save-Operation, bis der User im Dialog entscheidet.
   const pendingSaveRef = useRef<null | (() => void)>(null);
+
+  // When the user chooses "create starters", we have to wait for the starter-create patch
+  // to roundtrip from the server (this app is non-optimistic).
+  // Otherwise the subsequent "add activity" patch may be rejected due to rev mismatch.
+  const [pendingSaveBibs, setPendingSaveBibs] = useState<number[] | null>(null);
+
 
   function openMissingStartersDialog(bibs: number[]) {
     setMissingDialogBibs(bibs);
     setMissingDialogOpen(true);
   }
 
-  function closeMissingStartersDialog() {
+    function closeMissingStartersDialog() {
     setMissingDialogOpen(false);
     setMissingDialogBibs([]);
   }
+
+  // After missing starters were created and arrived in local state, run the pending save.
+  useEffect(() => {
+    if (!pendingSaveBibs?.length) return;
+
+    // Wait until all created starters are actually present.
+    const allPresent = pendingSaveBibs.every((bib) => starterByBib.has(bib));
+    if (!allPresent) return;
+
+    const run = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    setPendingSaveBibs(null);
+    run?.();
+  }, [pendingSaveBibs, starterByBib]);
+
 
   // ---------------------------------------------------------------------------
   // Existing points activities -> default lap = max(lap) + 1
@@ -462,25 +483,29 @@ export default function PointsScoring({
         return; // nicht speichern
       }
 
-      pendingSaveRef.current = commitSave;
+            pendingSaveRef.current = commitSave;
+      setPendingSaveBibs(null);
       openMissingStartersDialog(missing);
       return;
+
     }
 
     commitSave();
   }
 
-  async function handleDialogCreateAndSave() {
+    async function handleDialogCreateAndSave() {
     if (!onCreateStarters) return;
+
+    // capture before closeMissingStartersDialog() resets the state
+    const bibs = [...missingDialogBibs];
 
     try {
       setMissingDialogBusy(true);
-      await onCreateStarters(missingDialogBibs);
+      await onCreateStarters(bibs);
       closeMissingStartersDialog();
 
-      const run = pendingSaveRef.current;
-      pendingSaveRef.current = null;
-      run?.();
+      // actual saving happens via effect above, once starters exist locally
+      setPendingSaveBibs(bibs);
     } finally {
       setMissingDialogBusy(false);
     }
@@ -488,10 +513,13 @@ export default function PointsScoring({
 
 
 
-  function handleDialogCancel() {
+
+    function handleDialogCancel() {
     closeMissingStartersDialog();
     pendingSaveRef.current = null;
+    setPendingSaveBibs(null);
   }
+
 
   function clearNow() {
     enterRequestedRef.current = false;
