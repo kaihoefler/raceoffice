@@ -30,51 +30,22 @@ import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useEventList } from "../providers/EventListProvider";
-import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
 import RaceStartersImport from "../components/RaceStartersImport";
 import RaceSelector from "../components/RaceSelector";
 
-
-import type { FullEvent } from "../types/event";
 import type { Race } from "../types/race";
 import type { Athlete } from "../types/athlete";
 
-function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
-    const obj = raw && typeof raw === "object" ? (raw as any) : {};
+import { useEventsActions } from "../hooks/useEventsActions";
 
-    const races = Array.isArray(obj.races) ? obj.races : [];
+import {
+  mergeStarters,
+  normalizeIoc,
+  parseBib,
+  rowsToAthletes,
+  type StarterImportRow,
+} from "../domain/startersActions";
 
-    return {
-        id: typeof obj.id === "string" ? obj.id : eventId,
-        name: typeof obj.name === "string" ? obj.name : "",
-        slug: typeof obj.slug === "string" ? obj.slug : "",
-        activeRaceId: typeof obj.activeRaceId === "string" ? obj.activeRaceId : null,
-        ageGroups: Array.isArray(obj.ageGroups) ? obj.ageGroups : [],
-        races: races.map((r: any) => ({
-            ...r,
-            raceResults: Array.isArray(r?.raceResults) ? r.raceResults : [],
-            raceStarters: Array.isArray(r?.raceStarters) ? r.raceStarters : [],
-                        raceActivities: Array.isArray(r?.raceActivities) ? r.raceActivities : [],
-
-        })),
-        athletes: Array.isArray(obj.athletes) ? obj.athletes : [],
-    };
-}
-
-
-function normalizeIoc(input: string): string | null {
-    const v = input.trim().toUpperCase();
-    if (!v) return null;
-    if (!/^[A-Z]{3}$/.test(v)) return v;
-    return v;
-}
-
-function parseBib(input: string): number | null {
-    const v = input.trim();
-    if (!v) return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-}
 
 export default function RaceStartersPage() {
     // ---- Hooks (must run unconditionally) ----
@@ -85,13 +56,11 @@ export default function RaceStartersPage() {
 
     const activeEventId = eventList?.activeEventId ?? null;
 
-    const docId = activeEventId ? `Event-${activeEventId}` : null;
-    const { data: raw, update, status, error } = useRealtimeDoc<Partial<FullEvent>>(docId);
+    const { fullEvent: eventDoc, status, error, replaceRaceStarters } = useEventsActions(activeEventId);
 
-    const fullEvent = useMemo(() => {
-        if (!activeEventId) return null;
-        return normalizeFullEvent(raw, activeEventId);
-    }, [raw, activeEventId]);
+    // Expose null while no activeEventId is selected (used by render guards below)
+    const fullEvent = useMemo(() => (activeEventId ? eventDoc : null), [activeEventId, eventDoc]);
+
 
     const race: Race | null = useMemo(() => {
         if (!fullEvent || !raceId) return null;
@@ -145,20 +114,11 @@ export default function RaceStartersPage() {
         nation: "",
     });
 
-    function updateRaceStarters(nextStarters: Athlete[]) {
-        if (!activeEventId || !raceId) return;
-
-        update((prev) => {
-            const current = normalizeFullEvent(prev, activeEventId);
-
-            const nextRaces = current.races.map((r) => {
-                if (r.id !== raceId) return r;
-                return { ...r, raceStarters: nextStarters };
-            });
-
-            return { ...current, races: nextRaces } as Partial<FullEvent>;
-        });
+        function updateRaceStarters(nextStarters: Athlete[]) {
+        if (!raceId) return;
+        replaceRaceStarters(raceId, nextStarters);
     }
+
 
     function startEdit(a: Athlete) {
         setEditingAthleteId(a.id);
@@ -241,71 +201,10 @@ export default function RaceStartersPage() {
         return true;
     }
 
-    type ImportPreviewRow = {
-        bib: number | null;
-        firstName: string;
-        lastName: string;
-        nation: string | null;
-    };
-
-    function makeNameKey(r: { firstName: string; lastName: string; nation: string | null }) {
-        return `${r.firstName.trim().toLowerCase()}|${r.lastName.trim().toLowerCase()}|${(r.nation ?? "").trim().toUpperCase()}`;
-    }
-
-    function rowsToAthletes(rows: ImportPreviewRow[], ageGroupId: string): Athlete[] {
-        return rows
-            .filter((r) => r.firstName.trim() && r.lastName.trim())
-            .map((r) => ({
-                id: crypto.randomUUID(),
-                bib: r.bib,
-                firstName: r.firstName.trim(),
-                lastName: r.lastName.trim(),
-                nation: r.nation,
-                ageGroupId,
-            }));
-    }
-
-    function mergeStarters(existing: Athlete[], rows: ImportPreviewRow[], ageGroupId: string): Athlete[] {
-        const byBib = new Map<number, Athlete>();
-        const byName = new Map<string, Athlete>();
-
-        for (const a of existing) {
-            if (a.bib !== null) byBib.set(a.bib, a);
-            byName.set(makeNameKey({ firstName: a.firstName ?? "", lastName: a.lastName ?? "", nation: a.nation ?? null }), a);
-        }
-
-        const updatesById = new Map<string, Athlete>();
-        const additions: Athlete[] = [];
-
-        for (const r of rows) {
-            const firstName = r.firstName.trim();
-            const lastName = r.lastName.trim();
-            if (!firstName || !lastName) continue;
-
-            const candidate = {
-                bib: r.bib,
-                firstName,
-                lastName,
-                nation: r.nation,
-                ageGroupId,
-            };
-
-            const match =
-                (candidate.bib !== null ? byBib.get(candidate.bib) : undefined) ??
-                byName.get(makeNameKey(candidate));
-
-            if (match) {
-                updatesById.set(match.id, { ...match, ...candidate, ageGroupId });
-            } else {
-                additions.push({ id: crypto.randomUUID(), ...candidate });
-            }
-        }
-
-        // keep existing order, apply updates, then append new ones
-        return [...existing.map((a) => updatesById.get(a.id) ?? a), ...additions];
-    }
+        type ImportPreviewRow = StarterImportRow;
 
     function handleImport(mode: "overwrite" | "merge", rows: ImportPreviewRow[]) {
+
         if (!race) return;
 
         if (mode === "overwrite") {

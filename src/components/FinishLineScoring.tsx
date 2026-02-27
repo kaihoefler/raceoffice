@@ -1,3 +1,12 @@
+// src/components/FinishLineScoring.tsx
+//
+// Komponente für “Finish Line Scoring”:
+// - Quick-Entry: Rank + Bib eintippen und hinzufügen
+// - Anzeige/Editing: Finisher-Tabelle mit Zeitfeld
+// - Drag&Drop: Reihenfolge ändern; mit Shift beim Drop => Gleichstand (Tie) erzeugen
+// - Optionaler Flow: Wenn Bib nicht in Startern ist, Dialog zum Anlegen anzeigen,
+//   dann nach Server-Roundtrip automatisch hinzufügen.
+
 import { type DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
@@ -43,6 +52,11 @@ type Props = {
   onCreateStarters?: (bibs: number[]) => Promise<void> | void;
 };
 
+/**
+ * Konvertiert eine Bib-Eingabe in eine positive Integer-Zahl.
+ * - null wenn leer/ungültig
+ * - > 0 (Startnummern <= 0 werden verworfen)
+ */
 function bibToInt(input: string): number | null {
   const v = String(input ?? "").trim();
   if (!v) return null;
@@ -52,12 +66,19 @@ function bibToInt(input: string): number | null {
   return i > 0 ? i : null;
 }
 
+/** Format für Anzeige in Dropdown/Tooltip. */
 function athleteLabel(a: Athlete) {
   return `${a.bib ?? ""} - ${(a.lastName ?? "").trim()} ${(a.firstName ?? "").trim()}`.trim();
 }
 
+/**
+ * Bildet “Tie”-Gruppen aus Finishern, anhand finishRank.
+ * Erwartet: finishers sind bereits sortiert nach (finishRank asc, bib asc).
+ *
+ * Beispiel:
+ *   [ (rank 1), (rank 1), (rank 3) ] -> [ [..1..], [..1..], [..3..] ]
+ */
 function groupFinishersByFinishRank(sortedFinishers: RaceResult[]): RaceResult[][] {
-  // Expects finishers sorted by (finishRank asc, bib asc)
   const groups: RaceResult[][] = [];
   let lastRank: number | null = null;
 
@@ -74,12 +95,18 @@ function groupFinishersByFinishRank(sortedFinishers: RaceResult[]): RaceResult[]
   return groups;
 }
 
+/**
+ * Wendet “Competition ranking” (auch: 1224-Style) an:
+ * - Gleichstand belegt gleiche Platzierung
+ * - nächste Platzierung springt um die Gruppengröße weiter
+ *   z.B. 1,1,3 statt 1,1,2.
+ */
 function applyCompetitionRanking(groups: RaceResult[][]): RaceResult[] {
-  // Competition ranking: ranks jump by the size of a tie group, e.g. 1,1,3
   let nextRank = 1;
   const out: RaceResult[] = [];
 
   for (const g of groups) {
+    // innerhalb der Tie-Gruppe nach Bib sortieren, damit Anzeige stabil bleibt
     const items = [...g].sort((a, b) => Number(a.bib ?? 0) - Number(b.bib ?? 0));
     for (const r of items) out.push({ ...r, finishRank: nextRank });
     nextRank += items.length;
@@ -88,6 +115,7 @@ function applyCompetitionRanking(groups: RaceResult[][]): RaceResult[] {
   return out;
 }
 
+/** Konvertiert Rank-Eingabe in positive Integer-Zahl. */
 function rankToInt(input: string): number | null {
   const v = String(input ?? "").trim();
   if (!v) return null;
@@ -97,6 +125,12 @@ function rankToInt(input: string): number | null {
   return i > 0 ? i : null;
 }
 
+/**
+ * Vorschlag für nächsten Rank im Quick-Entry.
+ * - Wenn keine Finisher: 1
+ * - Sonst: maxRank + size(tieGroupAtMaxRank)
+ *   => wenn letzter Rank ein Tie ist, springt Vorschlag korrekt weiter.
+ */
 function computeNextSuggestedRank(finishers: RaceResult[]): number {
   if (!finishers.length) return 1;
 
@@ -112,7 +146,11 @@ function computeNextSuggestedRank(finishers: RaceResult[]): number {
   return maxRank + Math.max(1, countAtMax);
 }
 
-
+/**
+ * Auto-Pick UX: Wenn User eine Bib tippt und diese eindeutig ist, wird sie automatisch “selected”.
+ * Schutz gegen “zu frühes” Pick:
+ * - Eingabe "1" und es gibt "12" => nicht autopicken.
+ */
 function tryAutoPickUniqueBib(input: string, candidates: Athlete[]): Athlete | null {
   const v = input.trim();
   if (!/^[0-9]+$/.test(v)) return null;
@@ -120,8 +158,9 @@ function tryAutoPickUniqueBib(input: string, candidates: Athlete[]): Athlete | n
   const exact = candidates.find((a) => a.bib !== null && String(a.bib) === v) ?? null;
   if (!exact) return null;
 
-  // Avoid premature picking (e.g. typing "1" when there is also "12")
-  const hasLongerPrefix = candidates.some((a) => a.bib !== null && String(a.bib).startsWith(v) && String(a.bib) !== v);
+  const hasLongerPrefix = candidates.some(
+    (a) => a.bib !== null && String(a.bib).startsWith(v) && String(a.bib) !== v,
+  );
   if (hasLongerPrefix) return null;
 
   return exact;
@@ -133,6 +172,11 @@ export default function FinishLineScoring({
   onChangeRaceResults,
   onCreateStarters,
 }: Props) {
+  /**
+   * Starterliste sortieren:
+   * - Primär nach bib
+   * - Sekundär nach Nachname (case-insensitive)
+   */
   const starters = useMemo(() => {
     const s = race.raceStarters ?? [];
     return [...s].sort((a, b) => {
@@ -143,6 +187,7 @@ export default function FinishLineScoring({
     });
   }, [race.raceStarters]);
 
+  /** Map für schnellen Lookup: bib -> Athlete */
   const starterByBib = useMemo(() => {
     const m = new Map<number, Athlete>();
     for (const a of starters) {
@@ -151,12 +196,22 @@ export default function FinishLineScoring({
     return m;
   }, [starters]);
 
+  /**
+   * Alle raceResults des Rennens (defensiv eingelesen).
+   * Wichtig: finishers werden separat gefiltert/sortiert.
+   */
   const raceResults = useMemo(() => {
     const raw = Array.isArray((race as any)?.raceResults) ? ((race as any).raceResults as RaceResult[]) : [];
-    // keep stable order by bib as secondary if finishRank equal
     return [...raw];
   }, [race]);
 
+  /**
+   * Finisher = alle Ergebnisse mit finishRank != 0.
+   * Sortierung ist die Basis für:
+   * - Anzeige im Table
+   * - Tie-Gruppierung
+   * - Drag&Drop Re-Ranking
+   */
   const finishers = useMemo(() => {
     return raceResults
       .filter((r) => Number(r?.finishRank ?? 0) !== 0)
@@ -168,6 +223,7 @@ export default function FinishLineScoring({
       });
   }, [raceResults]);
 
+  /** Set an Starter-IDs, die in den finishers vorkommen (für Starterliste-Highlight). */
   const selectedIds = useMemo(() => {
     const ids = new Set<string>();
     for (const r of finishers) {
@@ -177,45 +233,64 @@ export default function FinishLineScoring({
     return ids;
   }, [finishers, starterByBib]);
 
+  /** Set an Bibs, die bereits in finishers sind (damit wir sie nicht erneut vorschlagen). */
   const finishBibSet = useMemo(() => new Set(finishers.map((r) => Number(r.bib))), [finishers]);
 
+  // -------------------------
+  // UI-State (Quick Entry)
+  // -------------------------
   const [rankInput, setRankInput] = useState("");
   const [bibInput, setBibInput] = useState("");
   const [selBib, setSelBib] = useState<Athlete | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Fokus-Management für schnelles Tippen.
   const bibRef = useRef<HTMLInputElement>(null);
+
+  // Drag&Drop State (Index des gezogenen Rows).
   const dragFromIndexRef = useRef<number | null>(null);
 
-  // Confirmation dialog for creating missing starters
+  // -------------------------
+  // Dialog/Flow: fehlende Starter anlegen
+  // -------------------------
   const [missingDialogOpen, setMissingDialogOpen] = useState(false);
   const [missingDialogBibs, setMissingDialogBibs] = useState<number[]>([]);
   const [missingDialogBusy, setMissingDialogBusy] = useState(false);
 
-  // When the user chooses "create starter", we have to wait for the starter-create patch
-  // to roundtrip from the server (this app is non-optimistic).
-  // Otherwise the subsequent "add finish result" patch may be rejected due to rev mismatch.
+  /**
+   * Non-optimistic Backend:
+   * Wenn wir Starter anlegen, müssen wir auf das Update warten, bis es wieder in props erscheint.
+   * Erst dann fügen wir den Finisher-Eintrag hinzu, um rev-mismatch zu vermeiden.
+   */
   const [pendingAddBib, setPendingAddBib] = useState<number | null>(null);
   const [pendingAddRank, setPendingAddRank] = useState<number | null>(null);
 
+  /**
+   * Autocomplete-Filter:
+   * - wir zeigen Vorschläge nur, wenn wirklich getippt wurde
+   * - stringify bestimmt die Felder, die durchsucht werden
+   */
   const filterOptions: AthleteFilterOptions = useMemo(() => {
     const base = createFilterOptions<Athlete>({
       stringify: (o) => `${o.bib ?? ""} ${(o.lastName ?? "")} ${(o.firstName ?? "")} ${(o.nation ?? "")}`,
       trim: true,
     });
 
-    // Only show suggestions when at least 1 character was typed.
     return (options, state) => {
       if (!state.inputValue.trim()) return [];
       return base(options, state);
     };
   }, []);
 
+  /** Dropdown-Optionen: nur Starter mit Bib und nicht bereits in finishers. */
   const bibOptions = useMemo(() => {
-    // Only suggest starters that are not already in the finish list.
     return starters.filter((a) => a.bib != null && !finishBibSet.has(a.bib));
   }, [starters, finishBibSet]);
 
+  /**
+   * Falls Bib nicht in starters existiert, aber wir sie anzeigen/selektieren möchten,
+   * erzeugen wir einen Placeholder-Athleten (ohne Namen).
+   */
   function makePlaceholderAthlete(bib: number): Athlete {
     return {
       id: `placeholder_${race.id}_${bib}`,
@@ -227,6 +302,7 @@ export default function FinishLineScoring({
     };
   }
 
+  /** Liefert Starter (falls vorhanden) oder Placeholder (falls nicht). */
   function resolveOrPlaceholder(bibText: string): Athlete | null {
     const bib = bibToInt(bibText);
     if (bib == null) return null;
@@ -238,6 +314,13 @@ export default function FinishLineScoring({
     setMissingDialogBibs([]);
   }
 
+  /**
+   * Reset bei Rennwechsel (race.id oder resetKey):
+   * - Eingaben/Fehler zurücksetzen
+   * - Dialog schließen
+   * - pending states löschen
+   * - Fokus ins Bib-Feld setzen
+   */
   useEffect(() => {
     setRankInput(String(computeNextSuggestedRank(finishers)));
     setBibInput("");
@@ -250,8 +333,10 @@ export default function FinishLineScoring({
     setTimeout(() => bibRef.current?.focus(), 0);
   }, [resetKey, race.id]);
 
-  // After saving (raceResults update comes back in via props), update the suggested next rank,
-  // but don't overwrite the user's in-progress input.
+  /**
+   * Wenn sich finishers ändern (z.B. nach Save/prop update), aktualisieren wir den Rank-Vorschlag.
+   * Aber: nicht, wenn der User gerade tippt / Dialog offen / pending add läuft.
+   */
   useEffect(() => {
     if (bibInput.trim()) return;
     if (missingDialogOpen) return;
@@ -260,6 +345,7 @@ export default function FinishLineScoring({
     setRankInput(String(computeNextSuggestedRank(finishers)));
   }, [finishers, bibInput, missingDialogOpen, pendingAddBib]);
 
+  /** Default-RaceResult für neue Bib, falls sie noch nicht in raceResults existiert. */
   function makeDefaultRaceResult(bib: number): RaceResult {
     return {
       bib,
@@ -275,43 +361,55 @@ export default function FinishLineScoring({
     };
   }
 
+  /**
+   * “Commit” zum Hinzufügen eines Finishers:
+   * - existierendes RaceResult wird weiterverwendet, wenn vorhanden
+   * - finishers werden ergänzt & sortiert
+   * - danach wird in die vollständige raceResults-Liste zurückgemerged
+   * - danach onChangeRaceResults() -> parent persistiert
+   */
   function commitAddBib(bib: number, finishRank: number) {
     const existing = raceResults.find((r) => Number(r?.bib) === bib) ?? null;
     const base: RaceResult = existing ? { ...existing } : makeDefaultRaceResult(bib);
 
-    const nextFinishers = [...finishers, {
-      ...base,
-      finishRank,
-      // keep any existing laps/time if present
-      lapsCompleted: Number.isFinite(Number(base.lapsCompleted)) ? Number(base.lapsCompleted) : 0,
-      finishTime: String(base.finishTime ?? ""),
-    }].sort((a, b) => {
+    const nextFinishers = [
+      ...finishers,
+      {
+        ...base,
+        finishRank,
+        // vorhandene Werte (falls existierend) behalten
+        lapsCompleted: Number.isFinite(Number(base.lapsCompleted)) ? Number(base.lapsCompleted) : 0,
+        finishTime: String(base.finishTime ?? ""),
+      },
+    ].sort((a, b) => {
       const ar = Number(a.finishRank ?? 0) || 9999;
       const br = Number(b.finishRank ?? 0) || 9999;
       if (ar !== br) return ar - br;
       return Number(a.bib ?? 0) - Number(b.bib ?? 0);
     });
 
-    // Merge finishers back into the full raceResults list
+    // Map für schnellen Merge bib -> updated RaceResult
     const nextByBib = new Map<number, RaceResult>();
     for (const r of nextFinishers) nextByBib.set(Number(r.bib), r);
 
     const nextRaceResults: RaceResult[] = [];
 
-    // Update existing entries
+    // 1) Bestehende entries updaten (wenn in nextByBib)
     for (const r of raceResults) {
       const bibNum = Number((r as any)?.bib);
       if (!Number.isFinite(bibNum)) continue;
+
       const updated = nextByBib.get(bibNum);
       nextRaceResults.push(updated ? { ...r, ...updated } : r);
       nextByBib.delete(bibNum);
     }
 
-    // Append new entries (bib was not present in raceResults before)
+    // 2) Neue entries anhängen (Bib war vorher nicht in raceResults)
     for (const r of nextByBib.values()) nextRaceResults.push(r);
 
     onChangeRaceResults(nextRaceResults);
 
+    // UI “schnell weiter tippen”
     setRankInput(String(computeNextSuggestedRank(nextFinishers)));
     setBibInput("");
     setSelBib(null);
@@ -319,6 +417,12 @@ export default function FinishLineScoring({
     setTimeout(() => bibRef.current?.focus(), 0);
   }
 
+  /**
+   * Validiert Rank+Bib aus Textfeldern und entscheidet:
+   * - wenn Bib schon Finisher -> Fehler
+   * - wenn Bib kein Starter -> ggf Dialog zum Anlegen (wenn onCreateStarters vorhanden)
+   * - sonst: commitAddBib
+   */
   function requestAddBibFromText(bibText: string, rankText: string) {
     const finishRank = rankToInt(rankText);
     if (finishRank == null) {
@@ -337,15 +441,17 @@ export default function FinishLineScoring({
       return;
     }
 
-    // If bib is not an existing starter: ask to create it.
+    // Starter fehlt -> Create-Flow (wenn aktiviert)
     if (!starterByBib.has(bib)) {
       if (!onCreateStarters) {
         setError(`Startnummer ${bib} ist nicht in der Starterliste`);
         return;
       }
 
+      // pending: wir merken uns, was später hinzugefügt werden soll
       setPendingAddBib(bib);
       setPendingAddRank(finishRank);
+
       setMissingDialogBibs([bib]);
       setMissingDialogOpen(true);
       return;
@@ -354,58 +460,86 @@ export default function FinishLineScoring({
     commitAddBib(bib, finishRank);
   }
 
+    /** Dialog: Starter anlegen (async) */
   async function handleDialogCreateAndAdd() {
+    // Wenn das Feature nicht aktiv ist, gibt es nichts zu tun.
     if (!onCreateStarters) return;
 
     try {
+      // UI in “busy” Zustand setzen, um z.B. doppelte Klicks zu verhindern.
       setMissingDialogBusy(true);
+
+      // Starter anlegen (Backend/Parent-Logik). Kann async sein.
       await onCreateStarters(missingDialogBibs);
+
+      // Dialog schließen. Das “eigentliche Hinzufügen” passiert NICHT hier,
+      // sondern im Effect weiter unten, sobald die Starter wirklich in props auftauchen.
       closeMissingStartersDialog();
-      // actual adding happens via effect below, once starter exists locally
     } finally {
+      // Busy immer zurücksetzen (auch bei Error/Reject).
       setMissingDialogBusy(false);
     }
   }
 
+  /** Dialog: Abbrechen => Dialog schließen + pending states verwerfen. */
   function handleDialogCancel() {
     closeMissingStartersDialog();
     setPendingAddBib(null);
     setPendingAddRank(null);
   }
 
-  // After the missing-starter creation patch arrived (starter now exists), add the bib to the finish list.
+  /**
+   * Wenn wir auf das Anlegen eines Starters warten (pendingAddBib),
+   * und dieser Starter dann tatsächlich in starterByBib auftaucht (props update),
+   * dann fügen wir den Finisher automatisch hinzu.
+   */
   useEffect(() => {
     if (pendingAddBib == null) return;
 
-    // If it was added elsewhere in the meantime, stop waiting.
+    // Falls die Bib inzwischen bereits als Finisher existiert (z.B. parallel hinzugefügt),
+    // stoppen wir den Pending-Flow.
     if (finishers.some((r) => Number(r.bib) === pendingAddBib)) {
       setPendingAddBib(null);
       setPendingAddRank(null);
       return;
     }
 
-    // Wait until the created starter is actually present in starters.
+    // Warten, bis der neue Starter im lokalen Starter-Set angekommen ist.
+    // (Non-optimistic: erst nach Server Roundtrip.)
     if (!starterByBib.has(pendingAddBib)) return;
 
     const bib = pendingAddBib;
     const rank = pendingAddRank;
+
+    // Pending-State aufräumen (wir committen jetzt).
     setPendingAddBib(null);
     setPendingAddRank(null);
 
-    // rank should always be set (we only set pendingAddBib together with pendingAddRank)
+    // Rank sollte gesetzt sein; falls nicht, fallback auf aktuellen Vorschlag.
     commitAddBib(bib, rank ?? computeNextSuggestedRank(finishers));
   }, [pendingAddBib, pendingAddRank, finishers, starterByBib]);
 
+  /**
+   * Persistiert eine neue Finisher-Liste zurück in raceResults.
+   * - nextFinishers enthält die komplette, neu sortierte Finisher-Ansicht
+   * - removedBibs markiert Bibs, die “entfernt” wurden (finishRank=0, time="").
+   *
+   * Hinweis: Wir mergen immer in die Gesamtstruktur raceResults zurück,
+   * damit nicht-Finisher Ergebnisse erhalten bleiben.
+   */
   function commitFinishers(nextFinishers: RaceResult[], removedBibs: Set<number> = new Set()) {
+    // Map für Updates: bib -> RaceResult
     const nextByBib = new Map<number, RaceResult>();
     for (const r of nextFinishers) nextByBib.set(Number(r.bib), r);
 
     const nextRaceResults: RaceResult[] = [];
 
+    // Bestehende raceResults durchlaufen und ggf. aktualisieren
     for (const r of raceResults) {
       const bibNum = Number((r as any)?.bib);
       if (!Number.isFinite(bibNum)) continue;
 
+      // Entfernen bedeutet: finishRank zurücksetzen + time löschen (hier bewusst)
       if (removedBibs.has(bibNum)) {
         nextRaceResults.push({
           ...r,
@@ -415,16 +549,26 @@ export default function FinishLineScoring({
         continue;
       }
 
+      // Wenn es einen Update-Eintrag gibt: mergen
       const updated = nextByBib.get(bibNum);
       nextRaceResults.push(updated ? { ...r, ...updated } : r);
+
+      // Aus Map entfernen, damit am Ende nur “neue” übrig bleiben
       nextByBib.delete(bibNum);
     }
 
+    // Übrig gebliebene Einträge aus nextByBib sind neu und müssen angehängt werden
     for (const r of nextByBib.values()) nextRaceResults.push(r);
 
+    // Parent persistiert (Realtime Doc etc.)
     onChangeRaceResults(nextRaceResults);
   }
 
+  /**
+   * Entfernt einen Finisher an Tabellen-Index idx:
+   * - entfernt ihn aus der Finisher-Liste
+   * - markiert die Bib als “removed” (finishRank=0, time="")
+   */
   function removeAt(idx: number) {
     const bib = Number(finishers[idx]?.bib);
     if (!Number.isFinite(bib)) return;
@@ -433,19 +577,33 @@ export default function FinishLineScoring({
     commitFinishers(nextFinishers, new Set([bib]));
   }
 
+  /**
+   * Patcht einen einzelnen Finisher-Eintrag (aktuell nur finishTime).
+   * Wir bilden eine neue Finisher-Liste und committen sie komplett,
+   * damit die Datenquelle konsistent bleibt.
+   */
   function updateAt(idx: number, patch: Partial<Pick<RaceResult, "finishTime">>) {
     const nextFinishers = finishers.map((r, i) => (i === idx ? { ...r, ...patch } : r));
     commitFinishers(nextFinishers);
   }
 
+  /** Drag Start: Index merken, von dem gezogen wurde. */
   function onDragStart(idx: number) {
     dragFromIndexRef.current = idx;
   }
 
+  /**
+   * Drop-Handler:
+   * - ohne Shift: zieht Athlet vor die Ziel-(Tie-)Gruppe als eigene Gruppe (also neuer Rang)
+   * - mit Shift: zieht Athlet in die Zielgruppe hinein => Gleichstand
+   *
+   * Danach: applyCompetitionRanking() neu berechnet finishRank für alle Gruppen.
+   */
   function onDrop(e: DragEvent<HTMLElement>, idx: number) {
     const from = dragFromIndexRef.current;
     dragFromIndexRef.current = null;
 
+    // Guard-Clauses: ungültige DnD-States abfangen
     if (from == null) return;
     if (from === idx) return;
 
@@ -457,51 +615,54 @@ export default function FinishLineScoring({
     const targetBib = Number(target.bib);
     if (!Number.isFinite(draggedBib) || !Number.isFinite(targetBib)) return;
 
+    // Shift => tie, ohne Shift => eigener Rang vor Ziel
     const withShift = e.shiftKey;
 
-    // Build tie groups from current state.
+    // 1) Gruppen aus aktuellem Zustand erzeugen
     const groups = groupFinishersByFinishRank(finishers);
 
-    // Remove dragged from its current group.
+    // 2) Dragged aus seiner bisherigen Gruppe entfernen
     for (let gi = 0; gi < groups.length; gi++) {
       const g = groups[gi];
       const nextG = g.filter((r) => Number(r.bib) !== draggedBib);
       if (nextG.length !== g.length) {
+        // Wenn Gruppe leer geworden ist: ganze Gruppe entfernen
         if (nextG.length === 0) groups.splice(gi, 1);
         else groups[gi] = nextG;
         break;
       }
     }
 
-    // Find target group (after removal).
+    // 3) Zielgruppe finden (nachdem dragged entfernt wurde)
     const targetGroupIndex = groups.findIndex((g) => g.some((r) => Number(r.bib) === targetBib));
     if (targetGroupIndex < 0) return;
 
+    // 4) Einfügen: entweder in Zielgruppe (tie) oder als eigene Gruppe davor
     if (withShift) {
-      // Shift+Drop: create a tie by putting the dragged athlete into the target's tie group.
       groups[targetGroupIndex] = [...groups[targetGroupIndex], dragged];
     } else {
-      // Normal Drop: insert the dragged athlete as its own group BEFORE the target's tie group.
-      // This keeps existing ties (for non-moved athletes) intact.
       groups.splice(targetGroupIndex, 0, [dragged]);
     }
 
+    // 5) finishRank neu berechnen (competition ranking) und speichern
     const nextFinishers = applyCompetitionRanking(groups);
     commitFinishers(nextFinishers);
   }
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-      {/* Quick entry */}
+      {/* Quick entry: Rank + Bib => Add */}
       <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 1 }}>
           <Typography variant="subtitle2">Finish</Typography>
           <Typography variant="caption" color="text.secondary">
+            {/* Anzahl aktueller Finisher */}
             {finishers.length}
           </Typography>
         </Box>
 
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+          {/* Rank Eingabe */}
           <TextField
             value={rankInput}
             onChange={(e) => {
@@ -509,6 +670,8 @@ export default function FinishLineScoring({
               setError(null);
             }}
             onKeyDown={(e) => {
+              // Enter im Rank-Feld: Fokus direkt ins Bib-Feld,
+              // damit man Rank einmal setzt und dann nur noch Bibs tippt.
               if (e.key === "Enter") {
                 e.preventDefault();
                 setTimeout(() => bibRef.current?.focus(), 0);
@@ -521,6 +684,7 @@ export default function FinishLineScoring({
             sx={{ width: 80 }}
           />
 
+          {/* Bib Eingabe mit Autocomplete */}
           <Box sx={{ width: 140 }}>
             <PointsBibField
               value={selBib}
@@ -536,8 +700,10 @@ export default function FinishLineScoring({
                 setBibInput(v);
                 setError(null);
 
+                // Nur bei direktem Tippen autopicken, nicht bei programmatic changes
                 if (reason !== "input") return;
 
+                // Auswahl zurücksetzen und ggf. unique Bib autopicken
                 setSelBib(null);
                 const pick = tryAutoPickUniqueBib(v, bibOptions);
                 if (pick) {
@@ -546,14 +712,17 @@ export default function FinishLineScoring({
                 }
               }}
               onSelect={(next) => {
+                // Auswahl aus Dropdown
                 setError(null);
                 setSelBib(next);
                 setBibInput(next?.bib != null ? String(next.bib) : "");
               }}
               onEnter={() => {
+                // Enter im Bib-Feld => hinzufügen
                 setError(null);
 
-                // Make sure we can still show the name adornment when a valid bib is typed.
+                // Wenn gültige Bib getippt ist, wollen wir den “Name Adornment” anzeigen:
+                // daher resolveOrPlaceholder und als selBib setzen.
                 const m = resolveOrPlaceholder(bibInput);
                 if (m) {
                   setSelBib(m);
@@ -565,6 +734,7 @@ export default function FinishLineScoring({
             />
           </Box>
 
+          {/* Add Button als Alternative zu Enter */}
           <Button size="small" variant="contained" onClick={() => requestAddBibFromText(bibInput, rankInput)}>
             Add
           </Button>
@@ -574,6 +744,7 @@ export default function FinishLineScoring({
           </Typography>
         </Box>
 
+        {/* Fehleranzeige */}
         {error ? (
           <Typography variant="caption" color="error" sx={{ display: "block", mt: 0.75 }}>
             {error}
@@ -581,7 +752,7 @@ export default function FinishLineScoring({
         ) : null}
       </Box>
 
-      {/* Results table */}
+      {/* Results table: Finisher-Liste inkl. Drag&Drop + Zeit editieren */}
       <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1, minHeight: 0 }}>
         {finishers.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
@@ -593,8 +764,8 @@ export default function FinishLineScoring({
             stickyHeader
             sx={{
               "& th, & td": {
-                px: 0.5, // horizontal padding (default is larger)
-                py: 0.25, // vertical padding
+                px: 0.5,
+                py: 0.25,
               },
             }}
           >
@@ -615,6 +786,7 @@ export default function FinishLineScoring({
 
             <TableBody>
               {finishers.map((r, idx) => {
+                // Starter-Daten zur Anzeige (Name/Tooltip)
                 const a = starterByBib.get(Number(r.bib)) ?? null;
 
                 return (
@@ -623,11 +795,12 @@ export default function FinishLineScoring({
                     hover
                     draggable
                     onDragStart={() => onDragStart(idx)}
-                    onDragOver={(e) => e.preventDefault()}
+                    onDragOver={(e) => e.preventDefault()} // erlaubt Drop
                     onDrop={(e) => onDrop(e, idx)}
                     sx={{ cursor: "grab" }}
                     title={a ? athleteLabel(a) : undefined}
                   >
+                    {/* Rank Spalte: Icon + Rang */}
                     <TableCell>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.1 }}>
                         <DragIndicatorIcon fontSize="small" color="action" />
@@ -637,6 +810,7 @@ export default function FinishLineScoring({
                       </Box>
                     </TableCell>
 
+                    {/* Bib Spalte: Bib fett + ggf. Nachname */}
                     <TableCell>
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
                         {r.bib}
@@ -648,6 +822,7 @@ export default function FinishLineScoring({
                       ) : null}
                     </TableCell>
 
+                    {/* Time Spalte: editierbar (commit per onChange) */}
                     <TableCell>
                       <TextField
                         variant="standard"
@@ -662,15 +837,12 @@ export default function FinishLineScoring({
                       />
                     </TableCell>
 
+                    {/* Remove Button */}
                     <TableCell padding="checkbox">
                       <Tooltip title="Remove" arrow>
+                        {/* span notwendig, damit Tooltip auch bei disabled funktionieren könnte */}
                         <span>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => removeAt(idx)}
-                            aria-label="Remove"
-                          >
+                          <IconButton size="small" color="error" onClick={() => removeAt(idx)} aria-label="Remove">
                             <DeleteIcon fontSize="small" />
                           </IconButton>
                         </span>
@@ -688,8 +860,10 @@ export default function FinishLineScoring({
         </Typography>
       </Box>
 
+      {/* Starterliste: zeigt alle Starter und markiert die Finisher (selectedIds) */}
       <ScoringStarterList starters={starters} selectedIds={selectedIds} formatAthleteLabel={athleteLabel} />
 
+      {/* Dialog: fehlende Starter anlegen */}
       <Dialog
         open={missingDialogOpen}
         onClose={missingDialogBusy ? undefined : handleDialogCancel}
@@ -703,6 +877,7 @@ export default function FinishLineScoring({
             Folgende Startnummer(n) sind im Rennen noch nicht als Starter enthalten. Sollen diese angelegt werden?
           </DialogContentText>
 
+          {/* Liste der Bibs als Chips */}
           <Stack direction="row" flexWrap="wrap" gap={1}>
             {missingDialogBibs.map((bib) => (
               <Chip key={bib} label={bib} />
@@ -723,4 +898,3 @@ export default function FinishLineScoring({
     </Box>
   );
 }
-
