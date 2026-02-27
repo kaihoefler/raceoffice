@@ -37,6 +37,9 @@ import { createFilterOptions } from "@mui/material/useAutocomplete";
 import PointsBibField, { type AthleteFilterOptions } from "./PointsBibField";
 import ScoringStarterList from "./ScoringStarterList";
 
+import { useRaceStatusMeta } from "../providers/RaceStatusMetaProvider";
+import { useRaceStatusCompetitors } from "../providers/RaceStatusCompetitorsProvider";
+
 import type { Athlete } from "../types/athlete";
 import type { Race, RaceResult } from "../types/race";
 
@@ -235,6 +238,79 @@ export default function FinishLineScoring({
 
   /** Set an Bibs, die bereits in finishers sind (damit wir sie nicht erneut vorschlagen). */
   const finishBibSet = useMemo(() => new Set(finishers.map((r) => Number(r.bib))), [finishers]);
+
+  // -------------------------
+  // Live race status (Fill from Live)
+  // -------------------------
+  const liveMeta = useRaceStatusMeta();
+  const { competitors: liveCompetitors } = useRaceStatusCompetitors();
+
+  const canFillFromLive = true;
+  //const canFillFromLive = Number(liveMeta.lapsToGo ?? NaN) === 0;
+
+  function handleFillFromLive() {
+    if (!canFillFromLive) return;
+
+    const raceLap = liveMeta.lapsComplete;
+
+    const sorted = Array.isArray(liveCompetitors)
+      ? [...liveCompetitors].sort((a, b) => (Number(a.position ?? 9999) || 9999) - (Number(b.position ?? 9999) || 9999))
+      : [];
+
+    // Build RaceResults from live competitors. This overwrites previous results.
+    const seen = new Set<number>();
+    const nextRaceResults: RaceResult[] = [];
+
+    for (let i = 0; i < sorted.length; i++) {
+      const c = sorted[i];
+      const bib = bibToInt(String(c.number ?? ""));
+      if (bib == null) continue;
+      if (seen.has(bib)) continue;
+      seen.add(bib);
+
+      const finishRank = Number(c.position ?? 0) > 0 ? Number(c.position) : i + 1;
+      const lapsCompleted = Number.isFinite(Number(c.lapsComplete)) ? Number(c.lapsComplete) : 0;
+
+      const shouldCopyTime = raceLap != null && Number.isFinite(Number(raceLap)) && lapsCompleted === Number(raceLap);
+      const finishTime = shouldCopyTime ? String(c.totalTime ?? "") : "";
+
+      nextRaceResults.push({
+        bib,
+        rank: 0,
+        points: 0,
+        eliminated: false,
+        eliminationLap: 0,
+        dns: false,
+        dsq: false,
+        lapsCompleted,
+        finishTime,
+        finishRank,
+      });
+    }
+
+    if (nextRaceResults.length === 0) {
+      setError("Keine Live-Ergebnisse verfügbar (keine Competitors).");
+      return;
+    }
+
+    onChangeRaceResults(nextRaceResults);
+
+    // UI reset (let the user continue typing)
+    const nextFinishers = nextRaceResults
+      .filter((r) => Number(r.finishRank ?? 0) !== 0)
+      .sort((a, b) => {
+        const ar = Number(a.finishRank ?? 0) || 9999;
+        const br = Number(b.finishRank ?? 0) || 9999;
+        if (ar !== br) return ar - br;
+        return Number(a.bib ?? 0) - Number(b.bib ?? 0);
+      });
+
+    setRankInput(String(computeNextSuggestedRank(nextFinishers)));
+    setBibInput("");
+    setSelBib(null);
+    setError(null);
+    setTimeout(() => bibRef.current?.focus(), 0);
+  }
 
   // -------------------------
   // UI-State (Quick Entry)
@@ -655,10 +731,24 @@ export default function FinishLineScoring({
       <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 1 }}>
           <Typography variant="subtitle2">Finish</Typography>
-          <Typography variant="caption" color="text.secondary">
-            {/* Anzahl aktueller Finisher */}
-            {finishers.length}
-          </Typography>
+
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Tooltip
+              title={canFillFromLive ? "Finish-Ergebnisse aus Live-Feed übernehmen" : "Aktiv wenn Laps to Go = 0"}
+              arrow
+            >
+              <span>
+                <Button size="small" variant="outlined" onClick={handleFillFromLive} disabled={!canFillFromLive}>
+                  Fill from Live
+                </Button>
+              </span>
+            </Tooltip>
+
+            <Typography variant="caption" color="text.secondary">
+              {/* Anzahl aktueller Finisher */}
+              {finishers.length}
+            </Typography>
+          </Box>
         </Box>
 
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>

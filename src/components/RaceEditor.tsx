@@ -115,7 +115,7 @@ export default function RaceEditor({ open, mode, eventId, ageGroups, initialRace
 
   const ageGroup = useMemo(() => ageGroups.find((ag) => ag.id === ageGroupId) ?? null, [ageGroups, ageGroupId]);
 
-  const autoName = useMemo(
+    const autoName = useMemo(
     () =>
       buildAutoName({
         ageGroup,
@@ -124,8 +124,13 @@ export default function RaceEditor({ open, mode, eventId, ageGroups, initialRace
         stage,
         stage_value: stageValue,
       }),
-    [ageGroup, distanceValue, raceMode, stage, stageValue]
+    [ageGroup, distanceValue, raceMode, stage, stageValue],
   );
+
+  // If we're creating a new race from a template that already includes a name (e.g. LiveRace name),
+  // we must NOT let the auto-name effect overwrite it on the first open render.
+  const hasPrefilledNameTemplate = mode === "new" && Boolean(String(initialRace?.name ?? "").trim());
+
 
   // Initialize whenever we open / switch initialRace / mode
   useEffect(() => {
@@ -143,11 +148,20 @@ export default function RaceEditor({ open, mode, eventId, ageGroups, initialRace
     setDistanceValue(initialRace?.distance_value ?? "");
     setRaceMode(initialRace?.racemode ?? { isPointsRace: false, isEliminationRace: false });
 
-    if (mode === "new") {
-      // For new (incl. "copy/next"), let the name be auto-managed by default
-      setNameLocked(false);
-      setName(""); // will be filled by autoName effect
+        if (mode === "new") {
+      // For new (incl. "copy/next"), let the name be auto-managed by default.
+      // BUT: if a template provides a name (e.g. from LiveRace), we prefill and lock it.
+      const initialName = String(initialRace?.name ?? "").trim();
+
+      if (initialName) {
+        setName(initialName);
+        setNameLocked(true);
+      } else {
+        setNameLocked(false);
+        setName(""); // will be filled by autoName effect
+      }
     } else {
+
       const initialName = initialRace?.name ?? "";
       setName(initialName);
 
@@ -166,12 +180,16 @@ export default function RaceEditor({ open, mode, eventId, ageGroups, initialRace
     setTimeout(() => nameInputRef.current?.focus(), 0);
   }, [open, mode, initialRace, ageGroups]);
 
-  // Auto-update name when fields change, but only if name is not locked.
+    // Auto-update name when fields change, but only if name is not locked.
+  // IMPORTANT: when creating a new race from a template that already has a name,
+  // we keep that name (locked) and do not overwrite it with autoName.
   useEffect(() => {
     if (!open) return;
+    if (hasPrefilledNameTemplate) return;
     if (nameLocked) return;
     setName(autoName);
-  }, [open, autoName, nameLocked]);
+  }, [open, autoName, nameLocked, hasPrefilledNameTemplate]);
+
 
   if (!open) return null;
 

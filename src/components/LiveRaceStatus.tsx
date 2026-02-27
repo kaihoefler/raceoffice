@@ -42,6 +42,20 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 
 import { useRaceStatus, type RaceStatusCompetitor } from "../providers/RaceStatusProvider";
 
+import type { AgeGroup } from "../types/agegroup";
+import type { Athlete } from "../types/athlete";
+import type { Race } from "../types/race";
+
+import { buildStartersFromLiveCompetitors, inferRaceDraftFromLiveName } from "../domain/liveRaceActions";
+
+// Reuse the existing RaceEditor UI to let the user fill in missing race metadata
+// (distance, stage, etc.) while we prefill what we can from the live feed.
+import RaceEditor, { type RaceDraft } from "./RaceEditor";
+
+
+
+
+
 /**
  * Parsed Zeitstring in Sekunden (number).
  * Unterstützt:
@@ -172,17 +186,38 @@ function competitorName(c: RaceStatusCompetitor): string {
   return (ln || fn).trim();
 }
 
+
+
+
 export default function LiveRaceStatus({
   unknownLiveBibs,
   onCreateStarters,
   syncEnabled = false,
   onSyncEnabledChange,
+
+  // Optional feature: create a new Race in the current event derived from the LiveRace.
+  // This is kept optional so LiveRaceStatus can still be used in contexts where
+  // we don't have access to eventId/ageGroups or don't want to allow race creation.
+  eventId,
+  ageGroups,
+  onCreateRaceFromLive,
 }: {
+
+
   unknownLiveBibs?: Set<number>;
   onCreateStarters?: () => void;
   /** If enabled, the page can sync PointsScoring with Live status. */
   syncEnabled?: boolean;
   onSyncEnabledChange?: (next: boolean) => void;
+
+  // Create-race-from-live feature
+  // - eventId/ageGroups: required to open RaceEditor (age group dropdown + correct event)
+  // - onCreateRaceFromLive: persistence callback implemented by the page (writes to realtime doc)
+  eventId?: string;
+  ageGroups?: AgeGroup[];
+  onCreateRaceFromLive?: (draft: RaceDraft, startersToCopy: Athlete[]) => void;
+
+
 }) {
   /**
    * RaceStatusProvider liefert:
@@ -298,6 +333,77 @@ export default function LiveRaceStatus({
 
   // Wie viele Bibs fehlen in unserer Starterliste (vom Parent geliefert)?
   const unknownCount = unknownLiveBibs?.size ?? 0;
+
+  // -----------------------
+  // Create race from live (UI state)
+  // -----------------------
+  // We keep a small amount of UI state here:
+  // - createRaceOpen: controls the dialog visibility
+  // - createRaceInitialRace: template passed into RaceEditor (prefill name/mode/ageGroup)
+  // - createRaceStarters: starters derived from live competitors; we freeze the list when opening
+  //   the dialog so a changing live feed does not change what gets saved.
+  const [createRaceOpen, setCreateRaceOpen] = useState(false);
+  const [createRaceInitialRace, setCreateRaceInitialRace] = useState<Race | null>(null);
+  const [createRaceStarters, setCreateRaceStarters] = useState<Athlete[]>([]);
+
+
+
+  // Only allow race creation when:
+  // - the parent provided persistence callback + required context
+  // - we have an active race (not idle)
+  // - flag is GREEN/PURPLE (same rule as canSync)
+  const canCreateRaceFromLive =
+    !!onCreateRaceFromLive && !!eventId && Array.isArray(ageGroups) && ageGroups.length > 0 && canSync && !isIdle;
+
+
+  // We freeze the starters at click-time (while opening the dialog) to avoid surprises if live data changes.
+  const safeStartersToCopy = Array.isArray(createRaceStarters) ? createRaceStarters : [];
+
+
+  // RaceEditor is rendered inside a MUI Dialog.
+  // NOTE: this dialog is mounted conditionally (only if eventId+ageGroups exist).
+  const createRaceDialog = eventId && ageGroups ? (
+
+    <Dialog
+      open={createRaceOpen}
+      onClose={() => {
+        setCreateRaceOpen(false);
+        setCreateRaceInitialRace(null);
+        setCreateRaceStarters([]);
+      }}
+
+      maxWidth="md"
+      fullWidth
+    >
+      <DialogContent>
+        <RaceEditor
+          open={createRaceOpen}
+          mode="new"
+          eventId={eventId}
+          ageGroups={ageGroups}
+          initialRace={createRaceInitialRace}
+          onSave={(draft) => {
+            // Persist new race + starters. The page decides what "persist" means
+            // (typically a realtime doc update + setting active race + navigation).
+            onCreateRaceFromLive?.(draft, safeStartersToCopy);
+
+            // Close + reset dialog state.
+            setCreateRaceOpen(false);
+            setCreateRaceInitialRace(null);
+            setCreateRaceStarters([]);
+          }}
+          onCancel={() => {
+            // Close + reset dialog state.
+            setCreateRaceOpen(false);
+            setCreateRaceInitialRace(null);
+            setCreateRaceStarters([]);
+          }}
+        />
+
+      </DialogContent>
+    </Dialog>
+  ) : null;
+
 
   /**
    * rows: Darstellung für die Tabelle.
@@ -468,7 +574,10 @@ export default function LiveRaceStatus({
           </DialogActions>
         </Dialog>
 
+        {createRaceDialog}
+
         {/* Idle Body */}
+
         <Typography variant="body2" color="text.secondary">
           No active race.
         </Typography>
@@ -605,13 +714,67 @@ export default function LiveRaceStatus({
           alignItems: "baseline",
           mb: 1,
           gap: 1,
-          minWidth: 0,
+                    minWidth: 0,
         }}
       >
-        <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 0 }}>
-          {/* Name des aktuellen Live-Races */}
-          {currentRace?.raceName}
-        </Typography>
+        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, minWidth: 0 }}>
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 0, flexShrink: 1 }}>
+            {/* Name des aktuellen Live-Races */}
+            {currentRace?.raceName}
+          </Typography>
+
+          {/* Create-race-from-live button (placed directly after the race name) */}
+          <Tooltip
+            title={canCreateRaceFromLive ? "Create new race from live" : "Only available on GREEN/PURPLE"}
+            arrow
+          >
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  if (!canCreateRaceFromLive) return;
+
+                  const liveName = String(currentRace?.raceName ?? "").trim() || "Live Race";
+                  const ags = Array.isArray(ageGroups) ? ageGroups : [];
+
+                  // Domain helper: infers ageGroupId + raceMode from the race name.
+                  const inferred = inferRaceDraftFromLiveName({ liveRaceName: liveName, ageGroups: ags });
+
+                  // Domain helper: builds Athlete[] from live competitors.
+                  const startersFromLive = buildStartersFromLiveCompetitors({
+                    competitors: (currentRace as any)?.competitors,
+                    ageGroupId: inferred.ageGroupId,
+                  });
+
+                  // RaceEditor expects a Race-like template; id is regenerated by RaceEditor in "new" mode,
+                  // but we still provide a valid object so the UI can prefill fields.
+                  const template: Race = {
+                    id: crypto.randomUUID(),
+                    eventId: eventId!,
+                    ageGroupId: inferred.ageGroupId,
+                    name: inferred.name,
+                    slug: "",
+                    racemode: inferred.racemode,
+                    stage: "heat",
+                    stage_value: "",
+                    distance_value: "",
+                    raceResults: [],
+                    raceStarters: [],
+                    raceActivities: [],
+                  };
+
+                  setCreateRaceInitialRace(template);
+                  setCreateRaceStarters(startersFromLive);
+                  setCreateRaceOpen(true);
+                }}
+                disabled={!canCreateRaceFromLive}
+              >
+                Create New Race
+              </Button>
+            </span>
+          </Tooltip>
+        </Box>
 
         <Typography variant="caption" color="text.secondary" noWrap sx={{ textAlign: "right" }}>
           {/* Lap-Text wird inline berechnet:
@@ -667,10 +830,11 @@ export default function LiveRaceStatus({
               Activate Sync
             </ToggleButton>
           </span>
-        </Tooltip>
+                </Tooltip>
 
         {/* Wenn Live-Liste Bibs enthält, die wir nicht in unseren Startern kennen:
             zeige Action-Button, um diese Starter anzulegen (parent callback). */}
+
         {unknownCount > 0 ? (
           <Tooltip title={`Create ${unknownCount} missing starter(s) from live list`} arrow>
             <span>
@@ -737,6 +901,8 @@ export default function LiveRaceStatus({
           ) : null}
         </TableBody>
       </Table>
+
+      {createRaceDialog}
     </Box>
   );
 }

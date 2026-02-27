@@ -26,7 +26,13 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 
 import type { Race } from "../types/race";
-import type { RaceActivity, RaceActivityElimination, RaceActivityPointsSprint } from "../types/raceactivities";
+import type {
+  RaceActivity,
+  RaceActivityDisqualfication,
+  RaceActivityDns,
+  RaceActivityElimination,
+  RaceActivityPointsSprint,
+} from "../types/raceactivities";
 
 type Props = {
   race: Race;
@@ -51,6 +57,14 @@ function isPointsSprint(a: RaceActivity): a is RaceActivityPointsSprint {
 
 function isElimination(a: RaceActivity): a is RaceActivityElimination {
   return a.type === "elimination";
+}
+
+function isDns(a: RaceActivity): a is RaceActivityDns {
+  return a.type === "DNS";
+}
+
+function isDsq(a: RaceActivity): a is RaceActivityDisqualfication {
+  return a.type === "DSQ";
 }
 
 function formatPointsResults(results: Array<{ bib: number; points: number }>): string {
@@ -110,14 +124,17 @@ function formatHistoryLine(a: RaceActivity, h: any): string {
   const lap = Number.isFinite(Number(h?.lap)) ? Number(h.lap) : 0;
   const isDeleted = Boolean(h?.isDeleted);
 
-  const resultsStr = isPointsSprint(a)
+  const detailsStr = isPointsSprint(a)
     ? formatPointsResults(h?.results ?? [])
     : isElimination(a)
       ? formatEliminationResults(h?.results ?? [])
-      : "";
+      : isDns(a) || isDsq(a)
+        ? String(h?.bib ?? "")
+        : "";
 
+  const lapStr = lap > 0 ? `Lap ${lap}` : "Lap -";
   const deletedStr = isDeleted ? " • deleted" : "";
-  return `${changedAt} • Lap ${lap}${deletedStr}${resultsStr ? ` • ${resultsStr}` : ""}`;
+  return `${changedAt} • ${lapStr}${deletedStr}${detailsStr ? ` • ${detailsStr}` : ""}`;
 }
 
 export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceActivities }: Props) {
@@ -171,7 +188,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
     if (isPointsSprint(a)) {
       const nextResults = parsePointsResults(draftResults);
       if (nextResults === null) {
-        setError("Invalid results format. Use: bib:points, bib:points");
+        setError("Invalid results format. Use: pointsP:bib, pointsP:bib");
         return;
       }
 
@@ -202,7 +219,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
     if (isElimination(a)) {
       const nextResults = parseEliminationResults(draftResults);
       if (nextResults === null) {
-        setError("Invalid results format. Use: pointsP:bib, pointsP:bib");
+        setError("Invalid results format. Use: bib, bib");
         return;
       }
 
@@ -268,6 +285,48 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
       const prevHistory = Array.isArray((a.data as any).history) ? (a.data as any).history : [];
 
       const updated: RaceActivityElimination = {
+        ...a,
+        data: {
+          ...(a.data as any),
+          isDeleted: nextDeleted,
+          history: [prevSnapshot, ...prevHistory],
+        } as any,
+      };
+
+      onUpdateActivity(updated);
+      return;
+    }
+
+    if (isDns(a)) {
+      const prevSnapshot = {
+        changedAt: new Date().toISOString(),
+        isDeleted: (a.data as any).isDeleted,
+        bib: (a.data as any).bib,
+      };
+      const prevHistory = Array.isArray((a.data as any).history) ? (a.data as any).history : [];
+
+      const updated: RaceActivityDns = {
+        ...a,
+        data: {
+          ...(a.data as any),
+          isDeleted: nextDeleted,
+          history: [prevSnapshot, ...prevHistory],
+        } as any,
+      };
+
+      onUpdateActivity(updated);
+      return;
+    }
+
+    if (isDsq(a)) {
+      const prevSnapshot = {
+        changedAt: new Date().toISOString(),
+        isDeleted: (a.data as any).isDeleted,
+        bib: (a.data as any).bib,
+      };
+      const prevHistory = Array.isArray((a.data as any).history) ? (a.data as any).history : [];
+
+      const updated: RaceActivityDisqualfication = {
         ...a,
         data: {
           ...(a.data as any),
@@ -381,13 +440,25 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
             const lap = lapOf(a);
             const isDeleted = Boolean((a as any)?.data?.isDeleted);
 
-            const label = isPointsSprint(a) ? "Points" : isElimination(a) ? "Elimination" : "Activity";
+            const label = isPointsSprint(a)
+              ? "Points"
+              : isElimination(a)
+                ? "Elimination"
+                : isDns(a)
+                  ? "DNS"
+                  : isDsq(a)
+                    ? "DSQ"
+                    : "Activity";
 
             const content = isPointsSprint(a)
               ? formatPointsResults(a.data?.results ?? [])
               : isElimination(a)
                 ? formatEliminationResults((a.data as any)?.results ?? [])
-                : "";
+                : isDns(a)
+                  ? `DNS: ${(a.data as any)?.bib ?? ""}`
+                  : isDsq(a)
+                    ? `DSQ: ${(a.data as any)?.bib ?? ""}`
+                    : "";
 
             const history = historyOf(a);
             const historyTitle = history.length ? (
@@ -431,7 +502,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
                 >
                   {/* row 1 */}
                   <Typography variant="body2" sx={{ fontVariantNumeric: "tabular-nums" }}>
-                    {lap}
+                    {isDns(a) || isDsq(a) ? "-" : lap}
                   </Typography>
 
                   <Box sx={{ gridColumn: "2 / 4", display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
@@ -539,7 +610,13 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
 
                       <TextField
                         size="small"
-                        label={isPointsSprint(a) ? "Results (pointsP:bib, ...)" : "Results (bib, ...)"}
+                        label={
+                          isPointsSprint(a)
+                            ? "Results (pointsP:bib, ...)"
+                            : isElimination(a)
+                              ? "Results (bib, ...)"
+                              : "Results"
+                        }
                         value={draftResults}
                         onChange={(e) => setDraftResults(e.target.value)}
                         fullWidth

@@ -47,6 +47,15 @@ export type ScoringViewModel = {
     p3Bib: number | null;
   };
 
+    /** "Last" bib in live ranking (worst position), but only if NOT eliminated/DNS/DSQ in current raceResults. */
+  liveLastEligibleBib: number | null;
+
+  /** Bibs that still have 0 lapsComplete in the live feed (and are not eliminated/DNS/DSQ in current raceResults). */
+  liveZeroLapBibs: number[];
+
+
+
+
   /**
    * Build Athlete objects for competitors that appear in liveRace but are missing in race.raceStarters.
    * Can be used by the page to append them to the race starters list.
@@ -161,16 +170,51 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
     const liveLapCount = meta.lapsComplete ?? null;
     const liveLapsToGo = meta.lapsToGo ?? null;
 
-    // ---- Top bibs by position ----
-    const sortedByPos = [...competitors].sort(
-      (a: any, b: any) => (a?.position ?? 9999) - (b?.position ?? 9999),
-    );
+        // ---- Top bibs by position ----
+    const sortedByPos = [...competitors].sort((a: any, b: any) => (a?.position ?? 9999) - (b?.position ?? 9999));
 
     const liveTopBibs = {
       p1Bib: bibToInt(sortedByPos[0]?.number),
       p2Bib: bibToInt(sortedByPos[1]?.number),
       p3Bib: bibToInt(sortedByPos[2]?.number),
     };
+
+    // ---- Last eligible bib by position (used for EliminationScoring prefill) ----
+    // "Eligible" means: not eliminated, not DNS, not DSQ in current raceResults.
+    const ineligible = new Set<number>();
+    const raceResults = Array.isArray((race as any)?.raceResults) ? ((race as any).raceResults as any[]) : [];
+
+    for (const r of raceResults) {
+      const bib = bibToInt((r as any)?.bib);
+      if (bib == null) continue;
+      if ((r as any)?.eliminated || (r as any)?.dns || (r as any)?.dsq) ineligible.add(bib);
+    }
+
+        let liveLastEligibleBib: number | null = null;
+    for (let i = sortedByPos.length - 1; i >= 0; i--) {
+      const bib = bibToInt((sortedByPos[i] as any)?.number);
+      if (bib == null) continue;
+      if (ineligible.has(bib)) continue;
+      liveLastEligibleBib = bib;
+      break;
+    }
+
+    // ---- Zero-lap bibs (used for DNS helper) ----
+    const zeroLapSet = new Set<number>();
+    for (const c of competitors) {
+      const bib = bibToInt((c as any)?.number);
+      if (bib == null) continue;
+      if (ineligible.has(bib)) continue;
+
+      const laps = Number((c as any)?.lapsComplete);
+      if (!Number.isFinite(laps)) continue;
+      if (Math.floor(laps) !== 0) continue;
+
+      zeroLapSet.add(bib);
+    }
+
+    const liveZeroLapBibs = Array.from(zeroLapSet).sort((a, b) => a - b);
+
 
     // ---- Standings (Points) ----
     const activities = ((race as any)?.raceActivities ?? []) as RaceActivity[];
@@ -248,7 +292,7 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
       });
     };
 
-    return {
+        return {
       starterBibs,
       liveBibs,
       unknownLiveBibs,
@@ -257,13 +301,16 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
       syncEnabled,
       liveLapCount,
       liveLapsToGo,
-      liveTopBibs,
+            liveTopBibs,
+      liveLastEligibleBib,
+      liveZeroLapBibs,
       getMissingStarterBibsFromLive,
       buildStartersForBibs,
     };
   }, [
-    race?.raceStarters,
+        race?.raceStarters,
     (race as any)?.raceActivities,
+    (race as any)?.raceResults,
 
     // optimized providers
     bibSet,

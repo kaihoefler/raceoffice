@@ -48,18 +48,13 @@ import { useEventsActions } from "../hooks/useEventsActions";
 
 import { useScoringViewModel } from "./scoring/ScoringViewModel";
 
-// raceResults is treated as a consolidated/materialized view:
-// - manual parts come from dedicated UI (e.g. FinishLineScoring writes finishRank/finishTime)
-// - derived parts come from the event log (raceActivities), e.g. points/eliminations
-//
-// Whenever activities or results change, we rebuild the derived fields and recompute rank.
-import { applyActivitiesToRaceResults } from "./scoring/applyActivitiesToRaceResults";
-import { recomputeRaceResults } from "./scoring/recomputeRaceResults";
+
 
 import RaceSelector from "../components/RaceSelector";
 
 import PointsScoring from "../components/PointsScoring";
 import FinishLineScoring from "../components/FinishLineScoring";
+import EliminationScoring from "../components/EliminationScoring";
 import LiveRaceStatus from "../components/LiveRaceStatus";
 import RaceActivitiesList from "../components/RaceActivitiesList";
 import Scoreboard from "../components/Scoreboard";
@@ -85,14 +80,26 @@ export default function ScoringPage() {
 
         const activeEventId = eventList?.activeEventId ?? null;
 
-    const {
+                const {
         fullEvent: eventDoc,
         status,
         error,
-        updateRace,
-        toggleActiveRace: toggleActiveRaceAction,
+                toggleActiveRace: toggleActiveRaceAction,
+        setActiveRace: setActiveRaceAction,
         upsertRaceStarters,
+        saveRaceWithStarters,
+
+
+        // Scoring-specific actions (centralized in useEventsActions)
+                addRaceActivity,
+        addRaceActivities,
+        updateRaceActivity,
+        replaceRaceActivities,
+        setRaceResultsManual,
     } = useEventsActions(activeEventId);
+
+
+
 
     // -------------------------------------------------------------------------
     // Derived data from realtime doc
@@ -118,8 +125,8 @@ export default function ScoringPage() {
     // -------------------------------------------------------------------------
     // Local UI state
     // -------------------------------------------------------------------------
-    const [syncEnabled, setSyncEnabled] = useState(false);
-    const [col1Tab, setCol1Tab] = useState<"points" | "finish">("points");
+        const [syncEnabled, setSyncEnabled] = useState(false);
+    const [col1Tab, setCol1Tab] = useState<"points" | "finish" | "elimination">("points");
 
     /**
      * ViewModel (rein abgeleitet / read-only):
@@ -165,80 +172,42 @@ export default function ScoringPage() {
          * - Nach jeder Activity-Änderung werden raceResults neu materialisiert:
          *   applyActivitiesToRaceResults(...) -> recomputeRaceResults(...)
          */
-        function handleUpdateActivity(updated: RaceActivity) {
+                function handleUpdateActivity(updated: RaceActivity) {
         if (!race) return;
-
-        // NOTE: This app is non-optimistic (server patch roundtrip). We compute the next state
-        // (activities -> derived raceResults -> rank) before sending the update.
-                updateRace(race.id, (r) => {
-            const activities = Array.isArray(r.raceActivities) ? r.raceActivities : [];
-            const aIdx = activities.findIndex((a: any) => a?.id === updated.id);
-            if (aIdx < 0) return r;
-
-            const nextActivities = activities.slice();
-            nextActivities[aIdx] = updated;
-
-            const nextResults = recomputeRaceResults(
-                applyActivitiesToRaceResults({
-                    prevResults: Array.isArray(r.raceResults) ? r.raceResults : [],
-                    starters: Array.isArray(r.raceStarters) ? r.raceStarters : [],
-                    activities: nextActivities,
-                }),
-            );
-
-            return { ...r, raceActivities: nextActivities, raceResults: nextResults };
-        });
-
+        updateRaceActivity(race.id, updated);
     }
+
 
         /**
          * Ersetzt die komplette Activities-Liste eines Rennens.
          * Danach müssen derived fields + rank neu berechnet werden.
          */
-        function handleReplaceActivities(nextActivities: RaceActivity[]) {
+                function handleReplaceActivities(nextActivities: RaceActivity[]) {
         if (!race) return;
-
-        // Replacing the activities list affects derived results, so we recompute raceResults + rank.
-                updateRace(race.id, (r) => {
-            const safeActivities = Array.isArray(nextActivities) ? nextActivities : [];
-
-            const nextResults = recomputeRaceResults(
-                applyActivitiesToRaceResults({
-                    prevResults: Array.isArray(r.raceResults) ? r.raceResults : [],
-                    starters: Array.isArray(r.raceStarters) ? r.raceStarters : [],
-                    activities: safeActivities,
-                }),
-            );
-
-            return { ...r, raceActivities: safeActivities, raceResults: nextResults };
-        });
-
+        replaceRaceActivities(race.id, nextActivities);
     }
+
 
         /**
          * Fügt eine PointsSprint-Activity hinzu.
          * Wir hängen die Activity an und materialisieren anschließend raceResults + rank neu.
          */
-        function handleAddPointsSprintActivity(activity: RaceActivityPointsSprint) {
+                                function handleAddPointsSprintActivity(activity: RaceActivityPointsSprint) {
         if (!race) return;
-
-        // Adding a points sprint affects derived points and therefore rank.
-                updateRace(race.id, (r) => {
-            const activities = Array.isArray(r.raceActivities) ? r.raceActivities : [];
-            const nextActivities = [...activities, activity];
-
-            const nextResults = recomputeRaceResults(
-                applyActivitiesToRaceResults({
-                    prevResults: Array.isArray(r.raceResults) ? r.raceResults : [],
-                    starters: Array.isArray(r.raceStarters) ? r.raceStarters : [],
-                    activities: nextActivities,
-                }),
-            );
-
-            return { ...r, raceActivities: nextActivities, raceResults: nextResults };
-        });
-
+        addRaceActivity(race.id, activity);
     }
+
+        function handleAddRaceActivity(activity: RaceActivity) {
+        if (!race) return;
+        addRaceActivity(race.id, activity);
+    }
+
+    function handleAddRaceActivities(activities: RaceActivity[]) {
+        if (!race) return;
+        addRaceActivities(race.id, activities);
+    }
+
+
 
     // -------------------------------------------------------------------------
     // Handlers: starters
@@ -253,7 +222,8 @@ export default function ScoringPage() {
         const missing = vm.getMissingStarterBibsFromLive();
         if (!missing.length) return;
 
-                upsertRaceStarters(race.id, missing);
+                                upsertRaceStarters(race.id, missing, { recomputeResults: true });
+
 
     }
 
@@ -268,7 +238,8 @@ export default function ScoringPage() {
         const toAdd = vm.buildStartersForBibs(bibs);
         if (!toAdd.length) return;
 
-                upsertRaceStarters(race.id, toAdd);
+                                upsertRaceStarters(race.id, toAdd, { recomputeResults: true });
+
 
     }
 
@@ -288,19 +259,9 @@ export default function ScoringPage() {
                                 function handleChangeRaceResults(nextResults: RaceResult[]) {
 
         if (!race) return;
-
-                updateRace(race.id, (r) => {
-            const merged = applyActivitiesToRaceResults({
-                prevResults: Array.isArray(nextResults) ? nextResults : [],
-                starters: Array.isArray(r.raceStarters) ? r.raceStarters : [],
-                activities: Array.isArray(r.raceActivities) ? r.raceActivities : [],
-            });
-
-            const computed = recomputeRaceResults(merged);
-            return { ...r, raceResults: computed };
-        });
-
+        setRaceResultsManual(race.id, nextResults);
     }
+
 
 
 
@@ -439,7 +400,7 @@ export default function ScoringPage() {
                             alignItems: "start",
                         }}
                     >
-                        {/* Spalte 1: Tabs (Points / Finish) */}
+                                                {/* Spalte 1: Tabs (Points / Finish / Elimination) */}
                         <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, minHeight: 0 }}>
                             <Tabs
                                 value={col1Tab}
@@ -449,6 +410,7 @@ export default function ScoringPage() {
                             >
                                 <Tab value="points" label="Points" />
                                 <Tab value="finish" label="Finish" />
+                                <Tab value="elimination" label="Elimination" />
                             </Tabs>
 
                             <Box sx={{ p: 1 }}>
@@ -464,14 +426,25 @@ export default function ScoringPage() {
                                         liveLapsToGo={vm.liveLapsToGo}
                                         liveTopBibs={vm.liveTopBibs}
                                     />
-                                                                ) : (
-                                                                        <FinishLineScoring
+                                ) : col1Tab === "finish" ? (
+                                    <FinishLineScoring
                                         race={race}
                                         resetKey={race.id}
                                         onChangeRaceResults={handleChangeRaceResults}
                                         onCreateStarters={handleCreateStartersForBibs}
                                     />
-
+                                ) : (
+                                                                                                                                                                                                                        <EliminationScoring
+                                        race={race}
+                                        resetKey={race.id}
+                                        onAddRaceActivity={handleAddRaceActivity}
+                                        onAddRaceActivities={handleAddRaceActivities}
+                                        onCreateStarters={handleCreateStartersForBibs}
+                                        syncEnabled={vm.syncEnabled}
+                                        liveLapCount={vm.liveLapCount}
+                                        liveLastEligibleBib={vm.liveLastEligibleBib}
+                                        liveZeroLapBibs={vm.liveZeroLapBibs}
+                                    />
                                 )}
                             </Box>
                         </Box>
@@ -483,12 +456,29 @@ export default function ScoringPage() {
 
 
                         {/* Spalte 4: Live race status (polled via RaceStatusProvider) */}
-                        <LiveRaceStatus
+                                                <LiveRaceStatus
                             unknownLiveBibs={vm.unknownLiveBibs}
                             onCreateStarters={handleCreateMissingStartersFromLive}
                             syncEnabled={syncEnabled}
                             onSyncEnabledChange={setSyncEnabled}
+
+                            // Create race from live status
+                            eventId={activeEventId}
+                                                        ageGroups={fullEvent.ageGroups}
+                                                        onCreateRaceFromLive={(draft, starters) => {
+                                // 1) create the race (incl. starters + materialized results)
+                                saveRaceWithStarters(draft, starters);
+
+                                // 2) make it the active race in the event
+                                setActiveRaceAction(draft.id);
+
+                                // 3) navigate to the new race scoring page
+                                navigate(`/races/${draft.id}/scoring`);
+                            }}
+
+
                         />
+
 
 
 

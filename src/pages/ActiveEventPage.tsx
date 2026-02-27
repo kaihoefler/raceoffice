@@ -75,7 +75,7 @@ export default function ActiveEventPage() {
   const { eventList } = useEventList();
   const activeEventId = eventList?.activeEventId ?? null;
 
-  // Zentraler Zugriff auf Event-Realtime-Dokument + Actions (kein duplizierter Merge/Update Code in der Page)
+    // Zentraler Zugriff auf Event-Realtime-Dokument + Actions (kein duplizierter Merge/Update Code in der Page)
   const {
     fullEvent,
     status,
@@ -86,16 +86,16 @@ export default function ActiveEventPage() {
     makeNextRaceTemplate,
   } = useEventsActions(activeEventId);
 
-  // Frühe Returns: Seite braucht ein aktives Event
-  if (!eventList) return <Typography variant="h6">Loading…</Typography>;
-  if (!activeEventId) return <Typography variant="h6">No active event selected.</Typography>;
-
-  // Aktives Event (Meta) aus der Liste
-  const activeEvent = eventList.events.find((e) => e.id === activeEventId) ?? null;
-
-
-
+  // IMPORTANT: Hooks must not be called conditionally.
+  // So we call navigation + local state hooks before doing any early returns.
   const navigate = useNavigate();
+
+  // Aktives Event (Meta) aus der Liste (safe even while eventList is still loading)
+  const activeEvent = useMemo(() => {
+    const id = activeEventId ?? "";
+    return eventList?.events.find((e) => e.id === id) ?? null;
+  }, [eventList, activeEventId]);
+
 
   // -----------------------
   // RaceEditor state
@@ -331,14 +331,20 @@ export default function ActiveEventPage() {
     });
   }, [fullEvent.ageGroups]);
 
-  /**
+    /**
    * Render:
    * - Card: Event Header + Live-Status (useRealtimeDoc status/error)
    * - Filterzeile: AgeGroup/Stage/Mode Filter + Count Chip
    * - Tabelle: gefilterte/sortierte Races mit Actions
    * - RaceEditor: Modal/Dialog für New/Edit/Copy
    */
+
+  // Render guards (must come AFTER all hooks above)
+  if (!eventList) return <Typography variant="h6">Loading…</Typography>;
+  if (!activeEventId) return <Typography variant="h6">No active event selected.</Typography>;
+
   return (
+
     <Box>
       <Card variant="outlined">
         {/* Kopfbereich: zeigt Eventnamen und Realtime-Status */}
