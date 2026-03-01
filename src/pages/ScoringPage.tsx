@@ -41,12 +41,17 @@ import {
 
 import HomeIcon from "@mui/icons-material/Home";
 import GroupsIcon from "@mui/icons-material/Groups";
+import FileDownloadIcon from "@mui/icons-material/FileDownload";
+
 
 import { useEventList } from "../providers/EventListProvider";
 import { useEventsActions } from "../hooks/useEventsActions";
 
 
 import { useScoringViewModel } from "./scoring/ScoringViewModel";
+
+import { buildRaceResultsCsv } from "../domain/raceResultsCsvExport";
+
 
 
 
@@ -262,6 +267,30 @@ export default function ScoringPage() {
         setRaceResultsManual(race.id, nextResults);
     }
 
+    function downloadTextFile(filename: string, contents: string, mimeType = "text/plain;charset=utf-8") {
+        const blob = new Blob([contents], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        URL.revokeObjectURL(url);
+    }
+
+    function handleExportRaceResultsCsv() {
+        if (!race) return;
+
+        const csv = buildRaceResultsCsv(race.raceResults ?? []);
+        const filename = `${race.slug}_result.csv`;
+
+        downloadTextFile(filename, csv, "text/csv;charset=utf-8");
+    }
+
+
 
 
 
@@ -348,7 +377,7 @@ export default function ScoringPage() {
                     }
                     action={
                         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                            <RaceSelector
+                                                        <RaceSelector
                                 races={fullEvent.races}
                                 ageGroups={fullEvent.ageGroups}
                                 value={race.id}
@@ -357,7 +386,22 @@ export default function ScoringPage() {
                                 activeRaceId={fullEvent.activeRaceId}
                             />
 
+                                                        <Tooltip title="Export results as CSV" arrow>
+                                <span>
+                                    <IconButton
+                                        size="small"
+                                        onClick={handleExportRaceResultsCsv}
+                                        disabled={!race.raceResults?.length}
+                                        aria-label="Export results as CSV"
+                                    >
+                                        <FileDownloadIcon />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+
+
                             <Tooltip title="Race starters" arrow>
+
                                 <span>
                                     <IconButton
                                         onClick={() => navigate(`/races/${race.id}/starters`)}

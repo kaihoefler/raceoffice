@@ -283,6 +283,26 @@ function sortKey(r: RaceResult): SortKey {
   };
 }
 
+function compareRaceResultsForStandings(ra: RaceResult, rb: RaceResult): number {
+  const a = sortKey(ra);
+  const b = sortKey(rb);
+
+  // 1) status bucket (asc)
+  if (a.bucket !== b.bucket) return a.bucket - b.bucket;
+
+  // 2) eliminationLap (desc)
+  if (a.eliminationLap !== b.eliminationLap) return b.eliminationLap - a.eliminationLap;
+
+  // 3) points (desc)
+  if (a.points !== b.points) return b.points - a.points;
+
+  // 4) finishRank (asc), finishRank=0 => Infinity => end
+  if (a.finishRankKey !== b.finishRankKey) return a.finishRankKey - b.finishRankKey;
+
+  // Stable tie-breaker (does NOT affect rank ties)
+  return toFiniteInt(ra.bib, 0) - toFiniteInt(rb.bib, 0);
+}
+
 function keysEqual(a: SortKey, b: SortKey): boolean {
   return (
     a.bucket === b.bucket &&
@@ -297,29 +317,16 @@ function keysEqual(a: SortKey, b: SortKey): boolean {
  *
  * IMPORTANT: This helper only sets `rank`. It does not modify points/finishRank/etc.
  */
+export function sortRaceResultsForStandings(input: RaceResult[]): RaceResult[] {
+  const list = Array.isArray(input) ? [...input] : [];
+  return list.sort(compareRaceResultsForStandings);
+}
+
 export function recomputeRaceResults(input: RaceResult[]): RaceResult[] {
   const list = Array.isArray(input) ? [...input] : [];
 
   // Deterministic sort by the configured priority criteria.
-  const sorted = [...list].sort((ra, rb) => {
-    const a = sortKey(ra);
-    const b = sortKey(rb);
-
-    // 1) status bucket (asc)
-    if (a.bucket !== b.bucket) return a.bucket - b.bucket;
-
-    // 2) eliminationLap (desc)
-    if (a.eliminationLap !== b.eliminationLap) return b.eliminationLap - a.eliminationLap;
-
-    // 3) points (desc)
-    if (a.points !== b.points) return b.points - a.points;
-
-    // 4) finishRank (asc), finishRank=0 => Infinity => end
-    if (a.finishRankKey !== b.finishRankKey) return a.finishRankKey - b.finishRankKey;
-
-    // Stable tie-breaker (does NOT affect rank ties)
-    return toFiniteInt(ra.bib, 0) - toFiniteInt(rb.bib, 0);
-  });
+  const sorted = [...list].sort(compareRaceResultsForStandings);
 
   // Assign ranks with ties: 1, 1, 3 ...
   const rankByBib = new Map<number, number>();
