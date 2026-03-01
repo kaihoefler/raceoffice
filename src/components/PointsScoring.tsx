@@ -243,24 +243,23 @@ export default function PointsScoring({
     prevLiveLapRef.current = null;
   }, [syncEnabled]);
 
-  // If sync is enabled: update lap ONLY when the live lap count changes.
+    // If sync is enabled: always align lap with the live lap count.
+  // This runs:
+  // - immediately when sync is enabled
+  // - on mount (e.g. when switching tabs)
+  // - whenever the live lap count changes
   useEffect(() => {
     if (!syncEnabled) return;
     if (liveLapCount == null) return;
 
     const liveLapInt = Math.max(1, Math.floor(Number(liveLapCount)));
 
-    if (prevLiveLapRef.current == null) {
-      // Initialize without overriding the user's current lap.
-      prevLiveLapRef.current = liveLapInt;
-      return;
-    }
-
     if (prevLiveLapRef.current !== liveLapInt) {
       prevLiveLapRef.current = liveLapInt;
       setLap(liveLapInt);
     }
   }, [syncEnabled, liveLapCount]);
+
 
   // If live says "no laps to go" -> switch to finish mode.
   // We do not auto-switch back to lap mode.
@@ -358,7 +357,7 @@ export default function PointsScoring({
   // ---------------------------------------------------------------------------
   // UI helpers: selectedIds + available options + focus/reset behavior
   // ---------------------------------------------------------------------------
-  const selectedIds = useMemo(() => {
+    const selectedIds = useMemo(() => {
     const ids = new Set<string>();
 
     if (sel3P) ids.add(sel3P.id);
@@ -367,7 +366,43 @@ export default function PointsScoring({
     return ids;
   }, [sel1P, sel2P, sel3P]);
 
+    const statusByBib = useMemo(() => {
+    const m = new Map<number, { eliminated?: boolean; dns?: boolean; dsq?: boolean }>();
+    const list = Array.isArray((race as any)?.raceResults) ? ((race as any).raceResults as any[]) : [];
+
+    for (const r of list) {
+      const bib = Number((r as any)?.bib);
+      if (!Number.isFinite(bib) || bib <= 0) continue;
+
+      const eliminated = Boolean((r as any)?.eliminated);
+      const dns = Boolean((r as any)?.dns);
+      const dsq = Boolean((r as any)?.dsq);
+
+      if (!eliminated && !dns && !dsq) continue;
+      m.set(bib, { eliminated, dns, dsq });
+    }
+
+    return m;
+  }, [race]);
+
+  const pointsByBib = useMemo(() => {
+    const m = new Map<number, number>();
+    const list = Array.isArray((race as any)?.raceResults) ? ((race as any).raceResults as any[]) : [];
+
+    for (const r of list) {
+      const bib = Number((r as any)?.bib);
+      if (!Number.isFinite(bib) || bib <= 0) continue;
+
+      const pts = Number((r as any)?.points ?? 0);
+      if (!Number.isFinite(pts) || pts === 0) continue;
+      m.set(bib, pts);
+    }
+
+    return m;
+  }, [race]);
+
   const optionsFor = (exclude: Set<string>) => starters.filter((a) => !exclude.has(a.id));
+
 
   function resetInputs(focus: "2P" | "3P" = "2P") {
     auto3PBibRef.current = null;
@@ -787,12 +822,16 @@ export default function PointsScoring({
         </Box>
       </Box>
 
-      <ScoringStarterList
+                        <ScoringStarterList
         starters={starters}
         missingInLiveBibs={missingInLiveBibs}
         selectedIds={selectedIds}
+        statusByBib={statusByBib}
+        pointsByBib={pointsByBib}
         formatAthleteLabel={athleteLabel}
       />
+
+
 
       <Dialog
         open={missingDialogOpen}

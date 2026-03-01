@@ -442,7 +442,7 @@ export default function ScoringPage() {
                                         onCreateStarters={handleCreateStartersForBibs}
                                         syncEnabled={vm.syncEnabled}
                                         liveLapCount={vm.liveLapCount}
-                                        liveLastEligibleBib={vm.liveLastEligibleBib}
+                                                                                liveLastEligibleBibs={vm.liveLastEligibleBibs}
                                         liveZeroLapBibs={vm.liveZeroLapBibs}
                                     />
                                 )}

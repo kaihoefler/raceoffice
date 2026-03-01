@@ -236,6 +236,39 @@ export default function FinishLineScoring({
     return ids;
   }, [finishers, starterByBib]);
 
+  const statusByBib = useMemo(() => {
+    const m = new Map<number, { eliminated?: boolean; dns?: boolean; dsq?: boolean }>();
+
+    for (const r of raceResults) {
+      const bib = Number((r as any)?.bib);
+      if (!Number.isFinite(bib) || bib <= 0) continue;
+
+      const eliminated = Boolean((r as any)?.eliminated);
+      const dns = Boolean((r as any)?.dns);
+      const dsq = Boolean((r as any)?.dsq);
+
+      if (!eliminated && !dns && !dsq) continue;
+      m.set(bib, { eliminated, dns, dsq });
+    }
+
+    return m;
+  }, [raceResults]);
+
+  const pointsByBib = useMemo(() => {
+    const m = new Map<number, number>();
+
+    for (const r of raceResults) {
+      const bib = Number((r as any)?.bib);
+      if (!Number.isFinite(bib) || bib <= 0) continue;
+
+      const pts = Number((r as any)?.points ?? 0);
+      if (!Number.isFinite(pts) || pts === 0) continue;
+      m.set(bib, pts);
+    }
+
+    return m;
+  }, [raceResults]);
+
   /** Set an Bibs, die bereits in finishers sind (damit wir sie nicht erneut vorschlagen). */
   const finishBibSet = useMemo(() => new Set(finishers.map((r) => Number(r.bib))), [finishers]);
 
@@ -325,6 +358,15 @@ export default function FinishLineScoring({
 
   // Drag&Drop State (Index des gezogenen Rows).
   const dragFromIndexRef = useRef<number | null>(null);
+
+  // -------------------------
+  // Dialog: "Clear all finishers"
+  // -------------------------
+  const [clearFinishDialogOpen, setClearFinishDialogOpen] = useState(false);
+
+  function closeClearFinishDialog() {
+    setClearFinishDialogOpen(false);
+  }
 
   // -------------------------
   // Dialog/Flow: fehlende Starter anlegen
@@ -640,6 +682,22 @@ export default function FinishLineScoring({
     onChangeRaceResults(nextRaceResults);
   }
 
+  function clearAllFinishersNow() {
+    if (finishers.length === 0) return;
+
+    const removed = new Set<number>(finishers.map((r) => Number(r.bib)).filter((b) => Number.isFinite(b)));
+    commitFinishers([], removed);
+
+    // Quick-entry UI reset
+    setRankInput("1");
+    setBibInput("");
+    setSelBib(null);
+    setError(null);
+
+    closeClearFinishDialog();
+    setTimeout(() => bibRef.current?.focus(), 0);
+  }
+
   /**
    * Entfernt einen Finisher an Tabellen-Index idx:
    * - entfernt ihn aus der Finisher-Liste
@@ -741,6 +799,20 @@ export default function FinishLineScoring({
                 <Button size="small" variant="outlined" onClick={handleFillFromLive} disabled={!canFillFromLive}>
                   Fill from Live
                 </Button>
+              </span>
+            </Tooltip>
+
+            <Tooltip title="Clear all finish entries" arrow>
+              <span>
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => setClearFinishDialogOpen(true)}
+                  disabled={finishers.length === 0}
+                  aria-label="Clear finish"
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
               </span>
             </Tooltip>
 
@@ -951,7 +1023,32 @@ export default function FinishLineScoring({
       </Box>
 
       {/* Starterliste: zeigt alle Starter und markiert die Finisher (selectedIds) */}
-      <ScoringStarterList starters={starters} selectedIds={selectedIds} formatAthleteLabel={athleteLabel} />
+      <ScoringStarterList
+        starters={starters}
+        selectedIds={selectedIds}
+        statusByBib={statusByBib}
+        pointsByBib={pointsByBib}
+        formatAthleteLabel={athleteLabel}
+      />
+
+      {/* Dialog: clear all finish entries */}
+      <Dialog open={clearFinishDialogOpen} onClose={closeClearFinishDialog} maxWidth="xs" fullWidth>
+        <DialogTitle>Clear finish entries?</DialogTitle>
+
+        <DialogContent>
+          <DialogContentText>
+            Do you really want to remove all finish entries? (finishRank will be set to 0 and the finish time will be
+            cleared.)
+          </DialogContentText>
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={closeClearFinishDialog}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={clearAllFinishersNow}>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Dialog: fehlende Starter anlegen */}
       <Dialog

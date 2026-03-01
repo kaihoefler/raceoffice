@@ -1,3 +1,14 @@
+// src/components/EliminationScoring.tsx
+//
+// UI for recording elimination-related race activities:
+// - Elim: elimination activity per lap with multiple bibs
+// - DNS/DSQ: one activity per bib (optionally appended atomically for non-optimistic backend)
+//
+// Optional live-sync helpers (controlled by the page):
+// - sync lap number from live feed
+// - prefill last eligible bib(s) from live ranking (for 1- or 2-elim workflows)
+// - DNS helper: insert all bibs that still have 0 laps in the live feed
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
@@ -29,7 +40,12 @@ import type {
   RaceActivityElimination,
 } from "../types/raceactivities";
 
-export type EliminationMode = "elim" | "DNS" | "DSQ";
+/**
+ * Which "activity type" is currently being recorded.
+ * - elim1/elim2 => RaceActivityElimination (single activity; 1 or 2 bibs)
+ * - DNS/DSQ => multiple activities (one per bib)
+ */
+export type EliminationMode = "elim1" | "elim2" | "DNS" | "DSQ";
 
 type Props = {
   /** Active race (comes from the page) */
@@ -49,8 +65,11 @@ type Props = {
   syncEnabled?: boolean;
   /** Live lap count (typically RaceStatusRace.lapsComplete). */
   liveLapCount?: number | null;
-  /** Bib of the last eligible athlete in live ranking (not eliminated/DNS/DSQ). */
-  liveLastEligibleBib?: number | null;
+  /**
+   * Last eligible bibs in live ranking (worst positions).
+   * Used to prefill Elim inputs when sync is enabled.
+   */
+  liveLastEligibleBibs?: { lastBib: number | null; secondLastBib: number | null };
 
   /** Bibs with 0 lapsComplete in live feed (typically DNS candidates). */
   liveZeroLapBibs?: number[];
@@ -64,6 +83,10 @@ function newId() {
   return globalThis.crypto?.randomUUID?.() ?? `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
+/**
+ * Parse a bib input into a positive integer.
+ * Returns null for empty/invalid input.
+ */
 function bibToInt(input: string): number | null {
   const v = String(input ?? "").trim();
   if (!v) return null;
@@ -74,6 +97,7 @@ function bibToInt(input: string): number | null {
   return i > 0 ? i : null;
 }
 
+/** Build a RaceActivityElimination for the given lap and bib list. */
 function toEliminationActivity(lap: number, bibs: number[]): RaceActivityElimination {
   return {
     id: newId(),
@@ -122,7 +146,7 @@ export default function EliminationScoring({
   onCreateStarters,
   syncEnabled = false,
   liveLapCount = null,
-  liveLastEligibleBib = null,
+  liveLastEligibleBibs = { lastBib: null, secondLastBib: null },
   liveZeroLapBibs = [],
 }: Props) {
   // ---------------------------------------------------------------------------
@@ -149,12 +173,48 @@ export default function EliminationScoring({
   // ---------------------------------------------------------------------------
   // Local UI state
   // ---------------------------------------------------------------------------
-  const [mode, setMode] = useState<EliminationMode>("elim");
+  const [mode, setMode] = useState<EliminationMode>("elim1");
   const [lap, setLap] = useState<number>(1);
 
-  // We always keep at least one empty input row at the end.
+  // "Elim" input modes are fixed-size (either 1 bib or 2 bibs).
+  const isElim1 = mode === "elim1";
+  const isElim2 = mode === "elim2";
+  const isFixedElimMode = isElim1 || isElim2;
+  const elimBibCount = isElim2 ? 2 : 1;
+
+  // DNS/DSQ support an auto-growing row list.
+  const allowAutoGrow = mode === "DNS" || mode === "DSQ";
+
+  // Bib input rows:
+  // - `sel`: selected Athlete from autocomplete (or placeholder)
+  // - `input`: raw text in the input
   const [rows, setRows] = useState<Array<{ sel: Athlete | null; input: string }>>([{ sel: null, input: "" }]);
   const [error, setError] = useState<string | null>(null);
+
+  // Normalize row count when switching modes:
+  // - elim1/elim2 => exactly 1 or 2 rows
+  // - DNS/DSQ => keep current rows but ensure a trailing empty row exists
+  useEffect(() => {
+    setRows((prev) => {
+      if (isFixedElimMode) {
+        const next = prev.slice(0, elimBibCount);
+        while (next.length < elimBibCount) next.push({ sel: null, input: "" });
+
+        // Avoid pointless state updates.
+        const isSame =
+          next.length === prev.length && next.every((r, i) => r === prev[i]);
+        return isSame ? prev : next;
+      }
+
+      const safePrev = prev.length ? prev : [{ sel: null, input: "" }];
+      const last = safePrev[safePrev.length - 1];
+      const lastIsEmpty = !last?.sel && !String(last?.input ?? "").trim();
+      return lastIsEmpty ? safePrev : [...safePrev, { sel: null, input: "" }];
+    });
+
+    // Clear any stale error when switching modes.
+    setError(null);
+  }, [isFixedElimMode, elimBibCount, allowAutoGrow]);
 
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
@@ -194,7 +254,7 @@ export default function EliminationScoring({
 
   // Reset when race changes
   useEffect(() => {
-    setMode("elim");
+    setMode("elim1");
     setLap(1);
     setRows([{ sel: null, input: "" }]);
     setError(null);
@@ -205,11 +265,14 @@ export default function EliminationScoring({
 
     // reset live-sync tracking
     prevLiveLapRef.current = null;
-    autoPrefillBibRef.current = null;
+    autoPrefillBibsRef.current = { bib0: null, bib1: null };
 
     setTimeout(() => inputRefs.current[0]?.focus(), 0);
   }, [race.id, resetKey]);
 
+  // Parse/normalize bibs from the UI rows:
+  // - accepts either selected Athlete (`sel.bib`) or plain typed input
+  // - deduplicates bibs while preserving input order
   const parsedBibs = useMemo(() => {
     const seen = new Set<number>();
     const out: number[] = [];
@@ -225,33 +288,35 @@ export default function EliminationScoring({
     return out;
   }, [rows]);
 
-  const canSave = parsedBibs.length > 0;
+  const canSave = useMemo(() => {
+    if (mode === "elim1") return parsedBibs.length === 1;
+    if (mode === "elim2") return parsedBibs.length === 2;
+    return parsedBibs.length > 0;
+  }, [mode, parsedBibs.length]);
 
   // ---------------------------------------------------------------------------
   // Live sync handling (lap + prefill)
   // ---------------------------------------------------------------------------
   const prevLiveLapRef = useRef<number | null>(null);
-  const autoPrefillBibRef = useRef<number | null>(null);
+  const autoPrefillBibsRef = useRef<{ bib0: number | null; bib1: number | null }>({ bib0: null, bib1: null });
 
   // When sync is turned off, forget previous live lap (so re-enabling doesn't trigger a stale "change").
   useEffect(() => {
     if (syncEnabled) return;
     prevLiveLapRef.current = null;
-    autoPrefillBibRef.current = null;
+    autoPrefillBibsRef.current = { bib0: null, bib1: null };
   }, [syncEnabled]);
 
-  // If sync is enabled: update lap ONLY when the live lap count changes.
+  // If sync is enabled: always align lap with the live lap count.
+  // This runs:
+  // - immediately when sync is enabled
+  // - on mount (e.g. when switching tabs)
+  // - whenever the live lap count changes
   useEffect(() => {
     if (!syncEnabled) return;
     if (liveLapCount == null) return;
 
     const liveLapInt = Math.max(1, Math.floor(Number(liveLapCount)));
-
-    if (prevLiveLapRef.current == null) {
-      // Initialize without overriding the user's current lap.
-      prevLiveLapRef.current = liveLapInt;
-      return;
-    }
 
     if (prevLiveLapRef.current !== liveLapInt) {
       prevLiveLapRef.current = liveLapInt;
@@ -259,46 +324,58 @@ export default function EliminationScoring({
     }
   }, [syncEnabled, liveLapCount]);
 
-  const firstRowSelId = rows[0]?.sel?.id ?? null;
-  const firstRowInput = rows[0]?.input ?? "";
-
-  // Prefill the first bib with the last eligible bib from the live ranking.
-  // We do not override user input; we only apply if first row is empty OR it was previously auto-filled.
+  // Prefill Elim bib(s) with the last eligible live bib(s) when sync is enabled.
+  // - elim1: prefill `lastBib`
+  // - elim2: prefill `lastBib` + `secondLastBib`
+  // UX rule: never override manual user input.
   useEffect(() => {
     if (!syncEnabled) return;
-    if (liveLastEligibleBib == null) return;
+    if (!isFixedElimMode) return;
 
-    const first = rows[0];
-    const firstBib = first?.sel?.bib ?? bibToInt(first?.input ?? "");
+    const t0 = liveLastEligibleBibs?.lastBib ?? null;
+    let t1 = isElim2 ? (liveLastEligibleBibs?.secondLastBib ?? null) : null;
 
-    const isEmpty = !first?.sel && !String(first?.input ?? "").trim();
-    const wasAutoFilled = autoPrefillBibRef.current != null && firstBib === autoPrefillBibRef.current;
-    if (!isEmpty && !wasAutoFilled) return;
-
-    const resolved = resolveOrPlaceholder(String(liveLastEligibleBib));
-    if (!resolved) return;
-
-    autoPrefillBibRef.current = liveLastEligibleBib;
+    // Avoid prefilling duplicates.
+    if (t0 != null && t1 != null && t0 === t1) t1 = null;
 
     setRows((prev) => {
-      const current0 = prev[0] ?? { sel: null, input: "" };
-      const currentBib = current0.sel?.bib ?? bibToInt(current0.input);
-      const desiredInput = String(liveLastEligibleBib);
+      const next = prev.slice(0, elimBibCount);
+      while (next.length < elimBibCount) next.push({ sel: null, input: "" });
 
-      const alreadySet =
-        currentBib === liveLastEligibleBib &&
-        String(current0.input ?? "").trim() === desiredInput &&
-        current0.sel?.bib === liveLastEligibleBib;
+      const auto = { ...autoPrefillBibsRef.current };
 
-      const needsTrailingEmpty = prev.length === 1;
-      if (alreadySet && !needsTrailingEmpty) return prev;
+      function apply(idx: 0 | 1, bib: number | null) {
+        if (bib == null) return;
 
-      const copy = prev.slice();
-      copy[0] = { sel: resolved, input: desiredInput };
-      if (needsTrailingEmpty) copy.push({ sel: null, input: "" });
-      return copy;
+        const current = next[idx] ?? { sel: null, input: "" };
+        const currentBib = current.sel?.bib ?? bibToInt(current.input);
+
+        const isEmpty = !current.sel && !String(current.input ?? "").trim();
+        const wasAutoFilled = auto[`bib${idx}`] != null && currentBib === auto[`bib${idx}`];
+        if (!isEmpty && !wasAutoFilled) return;
+
+        const resolved = resolveOrPlaceholder(String(bib));
+        if (!resolved) return;
+
+        next[idx] = { sel: resolved, input: String(bib) };
+        auto[`bib${idx}`] = bib;
+      }
+
+      apply(0, t0);
+      if (elimBibCount > 1) apply(1, t1);
+
+      autoPrefillBibsRef.current = auto;
+      return next;
     });
-  }, [syncEnabled, liveLastEligibleBib, firstRowSelId, firstRowInput, starterByBib]);
+  }, [
+    syncEnabled,
+    isFixedElimMode,
+    isElim2,
+    elimBibCount,
+    liveLastEligibleBibs?.lastBib,
+    liveLastEligibleBibs?.secondLastBib,
+    starterByBib,
+  ]);
 
   const selectedIds = useMemo(() => {
     const ids = new Set<string>();
@@ -308,6 +385,41 @@ export default function EliminationScoring({
     }
     return ids;
   }, [parsedBibs, starterByBib]);
+
+  const statusByBib = useMemo(() => {
+    const m = new Map<number, { eliminated?: boolean; dns?: boolean; dsq?: boolean }>();
+    const list = Array.isArray((race as any)?.raceResults) ? ((race as any).raceResults as any[]) : [];
+
+    for (const r of list) {
+      const bib = bibToInt(String((r as any)?.bib ?? ""));
+      if (bib == null) continue;
+
+      const eliminated = Boolean((r as any)?.eliminated);
+      const dns = Boolean((r as any)?.dns);
+      const dsq = Boolean((r as any)?.dsq);
+
+      if (!eliminated && !dns && !dsq) continue;
+      m.set(bib, { eliminated, dns, dsq });
+    }
+
+    return m;
+  }, [race]);
+
+  const pointsByBib = useMemo(() => {
+    const m = new Map<number, number>();
+    const list = Array.isArray((race as any)?.raceResults) ? ((race as any).raceResults as any[]) : [];
+
+    for (const r of list) {
+      const bib = bibToInt(String((r as any)?.bib ?? ""));
+      if (bib == null) continue;
+
+      const pts = Number((r as any)?.points ?? 0);
+      if (!Number.isFinite(pts) || pts === 0) continue;
+      m.set(bib, pts);
+    }
+
+    return m;
+  }, [race]);
 
   function focusIndex(i: number) {
     setTimeout(() => inputRefs.current[i]?.focus(), 0);
@@ -382,7 +494,12 @@ export default function EliminationScoring({
   }
 
   function resetRows() {
-    setRows([{ sel: null, input: "" }]);
+    if (isFixedElimMode) {
+      setRows(Array.from({ length: elimBibCount }, () => ({ sel: null, input: "" })));
+    } else {
+      // DNS/DSQ: keep one empty row at the end.
+      setRows([{ sel: null, input: "" }]);
+    }
     focusIndex(0);
   }
 
@@ -391,6 +508,10 @@ export default function EliminationScoring({
     resetRows();
   }
 
+  /**
+   * DNS helper: prefill rows with all bibs that still have 0 laps in the live feed.
+   * (These bibs are computed in the page view model and passed in via `liveZeroLapBibs`.)
+   */
   function insertZeroLapBibs() {
     const list = Array.from(
       new Set((Array.isArray(liveZeroLapBibs) ? liveZeroLapBibs : []).map((b) => Math.floor(Number(b))).filter((b) => b > 0)),
@@ -415,28 +536,56 @@ export default function EliminationScoring({
     return bibs.filter((bib) => !starterByBib.has(bib));
   }
 
+  /**
+   * The actual save operation (no validation, no missing-starter dialog).
+   *
+   * NOTE (non-optimistic backend):
+   * - For DNS/DSQ we may need to append multiple activities.
+   * - If `onAddRaceActivities` is provided, we use it to patch all activities atomically.
+   */
   function commitSave() {
     const bibs = parsedBibs;
     if (!bibs.length) return;
 
-    if (mode === "elim") {
+    if (isFixedElimMode) {
+      // Defensive: should already be enforced via canSave.
+      if (bibs.length !== elimBibCount) return;
+
       const lapNum = Math.max(1, Math.floor(Number(lap)));
       onAddRaceActivity(toEliminationActivity(lapNum, bibs));
-    } else if (mode === "DNS") {
+
+      // UX: after recording an elimination, advance the lap counter.
+      // When live sync is enabled we do NOT auto-increment here, because lap is driven by the live feed.
+      if (!syncEnabled) setLap(lapNum + 1);
+
+      setError(null);
+      resetRows();
+      return;
+    }
+
+    if (mode === "DNS") {
       const acts = bibs.map((bib) => toDnsActivity(bib));
       if (onAddRaceActivities) onAddRaceActivities(acts);
       else for (const a of acts) onAddRaceActivity(a);
-    } else {
-      const acts = bibs.map((bib) => toDsqActivity(bib));
-      if (onAddRaceActivities) onAddRaceActivities(acts);
-      else for (const a of acts) onAddRaceActivity(a);
+
+      setError(null);
+      resetRows();
+      return;
     }
+
+    // mode === "DSQ"
+    const acts = bibs.map((bib) => toDsqActivity(bib));
+    if (onAddRaceActivities) onAddRaceActivities(acts);
+    else for (const a of acts) onAddRaceActivity(a);
 
     setError(null);
     resetRows();
   }
 
   function saveIfPossible() {
+    // Prevent saving via "Enter" when an elim-mode is only partially filled.
+    if (!canSave) return;
+
     const bibs = parsedBibs;
     if (!bibs.length) return;
 
@@ -494,7 +643,7 @@ export default function EliminationScoring({
             value={lap}
             onChange={(e) => setLap(Number((e.target as HTMLInputElement).value))}
             type="number"
-            disabled={mode !== "elim"}
+            disabled={!isFixedElimMode}
             slotProps={{ htmlInput: { min: 1, step: 1 } }}
             sx={{
               width: 110,
@@ -528,8 +677,11 @@ export default function EliminationScoring({
             }}
             aria-label="Elimination mode"
           >
-            <ToggleButton value="elim" aria-label="Elim">
-              Elim
+            <ToggleButton value="elim1" aria-label="1 Elim">
+              1 Elim
+            </ToggleButton>
+            <ToggleButton value="elim2" aria-label="2 Elim">
+              2 Elim
             </ToggleButton>
             <ToggleButton value="DNS" aria-label="DNS">
               DNS
@@ -546,8 +698,12 @@ export default function EliminationScoring({
         {rows.map((row, idx) => {
           const isLast = idx === rows.length - 1;
           const isEmpty = !row.sel && !String(row.input ?? "").trim();
-          if (!isLast && isEmpty) return null;
+          if (allowAutoGrow && !isLast && isEmpty) return null;
 
+          // Show DNS helper only:
+          // - next to the FIRST bib field
+          // - when DNS mode is active
+          // - when live sync is enabled and the race already progressed (lapsComplete > 0)
           const showInsertZeroLapButton =
             idx === 0 && mode === "DNS" && syncEnabled && Number(liveLapCount ?? 0) > 0;
 
@@ -573,7 +729,7 @@ export default function EliminationScoring({
 
                     if (reason === "input") {
                       copy[idx] = { sel: null, input: v };
-                      if (isLastField && String(v).trim()) copy.push({ sel: null, input: "" });
+                      if (allowAutoGrow && isLastField && String(v).trim()) copy.push({ sel: null, input: "" });
                     } else {
                       copy[idx] = { ...copy[idx], input: v };
                     }
@@ -592,19 +748,23 @@ export default function EliminationScoring({
                     const copy = prev.slice();
                     const isLastField = idx === prev.length - 1;
                     copy[idx] = { sel: pick, input: pick.bib != null ? String(pick.bib) : "" };
-                    if (isLastField) copy.push({ sel: null, input: "" });
+                    if (allowAutoGrow && isLastField) copy.push({ sel: null, input: "" });
                     return copy;
                   });
 
-                  ensureRow(idx + 1);
-                  focusIndex(idx + 1);
+                  if (allowAutoGrow) {
+                    ensureRow(idx + 1);
+                    focusIndex(idx + 1);
+                  } else if (idx + 1 < elimBibCount) {
+                    focusIndex(idx + 1);
+                  }
                 }}
                 onSelect={(next) => {
                   setRows((prev) => {
                     const copy = prev.slice();
                     const isLastField = idx === prev.length - 1;
                     copy[idx] = { sel: next, input: next?.bib != null ? String(next.bib) : "" };
-                    if (isLastField && next) copy.push({ sel: null, input: "" });
+                    if (allowAutoGrow && isLastField && next) copy.push({ sel: null, input: "" });
                     return copy;
                   });
 
@@ -628,15 +788,19 @@ export default function EliminationScoring({
                       const copy = prev.slice();
                       const isLastField = idx === prev.length - 1;
                       copy[idx] = { sel: m, input: m.bib != null ? String(m.bib) : "" };
-                      if (isLastField) copy.push({ sel: null, input: "" });
+                      if (allowAutoGrow && isLastField) copy.push({ sel: null, input: "" });
                       return copy;
                     });
                   } else {
                     return;
                   }
 
-                  ensureRow(idx + 1);
-                  focusIndex(idx + 1);
+                  if (allowAutoGrow) {
+                    ensureRow(idx + 1);
+                    focusIndex(idx + 1);
+                  } else if (idx + 1 < elimBibCount) {
+                    focusIndex(idx + 1);
+                  }
                 }}
               />
               </Box>
@@ -676,7 +840,13 @@ export default function EliminationScoring({
         </Typography>
       </Box>
 
-      <ScoringStarterList starters={starters} selectedIds={selectedIds} formatAthleteLabel={athleteLabel} />
+      <ScoringStarterList
+        starters={starters}
+        selectedIds={selectedIds}
+        statusByBib={statusByBib}
+        pointsByBib={pointsByBib}
+        formatAthleteLabel={athleteLabel}
+      />
 
       <Dialog
         open={missingDialogOpen}

@@ -203,13 +203,14 @@ export default function Scoreboard({ results, title = "Standings", maxHeight = 9
             size="small"
             stickyHeader
             aria-label="scoreboard"
-            sx={{
-              // Kompaktere Zeilenhöhe
+                        sx={{
+              // More compact cell padding (important for smaller screens)
               "& th, & td": {
-                // px: 0.5, // optional (auskommentiert)
+                px: { xs: 0.5, sm: 1 },
                 py: 0.5,
               },
             }}
+
           >
             <TableHead>
               <TableRow>

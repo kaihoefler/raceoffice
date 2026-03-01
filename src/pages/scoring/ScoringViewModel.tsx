@@ -47,8 +47,14 @@ export type ScoringViewModel = {
     p3Bib: number | null;
   };
 
-    /** "Last" bib in live ranking (worst position), but only if NOT eliminated/DNS/DSQ in current raceResults. */
-  liveLastEligibleBib: number | null;
+      /**
+   * Last eligible bibs in live ranking (worst positions).
+   * - lastBib: last/worst
+   * - secondLastBib: second last
+   * Both are filtered to NOT be eliminated/DNS/DSQ in current raceResults.
+   */
+  liveLastEligibleBibs: { lastBib: number | null; secondLastBib: number | null };
+
 
   /** Bibs that still have 0 lapsComplete in the live feed (and are not eliminated/DNS/DSQ in current raceResults). */
   liveZeroLapBibs: number[];
@@ -190,14 +196,20 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
       if ((r as any)?.eliminated || (r as any)?.dns || (r as any)?.dsq) ineligible.add(bib);
     }
 
-        let liveLastEligibleBib: number | null = null;
+            const lastEligible: number[] = [];
     for (let i = sortedByPos.length - 1; i >= 0; i--) {
       const bib = bibToInt((sortedByPos[i] as any)?.number);
       if (bib == null) continue;
       if (ineligible.has(bib)) continue;
-      liveLastEligibleBib = bib;
-      break;
+      lastEligible.push(bib);
+      if (lastEligible.length >= 2) break;
     }
+
+    const liveLastEligibleBibs = {
+      lastBib: lastEligible[0] ?? null,
+      secondLastBib: lastEligible[1] ?? null,
+    };
+
 
     // ---- Zero-lap bibs (used for DNS helper) ----
     const zeroLapSet = new Set<number>();
@@ -301,9 +313,10 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
       syncEnabled,
       liveLapCount,
       liveLapsToGo,
-            liveTopBibs,
-      liveLastEligibleBib,
+                        liveTopBibs,
+      liveLastEligibleBibs,
       liveZeroLapBibs,
+
       getMissingStarterBibsFromLive,
       buildStartersForBibs,
     };
