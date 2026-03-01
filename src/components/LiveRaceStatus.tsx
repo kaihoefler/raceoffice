@@ -36,6 +36,8 @@ import {
   Typography,
   IconButton,
 } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
+
 
 import PauseIcon from "@mui/icons-material/Pause";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
@@ -44,7 +46,8 @@ import { useRaceStatus, type RaceStatusCompetitor } from "../providers/RaceStatu
 
 import type { AgeGroup } from "../types/agegroup";
 import type { Athlete } from "../types/athlete";
-import type { Race } from "../types/race";
+import type { Race, RaceResult } from "../types/race";
+
 
 import { buildStartersFromLiveCompetitors, inferRaceDraftFromLiveName } from "../domain/liveRaceActions";
 
@@ -178,7 +181,10 @@ function shortenLastName(ln: string): string {
  * - "Nachname, Vorname" (gekürzt)
  * - IOC Code wird entfernt
  */
+type StatusKind = "DSQ" | "DNS" | "ELIM" | null;
+
 function competitorName(c: RaceStatusCompetitor): string {
+
   const fn = shortenFirstName(String(c.firstName ?? ""));
   const ln = shortenLastName(stripIocSuffix(String(c.lastName ?? "")));
 
@@ -194,6 +200,8 @@ export default function LiveRaceStatus({
   onCreateStarters,
   syncEnabled = false,
   onSyncEnabledChange,
+  raceResults,
+
 
   // Optional feature: create a new Race in the current event derived from the LiveRace.
   // This is kept optional so LiveRaceStatus can still be used in contexts where
@@ -206,9 +214,13 @@ export default function LiveRaceStatus({
 
   unknownLiveBibs?: Set<number>;
   onCreateStarters?: () => void;
-  /** If enabled, the page can sync PointsScoring with Live status. */
+    /** If enabled, the page can sync PointsScoring with Live status. */
   syncEnabled?: boolean;
   onSyncEnabledChange?: (next: boolean) => void;
+
+  /** Optional: local, materialized standings (RaceResult) to show ELIM/DNS/DSQ markers in the live table. */
+  raceResults?: RaceResult[];
+
 
   // Create-race-from-live feature
   // - eventId/ageGroups: required to open RaceEditor (age group dropdown + correct event)
@@ -228,6 +240,8 @@ export default function LiveRaceStatus({
    * - paused: Polling pausiert?
    * - setUrl/setPollIntervalMs/setPaused: Settings ändern
    */
+    const theme = useTheme();
+
   const {
     status,
     error,
@@ -242,6 +256,7 @@ export default function LiveRaceStatus({
     setPollIntervalMs,
     setPaused,
   } = useRaceStatus();
+
 
   // -----------------------
   // Settings Dialog State
@@ -331,8 +346,46 @@ export default function LiveRaceStatus({
           ? { bgcolor: "common.black", color: "common.white" }
           : undefined;
 
-  // Wie viele Bibs fehlen in unserer Starterliste (vom Parent geliefert)?
+    // Wie viele Bibs fehlen in unserer Starterliste (vom Parent geliefert)?
   const unknownCount = unknownLiveBibs?.size ?? 0;
+
+  function statusColor(kind: StatusKind): string {
+    switch (kind) {
+      case "DNS":
+        return theme.palette.text.secondary;
+      case "DSQ":
+        return theme.palette.error.dark;
+      case "ELIM":
+        return theme.palette.error.main;
+      default:
+        return theme.palette.text.primary;
+    }
+  }
+
+  const statusMetaByBib = useMemo(() => {
+    const m = new Map<number, { kind: StatusKind; label: string }>();
+    const list = Array.isArray(raceResults) ? raceResults : [];
+
+    for (const r of list) {
+      const bib = Number((r as any)?.bib);
+      if (!Number.isFinite(bib) || bib <= 0) continue;
+
+      const dsq = Boolean((r as any)?.dsq);
+      const dns = Boolean((r as any)?.dns);
+      const eliminated = Boolean((r as any)?.eliminated);
+
+      if (!dsq && !dns && !eliminated) continue;
+
+      const kind: StatusKind = dsq ? "DSQ" : dns ? "DNS" : eliminated ? "ELIM" : null;
+      const label =
+        kind === "ELIM" ? `ELIM (${Number((r as any)?.eliminationLap ?? 0) || 0})` : kind === "DSQ" ? "DSQ" : "DNS";
+
+      m.set(bib, { kind, label });
+    }
+
+    return m;
+  }, [raceResults]);
+
 
   // -----------------------
   // Create race from live (UI state)
@@ -852,8 +905,19 @@ export default function LiveRaceStatus({
         ) : null}
       </Box>
 
-      {/* Tabelle der aktuellen Live-Positionen */}
-      <Table size="small" stickyHeader>
+            {/* Tabelle der aktuellen Live-Positionen */}
+      <Table
+        size="small"
+        stickyHeader
+        sx={{
+          // Make rows more compact (important for live views with many competitors)
+          "& th, & td": {
+            px: { xs: 0.5, sm: 1 },
+            py: 0.25,
+          },
+        }}
+      >
+
         <TableHead>
           <TableRow>
             <TableCell sx={{ width: 60 }}>Platz</TableCell>
@@ -878,8 +942,37 @@ export default function LiveRaceStatus({
                 return <TableCell sx={isUnknown ? { color: "error.main", fontWeight: 700 } : undefined}>{r.bib}</TableCell>;
               })()}
 
-              {/* Name: nowrap, um Zeilenhöhe stabil zu halten */}
-              <TableCell sx={{ whiteSpace: "nowrap" }}>{r.name}</TableCell>
+                            {/* Name: nowrap, um Zeilenhöhe stabil zu halten */}
+              <TableCell sx={{ whiteSpace: "nowrap" }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+                  <Box sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</Box>
+
+                  {(() => {
+                    const bibNum = Number(r.bib);
+                    const st = Number.isFinite(bibNum) ? statusMetaByBib.get(bibNum) ?? null : null;
+                    if (!st?.label) return null;
+
+                    const c = statusColor(st.kind);
+
+                    return (
+                      <Chip
+                        size="small"
+                        label={st.label}
+                        variant="outlined"
+                        sx={{
+                          height: 20,
+                          fontWeight: 700,
+                          borderColor: c,
+                          color: c,
+                          backgroundColor: alpha(c, 0.10),
+                          "& .MuiChip-label": { px: 0.6 },
+                        }}
+                      />
+                    );
+                  })()}
+                </Box>
+              </TableCell>
+
 
               {/* Zeittext:
                   - Leader: absolute Zeit (oder Laps)

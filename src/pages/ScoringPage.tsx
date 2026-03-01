@@ -500,11 +500,13 @@ export default function ScoringPage() {
 
 
                         {/* Spalte 4: Live race status (polled via RaceStatusProvider) */}
-                                                <LiveRaceStatus
+                                                                        <LiveRaceStatus
                             unknownLiveBibs={vm.unknownLiveBibs}
                             onCreateStarters={handleCreateMissingStartersFromLive}
                             syncEnabled={syncEnabled}
                             onSyncEnabledChange={setSyncEnabled}
+                            raceResults={race.raceResults}
+
 
                             // Create race from live status
                             eventId={activeEventId}
