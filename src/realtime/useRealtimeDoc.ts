@@ -6,16 +6,11 @@ type SnapshotMsg<T> = { type: "snapshot"; docId: string; rev: number; data: T };
 type PatchMsg = { docId: string; rev: number; patch: Operation[] };
 
 /*
-TODO von ChatGPT:
-Was du als Nächstes brauchst (sonst wirst du es schnell merken)
+Potentielle TODOs
 
 1. rev mismatch handling: Server kann {error:"rev_mismatch", rev:...} senden. Dann Client: Snapshot neu ziehen / reconnect.
 
-2. Persistente Initialdaten: Server initialisiert eventList sauber (oben).
-
 3. Konflikte/Validierung: spätestens wenn mehrere Clients gleichzeitig editieren.
-
-Wenn du mir sagst, ob du SSE zusätzlich willst (z.B. Read-only Clients ohne WS), gebe ich dir die identische Client-Variante mit EventSource + fallback auf WS für Commands.
 
 
 */

@@ -796,7 +796,7 @@ export default function FinishLineScoring({
               arrow
             >
               <span>
-                <Button size="small" variant="outlined" onClick={handleFillFromLive} disabled={!canFillFromLive}>
+                <Button size="small" variant="contained" onClick={handleFillFromLive} disabled={!canFillFromLive}>
                   Fill from Live
                 </Button>
               </span>

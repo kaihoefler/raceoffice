@@ -7,6 +7,7 @@ import { theme } from "./theme";
 import { router } from "./router";
 // src/main.tsx
 import { EventListProvider } from "./providers/EventListProvider";
+import { VisualizationListProvider } from "./providers/VisualizationListProvider";
 import { RaceStatusProvider } from "./providers/RaceStatusProvider";
 import { RaceStatusTimeProvider } from "./providers/RaceStatusTimeProvider";
 import { RaceStatusBibProvider } from "./providers/RaceStatusBibProvider";
@@ -18,7 +19,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <EventListProvider>
-        <RaceStatusProvider>
+        <VisualizationListProvider>
+          <RaceStatusProvider>
           <RaceStatusTimeProvider>
             <RaceStatusMetaProvider>
               <RaceStatusCompetitorsProvider>
@@ -29,6 +31,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             </RaceStatusMetaProvider>
           </RaceStatusTimeProvider>
         </RaceStatusProvider>
+        </VisualizationListProvider>
       </EventListProvider>
     </ThemeProvider>
   </React.StrictMode>
