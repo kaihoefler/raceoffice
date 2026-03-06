@@ -51,11 +51,10 @@ import { useEventsActions } from "../hooks/useEventsActions";
 import { useScoringViewModel } from "./scoring/ScoringViewModel";
 
 import { buildRaceResultsCsv } from "../domain/raceResultsCsvExport";
-
-
-
+import { removeStarterById } from "../domain/startersActions";
 
 import RaceSelector from "../components/RaceSelector";
+
 
 import PointsScoring from "../components/PointsScoring";
 import FinishLineScoring from "../components/FinishLineScoring";
@@ -64,9 +63,11 @@ import LiveRaceStatus from "../components/LiveRaceStatus";
 import RaceActivitiesList from "../components/RaceActivitiesList";
 import Scoreboard from "../components/Scoreboard";
 
+import type { Athlete } from "../types/athlete";
 import type { Race, RaceResult } from "../types/race";
 
 import type { RaceActivityPointsSprint } from "../types/raceactivities";
+
 import type { RaceActivity } from "../types/raceactivities";
 
 
@@ -90,9 +91,11 @@ export default function ScoringPage() {
         status,
         error,
                 toggleActiveRace: toggleActiveRaceAction,
-        setActiveRace: setActiveRaceAction,
+                setActiveRace: setActiveRaceAction,
+        replaceRaceStarters,
         upsertRaceStarters,
         saveRaceWithStarters,
+
 
 
         // Scoring-specific actions (centralized in useEventsActions)
@@ -237,7 +240,7 @@ export default function ScoringPage() {
      * - vm.buildStartersForBibs(...) baut Athlete-Objekte
      * - wir deduplizieren gegen existierende raceStarters
      */
-    async function handleCreateStartersForBibs(bibs: number[]) {
+        async function handleCreateStartersForBibs(bibs: number[]) {
         if (!race) return;
 
         const toAdd = vm.buildStartersForBibs(bibs);
@@ -248,7 +251,18 @@ export default function ScoringPage() {
 
     }
 
+    function handleDeleteStarter(starter: Athlete) {
+        if (!race) return;
+
+        const bibLabel = starter.bib != null ? ` ${starter.bib}` : "";
+        const ok = window.confirm(`Starter${bibLabel} löschen?`);
+        if (!ok) return;
+
+        replaceRaceStarters(race.id, removeStarterById(race.raceStarters ?? [], starter.id));
+    }
+
         // -------------------------------------------------------------------------
+
     // Handlers: race results (manual finish entry)
     // -------------------------------------------------------------------------
     // FinishLineScoring edits manual finish fields in raceResults (finishRank/finishTime).
@@ -459,36 +473,44 @@ export default function ScoringPage() {
 
                             <Box sx={{ p: 1 }}>
                                 {col1Tab === "points" ? (
-                                    <PointsScoring
+                                                                        <PointsScoring
                                         race={race}
                                         resetKey={race.id}
                                         onAddRaceActivity={handleAddPointsSprintActivity}
                                         onCreateStarters={handleCreateStartersForBibs}
+                                        onDeleteStarter={handleDeleteStarter}
                                         missingInLiveBibs={vm.missingInLiveBibs}
                                         syncEnabled={vm.syncEnabled}
                                         liveLapCount={vm.liveLapCount}
                                         liveLapsToGo={vm.liveLapsToGo}
                                         liveTopBibs={vm.liveTopBibs}
                                     />
+
                                 ) : col1Tab === "finish" ? (
-                                    <FinishLineScoring
+                                                                        <FinishLineScoring
                                         race={race}
                                         resetKey={race.id}
                                         onChangeRaceResults={handleChangeRaceResults}
                                         onCreateStarters={handleCreateStartersForBibs}
+                                        onDeleteStarter={handleDeleteStarter}
+                                        missingInLiveBibs={vm.missingInLiveBibs}
                                     />
+
                                 ) : (
-                                                                                                                                                                                                                        <EliminationScoring
+                                                                                                                                                                                                                                                                                                                                                                                                                                                <EliminationScoring
                                         race={race}
                                         resetKey={race.id}
                                         onAddRaceActivity={handleAddRaceActivity}
                                         onAddRaceActivities={handleAddRaceActivities}
                                         onCreateStarters={handleCreateStartersForBibs}
+                                        onDeleteStarter={handleDeleteStarter}
+                                        missingInLiveBibs={vm.missingInLiveBibs}
                                         syncEnabled={vm.syncEnabled}
                                         liveLapCount={vm.liveLapCount}
                                                                                 liveLastEligibleBibs={vm.liveLastEligibleBibs}
                                         liveZeroLapBibs={vm.liveZeroLapBibs}
                                     />
+
                                 )}
                             </Box>
                         </Box>

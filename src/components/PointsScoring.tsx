@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -34,11 +34,11 @@ type Props = {
   /** Use e.g. race.id so the component resets when switching races */
   resetKey?: string;
   /** Add a new RaceActivityPointsSprint to the race (no editing in this component) */
-  onAddRaceActivity: (activity: RaceActivityPointsSprint) => void;
-
+    onAddRaceActivity: (activity: RaceActivityPointsSprint) => void;
   onCreateStarters?: (bibs: number[]) => Promise<void> | void;
-
+  onDeleteStarter?: (starter: Athlete) => void;
   missingInLiveBibs?: Set<number>;
+
 
   /** If true, PointsScoring can react to live lap changes. */
   syncEnabled?: boolean;
@@ -53,11 +53,7 @@ type Props = {
     p2Bib: number | null;
     p3Bib: number | null;
   };
-
 };
-
-
-
 
 function athleteLabel(a: Athlete) {
   return `${a.bib ?? ""} - ${(a.lastName ?? "").trim()} ${(a.firstName ?? "").trim()}`.trim();
@@ -101,17 +97,16 @@ function toPointsSprintActivity(lap: number, results: Array<{ bib: number; point
 export default function PointsScoring({
   race,
   resetKey,
-  onAddRaceActivity,
+    onAddRaceActivity,
   onCreateStarters,
+  onDeleteStarter,
   missingInLiveBibs,
+
   syncEnabled = false,
   liveLapCount = null,
   liveLapsToGo = null,
   liveTopBibs = DEFAULT_LIVE_TOP_BIBS,
 }: Props) {
-
-
-
   // ---------------------------------------------------------------------------
   // Derived data: starters + lookup maps
   // ---------------------------------------------------------------------------
@@ -133,12 +128,14 @@ export default function PointsScoring({
     return m;
   }, [starters]);
 
-
-
   // ---------------------------------------------------------------------------
-  // State: mode + selected athletes + input strings
+  // Local UI state
   // ---------------------------------------------------------------------------
   const [mode, setMode] = useState<PointsMode>("lap");
+
+  // Forces the live-prefill effect to run again, even when the inputs are already empty
+  // (for example when the user presses "Clear" twice).
+  const [prefillNonce, setPrefillNonce] = useState(0);
 
   const [sel3P, setSel3P] = useState<Athlete | null>(null);
   const [sel2P, setSel2P] = useState<Athlete | null>(null);
@@ -149,18 +146,77 @@ export default function PointsScoring({
   const [in1P, setIn1P] = useState("");
 
   const ref3P = useRef<HTMLInputElement>(null);
-
   const ref2P = useRef<HTMLInputElement>(null);
   const ref1P = useRef<HTMLInputElement>(null);
+    const saveButtonRef = useRef<HTMLButtonElement>(null);
+  const focusSaveAfterSyncSaveRef = useRef(false);
 
-  // Track which values were auto-prefilled from live status.
-  // If the user changes a field manually, we clear the corresponding ref.
+  // Once the user manually edits any points field while sync is enabled, we stop
+  // overwriting points fields from live data until the user presses "Clear".
+  const syncOverwriteBlockedRef = useRef(false);
+
+  // Tracks which bibs currently come from live prefill so they can stay highlighted
+  // and may still be replaced by newer live values.
   const auto3PBibRef = useRef<number | null>(null);
   const auto2PBibRef = useRef<number | null>(null);
   const auto1PBibRef = useRef<number | null>(null);
 
-  // Used to ensure saving happens "through Enter".
+  // Used to ensure saving only happens after Enter in the last field.
   const enterRequestedRef = useRef(false);
+
+  function clearAutoPrefillRefs() {
+    auto3PBibRef.current = null;
+    auto2PBibRef.current = null;
+    auto1PBibRef.current = null;
+  }
+
+  function requestSyncPrefill() {
+    if (!syncEnabled) return;
+    syncOverwriteBlockedRef.current = false;
+    clearAutoPrefillRefs();
+    setPrefillNonce((n) => n + 1);
+  }
+
+  function parseBibInput(value: string): number | null {
+    const v = String(value ?? "").trim();
+    if (!/^\d+$/.test(v)) return null;
+    const bib = Number(v);
+    return Number.isFinite(bib) && bib > 0 ? bib : null;
+  }
+
+  function isAutoHighlighted(selected: Athlete | null, autoBib: number | null) {
+    return syncEnabled && autoBib != null && (selected?.bib ?? null) === autoBib;
+  }
+
+  function markManualOverride(autoRef: { current: number | null }) {
+    syncOverwriteBlockedRef.current = true;
+    autoRef.current = null;
+  }
+
+  function queueFocus(ref: RefObject<HTMLInputElement | null>) {
+    setTimeout(() => ref.current?.focus(), 0);
+  }
+
+  function focusByMode(nextMode: PointsMode) {
+    if (nextMode === "finish") queueFocus(ref3P);
+    else queueFocus(ref2P);
+  }
+
+  function resolveFieldSelection(
+    input: string,
+    setSelected: (a: Athlete | null) => void,
+    setInput: (value: string) => void,
+    autoRef: { current: number | null },
+  ) {
+    markManualOverride(autoRef);
+
+    const resolved = resolveOrPlaceholder(input);
+    if (!resolved) return null;
+
+    setSelected(resolved);
+    setInput(resolved.bib != null ? String(resolved.bib) : "");
+    return resolved;
+  }
 
   // ---------------------------------------------------------------------------
   // State: confirmation dialog for creating missing starters
@@ -169,7 +225,7 @@ export default function PointsScoring({
   const [missingDialogBibs, setMissingDialogBibs] = useState<number[]>([]);
   const [missingDialogBusy, setMissingDialogBusy] = useState(false);
 
-    // Speichert die "eigentliche" Save-Operation, bis der User im Dialog entscheidet.
+  // Holds the actual save operation until the dialog flow completes.
   const pendingSaveRef = useRef<null | (() => void)>(null);
 
   // When the user chooses "create starters", we have to wait for the starter-create patch
@@ -183,7 +239,7 @@ export default function PointsScoring({
     setMissingDialogOpen(true);
   }
 
-    function closeMissingStartersDialog() {
+  function closeMissingStartersDialog() {
     setMissingDialogOpen(false);
     setMissingDialogBibs([]);
   }
@@ -227,10 +283,14 @@ export default function PointsScoring({
 
   const [lap, setLap] = useState<number>(defaultLap);
 
-  // Reset lap when switching races (or when parent forces a reset)
+  // Reset lap when switching races (or when parent forces a reset).
+  // IMPORTANT (live sync): never overwrite the live-driven lap while sync is enabled.
   useEffect(() => {
+    if (syncEnabled) return;
     setLap(defaultLap);
-  }, [resetKey, race.id, defaultLap]);
+  }, [resetKey, race.id, defaultLap, syncEnabled]);
+
+
 
   // ---------------------------------------------------------------------------
   // Live sync handling (lap + mode)
@@ -243,26 +303,34 @@ export default function PointsScoring({
     prevLiveLapRef.current = null;
   }, [syncEnabled]);
 
-    // If sync is enabled: always align lap with the live lap count.
-  // This runs:
-  // - immediately when sync is enabled
-  // - on mount (e.g. when switching tabs)
-  // - whenever the live lap count changes
+  // When the component mounts in sync mode (for example after switching back to the
+  // Points tab) or when sync is enabled again, trigger one explicit prefill pass.
+  // This mirrors the "Clear" behavior and makes mount-time timing/order issues harmless.
+  useEffect(() => {
+    requestSyncPrefill();
+  }, [syncEnabled, race.id]);
+
+  // If sync is enabled, always align the lap with the live lap count. This runs on
+  // mount, when sync is enabled, and whenever the live lap count changes.
   useEffect(() => {
     if (!syncEnabled) return;
     if (liveLapCount == null) return;
 
     const liveLapInt = Math.max(1, Math.floor(Number(liveLapCount)));
 
-    if (prevLiveLapRef.current !== liveLapInt) {
+    // Fix (tab switch / transient null liveLapCount): ensure lap is aligned even if
+
+    // prevLiveLapRef already equals liveLapInt but local state was reset in between.
+    if (prevLiveLapRef.current !== liveLapInt || lap !== liveLapInt) {
       prevLiveLapRef.current = liveLapInt;
       setLap(liveLapInt);
     }
-  }, [syncEnabled, liveLapCount]);
+  }, [syncEnabled, liveLapCount, lap]);
 
 
-  // If live says "no laps to go" -> switch to finish mode.
-  // We do not auto-switch back to lap mode.
+
+  // If live says "no laps to go", switch to finish mode. We intentionally do not
+  // auto-switch back to lap mode.
   useEffect(() => {
     if (!syncEnabled) return;
     if (liveLapsToGo == null) return;
@@ -273,15 +341,16 @@ export default function PointsScoring({
     }
   }, [syncEnabled, liveLapsToGo, mode]);
 
-  // ---------------------------------------------------------------------------
+      // ---------------------------------------------------------------------------
   // Live sync: prefill bibs from live positions
   // ---------------------------------------------------------------------------
+  const liveP1 = liveTopBibs?.p1Bib ?? null;
+  const liveP2 = liveTopBibs?.p2Bib ?? null;
+  const liveP3 = liveTopBibs?.p3Bib ?? null;
+
   useEffect(() => {
     if (!syncEnabled) return;
-
-    const p1 = liveTopBibs?.p1Bib ?? null;
-    const p2 = liveTopBibs?.p2Bib ?? null;
-    const p3 = liveTopBibs?.p3Bib ?? null;
+    if (syncOverwriteBlockedRef.current) return;
 
     const apply = (
       desiredBib: number | null,
@@ -291,44 +360,48 @@ export default function PointsScoring({
       setInput: (v: string) => void,
       autoRef: { current: number | null },
     ) => {
-
       if (desiredBib == null) return;
-      const a = starterByBib.get(desiredBib) ?? null;
-      if (!a) return;
 
-      const currentBib = current?.bib ?? null;
-      const shouldUpdate =
-        (current == null && !String(currentInput ?? "").trim()) ||
-        (autoRef.current != null && currentBib != null && currentBib === autoRef.current);
+      // Resolve even if the bib is not yet part of the starter list. This keeps
+      // live-prefill working for unknown live bibs as well.
+      const resolved = resolveOrPlaceholder(String(desiredBib));
+      if (!resolved) return;
 
+      const currentBib = current?.bib ?? parseBibInput(currentInput);
+      const isEmpty = current == null && !String(currentInput ?? "").trim();
+      const wasAutoFilled = autoRef.current != null && currentBib != null && currentBib === autoRef.current;
+      if (!isEmpty && !wasAutoFilled) return;
 
-
-
-      if (!shouldUpdate) return;
-
-      autoRef.current = a.bib ?? null;
-      setCurrent(a);
-      setInput(a.bib != null ? String(a.bib) : "");
-
+      autoRef.current = resolved.bib ?? null;
+      setCurrent(resolved);
+      setInput(resolved.bib != null ? String(resolved.bib) : "");
     };
 
     if (mode === "finish") {
-      // Finish: place 1..3 => 3/2/1 points
-      apply(p1, sel3P, in3P, setSel3P, setIn3P, auto3PBibRef);
-      apply(p2, sel2P, in2P, setSel2P, setIn2P, auto2PBibRef);
-      apply(p3, sel1P, in1P, setSel1P, setIn1P, auto1PBibRef);
-
+      // Finish mode maps live places 1..3 to 3/2/1 points.
+      apply(liveP1, sel3P, in3P, setSel3P, setIn3P, auto3PBibRef);
+      apply(liveP2, sel2P, in2P, setSel2P, setIn2P, auto2PBibRef);
+      apply(liveP3, sel1P, in1P, setSel1P, setIn1P, auto1PBibRef);
     } else {
-      // Lap sprint: place 1..2 => 2/1 points
-      apply(p1, sel2P, in2P, setSel2P, setIn2P, auto2PBibRef);
-      apply(p2, sel1P, in1P, setSel1P, setIn1P, auto1PBibRef);
-
-    }
-  }, [syncEnabled, mode, liveTopBibs, starterByBib, sel1P, sel2P, sel3P, in1P, in2P, in3P]);
-
-
-
-
+      // Lap sprint mode maps live places 1..2 to 2/1 points.
+      apply(liveP1, sel2P, in2P, setSel2P, setIn2P, auto2PBibRef);
+      apply(liveP2, sel1P, in1P, setSel1P, setIn1P, auto1PBibRef);
+        }
+  }, [
+    syncEnabled,
+    mode,
+    liveP1,
+    liveP2,
+    liveP3,
+    starterByBib,
+    sel1P,
+    sel2P,
+    sel3P,
+    in1P,
+    in2P,
+    in3P,
+    prefillNonce,
+  ]);
 
   // ---------------------------------------------------------------------------
   // Autocomplete filtering (only show options after typing at least 1 char)
@@ -357,7 +430,7 @@ export default function PointsScoring({
   // ---------------------------------------------------------------------------
   // UI helpers: selectedIds + available options + focus/reset behavior
   // ---------------------------------------------------------------------------
-    const selectedIds = useMemo(() => {
+  const selectedIds = useMemo(() => {
     const ids = new Set<string>();
 
     if (sel3P) ids.add(sel3P.id);
@@ -366,7 +439,7 @@ export default function PointsScoring({
     return ids;
   }, [sel1P, sel2P, sel3P]);
 
-    const statusByBib = useMemo(() => {
+  const statusByBib = useMemo(() => {
     const m = new Map<number, { eliminated?: boolean; dns?: boolean; dsq?: boolean }>();
     const list = Array.isArray((race as any)?.raceResults) ? ((race as any).raceResults as any[]) : [];
 
@@ -403,11 +476,8 @@ export default function PointsScoring({
 
   const optionsFor = (exclude: Set<string>) => starters.filter((a) => !exclude.has(a.id));
 
-
-  function resetInputs(focus: "2P" | "3P" = "2P") {
-    auto3PBibRef.current = null;
-    auto2PBibRef.current = null;
-    auto1PBibRef.current = null;
+  function resetInputs(focus: "2P" | "3P" | "none" = "2P") {
+    clearAutoPrefillRefs();
 
     setSel3P(null);
     setSel2P(null);
@@ -416,34 +486,41 @@ export default function PointsScoring({
     setIn2P("");
     setIn1P("");
 
-
-    setTimeout(() => {
-      if (focus === "3P") ref3P.current?.focus();
-      else ref2P.current?.focus();
-    }, 0);
+    if (focus === "none") return;
+    if (focus === "3P") queueFocus(ref3P);
+    else queueFocus(ref2P);
   }
 
-  // Reset when parent context changes (e.g. race change)
+  const didApplyResetRef = useRef(false);
+
+  // Reset when parent context changes (e.g. race change).
+  // NOTE: We intentionally skip the initial mount so that the live-sync prefill effect can run
+  // when opening the tab (otherwise this reset would clear the freshly prefixed values).
   useEffect(() => {
     if (!resetKey) return;
+
+    if (!didApplyResetRef.current) {
+      didApplyResetRef.current = true;
+      return;
+    }
+
     resetInputs(mode === "finish" ? "3P" : "2P");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
-  // When switching mode, adjust focus + clear 3P if leaving finish
+
+  // When switching mode, update focus. Leaving finish mode also clears the 3-point field.
   useEffect(() => {
     if (mode === "finish") {
-      setTimeout(() => ref3P.current?.focus(), 0);
-    } else {
-      auto3PBibRef.current = null;
-      setSel3P(null);
-      setIn3P("");
-      setTimeout(() => ref2P.current?.focus(), 0);
+      focusByMode(mode);
+      return;
     }
 
+    auto3PBibRef.current = null;
+    setSel3P(null);
+    setIn3P("");
+    focusByMode(mode);
   }, [mode]);
-
-
 
   // NOTE: Previously there was a `trySelectByBib` helper that only resolved existing starters.
   // We now use `resolveOrPlaceholder` (see below), so unknown bibs can still be selected.
@@ -485,6 +562,11 @@ export default function PointsScoring({
 
     enterRequestedRef.current = false;
 
+    // In sync mode we do not want to jump back into the bib fields after saving.
+    // Instead we restore focus to the Save button once prefill has made the form complete again.
+    focusSaveAfterSyncSaveRef.current = syncEnabled;
+    requestSyncPrefill();
+
     if (mode === "lap") {
       onAddRaceActivity(
         toPointsSprintActivity(lapNum, [
@@ -492,7 +574,7 @@ export default function PointsScoring({
           { bib: sel1P!.bib!, points: 1 },
         ]),
       );
-      resetInputs("2P");
+      resetInputs(syncEnabled ? "none" : "2P");
       return;
     }
 
@@ -503,8 +585,23 @@ export default function PointsScoring({
         { bib: sel1P!.bib!, points: 1 },
       ]),
     );
-    resetInputs("3P");
+    resetInputs(syncEnabled ? "none" : "3P");
   }
+
+  // When saving in sync mode, reset clears the fields temporarily. As soon as live-prefill
+  // makes the inputs complete again (canSave=true), restore focus to the Save button.
+  useEffect(() => {
+    if (!syncEnabled) {
+      focusSaveAfterSyncSaveRef.current = false;
+      return;
+    }
+
+    if (!focusSaveAfterSyncSaveRef.current) return;
+    if (!canSave) return;
+
+    focusSaveAfterSyncSaveRef.current = false;
+    setTimeout(() => saveButtonRef.current?.focus(), 0);
+  }, [syncEnabled, canSave]);
 
   async function saveAsync() {
     if (!canSave) return;
@@ -515,23 +612,22 @@ export default function PointsScoring({
     if (missing.length > 0) {
       if (!onCreateStarters) {
         console.warn("Missing starters but onCreateStarters is not provided:", missing);
-        return; // nicht speichern
+        return;
       }
 
-            pendingSaveRef.current = commitSave;
+      pendingSaveRef.current = commitSave;
       setPendingSaveBibs(null);
       openMissingStartersDialog(missing);
       return;
-
     }
 
     commitSave();
   }
 
-    async function handleDialogCreateAndSave() {
+  async function handleDialogCreateAndSave() {
     if (!onCreateStarters) return;
 
-    // capture before closeMissingStartersDialog() resets the state
+    // Capture before closeMissingStartersDialog() resets the state.
     const bibs = [...missingDialogBibs];
 
     try {
@@ -539,25 +635,22 @@ export default function PointsScoring({
       await onCreateStarters(bibs);
       closeMissingStartersDialog();
 
-      // actual saving happens via effect above, once starters exist locally
+      // The actual save happens via the effect above, once starters exist locally.
       setPendingSaveBibs(bibs);
     } finally {
       setMissingDialogBusy(false);
     }
   }
 
-
-
-
-    function handleDialogCancel() {
+  function handleDialogCancel() {
     closeMissingStartersDialog();
     pendingSaveRef.current = null;
     setPendingSaveBibs(null);
   }
 
-
-  function clearNow() {
+      function clearNow() {
     enterRequestedRef.current = false;
+    requestSyncPrefill();
     resetInputs(mode === "finish" ? "3P" : "2P");
   }
 
@@ -571,15 +664,20 @@ export default function PointsScoring({
   // ---------------------------------------------------------------------------
 
   function makePlaceholderAthlete(bib: number): Athlete {
+
+    // Keep the placeholder id stable so MUI Autocomplete does not lose the selection
+    // across re-renders / effects.
     return {
-      id: `placeholder_${bib}_${Date.now()}`,
+      id: `placeholder_${race.id}_${bib}`,
       bib,
+
       firstName: "",
       lastName: "",
       ageGroupId: race.ageGroupId ?? null,
       nation: null,
     };
   }
+
 
   function resolveOrPlaceholder(bibText: string): Athlete | null {
     const v = bibText.trim();
@@ -612,7 +710,7 @@ export default function PointsScoring({
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, minWidth: 0 }}>
           <Typography variant="subtitle2">Points</Typography>
         </Box>
-                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, mb: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, mb: 1 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <TextField
               size="small"
@@ -669,53 +767,49 @@ export default function PointsScoring({
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
           {mode === "finish" ? (
             <PointsRow label="3 P">
-              <PointsBibField
+                            <PointsBibField
                 value={sel3P}
                 inputValue={in3P}
                 inputRef={ref3P}
+                highlight={isAutoHighlighted(sel3P, auto3PBibRef.current)}
                 options={optionsFor(new Set([sel2P?.id, sel1P?.id].filter(Boolean) as string[]))}
                 filterOptions={filterOptions}
                 formatOption={athleteLabel}
                 resolveByBib={resolveOrPlaceholder}
-                onInputValueChange={(v, reason) => {
+                                onInputValueChange={(v, reason) => {
                   setIn3P(v);
                   if (reason !== "input") return;
 
-                  auto3PBibRef.current = null;
+                  markManualOverride(auto3PBibRef);
                   setSel3P(null);
 
                   const pick = tryAutoPickUniqueBib(v, candidatesFor([sel2P?.id, sel1P?.id]));
-                  if (pick) {
-                    setSel3P(pick);
-                    setIn3P(pick.bib != null ? String(pick.bib) : "");
-                    setTimeout(() => ref2P.current?.focus(), 0);
-                  }
+                  if (!pick) return;
+
+                  setSel3P(pick);
+                  setIn3P(pick.bib != null ? String(pick.bib) : "");
+                  queueFocus(ref2P);
                 }}
                 onSelect={(next) => {
-                  auto3PBibRef.current = null;
+                  markManualOverride(auto3PBibRef);
                   setSel3P(next);
                   setIn3P(next?.bib != null ? String(next.bib) : "");
-
-                  if (next) setTimeout(() => ref2P.current?.focus(), 0);
+                  if (next) queueFocus(ref2P);
                 }}
                 onEnter={() => {
-                  const m = resolveOrPlaceholder(in3P);
-                  if (m) {
-                    auto3PBibRef.current = null;
-                    setSel3P(m);
-                    setIn3P(m.bib != null ? String(m.bib) : "");
-                    setTimeout(() => ref2P.current?.focus(), 0);
-                  }
+                  const resolved = resolveFieldSelection(in3P, setSel3P, setIn3P, auto3PBibRef);
+                  if (resolved) queueFocus(ref2P);
                 }}
               />
             </PointsRow>
           ) : null}
 
-          <PointsRow label={mode === "finish" ? "2 P" : "2 P"}>
+          <PointsRow label="2 P">
             <PointsBibField
               value={sel2P}
               inputValue={in2P}
               inputRef={ref2P}
+              highlight={isAutoHighlighted(sel2P, auto2PBibRef.current)}
               options={
                 mode === "finish"
                   ? optionsFor(new Set([sel3P?.id, sel1P?.id].filter(Boolean) as string[]))
@@ -724,79 +818,69 @@ export default function PointsScoring({
               filterOptions={filterOptions}
               formatOption={athleteLabel}
               resolveByBib={resolveOrPlaceholder}
-              onInputValueChange={(v, reason) => {
+                            onInputValueChange={(v, reason) => {
                 setIn2P(v);
                 if (reason !== "input") return;
 
-                auto2PBibRef.current = null;
+                markManualOverride(auto2PBibRef);
                 setSel2P(null);
 
                 const exclude = mode === "finish" ? [sel3P?.id, sel1P?.id] : [sel1P?.id];
                 const pick = tryAutoPickUniqueBib(v, candidatesFor(exclude));
-                if (pick) {
-                  setSel2P(pick);
-                  setIn2P(pick.bib != null ? String(pick.bib) : "");
-                  setTimeout(() => ref1P.current?.focus(), 0);
-                }
+                if (!pick) return;
+
+                setSel2P(pick);
+                setIn2P(pick.bib != null ? String(pick.bib) : "");
+                queueFocus(ref1P);
               }}
               onSelect={(next) => {
-                auto2PBibRef.current = null;
+                markManualOverride(auto2PBibRef);
                 setSel2P(next);
                 setIn2P(next?.bib != null ? String(next.bib) : "");
-
-                if (next) setTimeout(() => ref1P.current?.focus(), 0);
+                if (next) queueFocus(ref1P);
               }}
               onEnter={() => {
-                const m = resolveOrPlaceholder(in2P);
-                if (m) {
-                  auto2PBibRef.current = null;
-                  setSel2P(m);
-                  setIn2P(m.bib != null ? String(m.bib) : "");
-                  setTimeout(() => ref1P.current?.focus(), 0);
-                }
+                const resolved = resolveFieldSelection(in2P, setSel2P, setIn2P, auto2PBibRef);
+                if (resolved) queueFocus(ref1P);
               }}
             />
           </PointsRow>
 
           <PointsRow label="1 P">
-            <PointsBibField
+                        <PointsBibField
               value={sel1P}
               inputValue={in1P}
               inputRef={ref1P}
+              highlight={isAutoHighlighted(sel1P, auto1PBibRef.current)}
               options={optionsFor(new Set([sel3P?.id, sel2P?.id].filter(Boolean) as string[]))}
               filterOptions={filterOptions}
               formatOption={athleteLabel}
               resolveByBib={resolveOrPlaceholder}
-              onInputValueChange={(v, reason) => {
+                            onInputValueChange={(v, reason) => {
                 setIn1P(v);
                 if (reason !== "input") return;
 
-                auto1PBibRef.current = null;
+                markManualOverride(auto1PBibRef);
                 setSel1P(null);
 
                 const pick = tryAutoPickUniqueBib(v, candidatesFor([sel3P?.id, sel2P?.id]));
-                if (pick) {
-                  setSel1P(pick);
-                  setIn1P(pick.bib != null ? String(pick.bib) : "");
-                }
+                if (!pick) return;
+
+                setSel1P(pick);
+                setIn1P(pick.bib != null ? String(pick.bib) : "");
               }}
               onSelect={(next) => {
-                auto1PBibRef.current = null;
+                markManualOverride(auto1PBibRef);
                 setSel1P(next);
                 setIn1P(next?.bib != null ? String(next.bib) : "");
-
-                // saving is intentionally gated by Enter
                 maybeSaveIfComplete();
               }}
               onEnter={() => {
-                // mark that we want to save via Enter
+                // Mark that we want to save via Enter.
                 enterRequestedRef.current = true;
 
-                const m = resolveOrPlaceholder(in1P);
-                if (m) {
-                  auto1PBibRef.current = null;
-                  setSel1P(m);
-                  setIn1P(m.bib != null ? String(m.bib) : "");
+                const resolved = resolveFieldSelection(in1P, setSel1P, setIn1P, auto1PBibRef);
+                if (resolved) {
                   setTimeout(() => maybeSaveIfComplete(), 0);
                   return;
                 }
@@ -807,9 +891,16 @@ export default function PointsScoring({
           </PointsRow>
 
           <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 0.5 }}>
-            <Button size="small" variant="contained" onClick={() => void saveAsync()} disabled={!canSave}>
+            <Button
+              ref={saveButtonRef}
+              size="small"
+              variant="contained"
+              onClick={() => void saveAsync()}
+              disabled={!canSave}
+            >
               Save
             </Button>
+
             <Button size="small" variant="outlined" onClick={clearNow}>
               Clear
             </Button>
@@ -822,14 +913,16 @@ export default function PointsScoring({
         </Box>
       </Box>
 
-                        <ScoringStarterList
+            <ScoringStarterList
         starters={starters}
         missingInLiveBibs={missingInLiveBibs}
         selectedIds={selectedIds}
         statusByBib={statusByBib}
         pointsByBib={pointsByBib}
         formatAthleteLabel={athleteLabel}
+        onDeleteStarter={onDeleteStarter}
       />
+
 
 
 
@@ -870,4 +963,3 @@ export default function PointsScoring({
     </Box>
   );
 }
-

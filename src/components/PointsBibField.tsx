@@ -17,6 +17,9 @@ type Props = {
   options: Athlete[];
   inputRef?: React.Ref<HTMLInputElement>;
 
+  /** If true, render the field with a green "synced" outline. */
+  highlight?: boolean;
+
   filterOptions: AthleteFilterOptions;
   formatOption: (a: Athlete) => string;
   resolveByBib: (bibText: string) => Athlete | null;
@@ -42,6 +45,7 @@ export default function PointsBibField({
   inputValue,
   options,
   inputRef,
+  highlight = false,
   filterOptions,
   formatOption,
   resolveByBib,
@@ -93,6 +97,22 @@ export default function PointsBibField({
             {...rest}
             inputRef={inputRef}
             placeholder={placeholder}
+            sx={
+              highlight
+                ? {
+                    "& .MuiOutlinedInput-root fieldset": {
+                      borderColor: "success.main",
+                      borderWidth: 2,
+                    },
+                    "& .MuiOutlinedInput-root:hover fieldset": {
+                      borderColor: "success.main",
+                    },
+                    "& .MuiOutlinedInput-root.Mui-focused fieldset": {
+                      borderColor: "success.main",
+                    },
+                  }
+                : undefined
+            }
             slotProps={{
               input: {
                 ...InputProps,

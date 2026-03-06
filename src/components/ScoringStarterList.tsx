@@ -1,8 +1,20 @@
 import { useMemo, useState } from "react";
 
-import { Box, Chip, List, ListItem, ListItemText, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import {
+  Box,
+  Chip,
+  IconButton,
+  List,
+  ListItem,
+  ListItemText,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  Typography,
+} from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 
+import DeleteIcon from "@mui/icons-material/Delete";
 import GridViewIcon from "@mui/icons-material/GridView";
 import ViewListIcon from "@mui/icons-material/ViewList";
 
@@ -31,6 +43,8 @@ type Props = {
 
   /** Customize how a starter is displayed. */
   formatAthleteLabel?: (a: Athlete) => string;
+  /** Optional delete action, shown for starters missing in the live feed. */
+  onDeleteStarter?: (starter: Athlete) => void;
   title?: string;
   maxHeight?: number;
 };
@@ -46,6 +60,7 @@ export default function ScoringStarterList({
   statusByBib,
   pointsByBib,
   formatAthleteLabel,
+  onDeleteStarter,
   title = "Starters",
   maxHeight = 420,
 }: Props) {
@@ -186,6 +201,8 @@ export default function ScoringStarterList({
                 sx={{
                   px: 1,
                   borderRadius: 1,
+                  border: missing ? "2px solid" : undefined,
+                  borderColor: missing ? "error.main" : undefined,
                   bgcolor: isSelected ? "action.selected" : "transparent",
                   display: "flex",
                   alignItems: "center",
@@ -234,6 +251,21 @@ export default function ScoringStarterList({
                     }}
                   />
                 ) : null}
+
+                {missing && onDeleteStarter ? (
+                  <Tooltip title="Delete starter" arrow>
+                    <span>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => onDeleteStarter(a)}
+                        aria-label={`Delete starter ${bib ?? ""}`.trim()}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                ) : null}
               </ListItem>
             );
           })}
@@ -267,7 +299,8 @@ export default function ScoringStarterList({
                 sx={{
                   p: 0.5,
                   borderRadius: 1,
-                  border: "1px solid",
+                  border: "solid",
+                  borderWidth: missing ? 2 : 1,
                   // Frame color: match Scoreboard.tsx statusColor
                   borderColor: missing ? theme.palette.error.main : c ? c : "divider",
                   bgcolor: isSelected ? "action.selected" : "background.paper",
@@ -280,9 +313,35 @@ export default function ScoringStarterList({
                   userSelect: "none",
                 }}
               >
-                <Typography variant="body2" sx={{ fontVariantNumeric: "tabular-nums", lineHeight: 1, fontWeight: 800 }}>
-                  {bib ?? "?"}
-                </Typography>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, minHeight: 18 }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontVariantNumeric: "tabular-nums",
+                      lineHeight: 1,
+                      fontWeight: 800,
+                      color: missing ? "error.main" : "text.primary",
+                    }}
+                  >
+                    {bib ?? "?"}
+                  </Typography>
+
+                  {missing && onDeleteStarter ? (
+                    <Tooltip title="Delete starter" arrow>
+                      <span>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => onDeleteStarter(a)}
+                          aria-label={`Delete starter ${bib ?? ""}`.trim()}
+                          sx={{ p: 0.15 }}
+                        >
+                          <DeleteIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  ) : null}
+                </Box>
 
                 {st?.label ? (
                   <Typography variant="caption" sx={{ lineHeight: 1, color: c ?? "text.secondary", fontWeight: 700 }}>

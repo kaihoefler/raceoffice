@@ -24,7 +24,7 @@ import { useEventList } from "../providers/EventListProvider";
 import { useVisualizationList } from "../providers/VisualizationListProvider";
 
 import type { Event, FullEvent } from "../types/event";
-import type { FullVisualization, Visualization } from "../types/visualization";
+import type { FullVisualization, Visualization, VisualizationColumnAlign } from "../types/visualization";
 
 export type VisualizationOutletContext = {
   event: FullEvent | null;
@@ -52,8 +52,21 @@ function normalizeFullEvent(raw: unknown, eventId: string, listEntry: Event | nu
   };
 }
 
+function normalizeColumnAlign(value: unknown): VisualizationColumnAlign {
+  return value === "center" || value === "right" ? value : "left";
+}
+
 function normalizeFullVisualization(raw: unknown, visualizationId: string, listEntry: Visualization | null): FullVisualization {
   const obj = raw && typeof raw === "object" ? (raw as any) : {};
+  const columns = Array.isArray(obj.columns)
+    ? obj.columns.map((col: any) => ({
+        columnTitle: typeof col?.columnTitle === "string" ? col.columnTitle : "",
+        columnWidth: typeof col?.columnWidth === "string" ? col.columnWidth : "",
+        columnAlign: normalizeColumnAlign(col?.columnAlign),
+        columnFallback: typeof col?.columnFallback === "string" ? col.columnFallback : "",
+        columnContent: typeof col?.columnContent === "string" ? col.columnContent : "",
+      }))
+    : [];
 
   return {
     id: typeof obj.id === "string" ? obj.id : visualizationId,
@@ -65,8 +78,15 @@ function normalizeFullVisualization(raw: unknown, visualizationId: string, listE
           ? obj.name
           : "",
     backgroundColor: typeof obj.backgroundColor === "string" ? obj.backgroundColor : "#000000",
+    alternateRowBackgroundColor:
+      typeof obj.alternateRowBackgroundColor === "string" ? obj.alternateRowBackgroundColor : "",
+    usePaging: typeof obj.usePaging === "boolean" ? obj.usePaging : false,
+    pagingLines: typeof obj.pagingLines === "number" && Number.isFinite(obj.pagingLines) ? Math.max(0, Math.floor(obj.pagingLines)) : 10,
+    pagingTime: typeof obj.pagingTime === "number" && Number.isFinite(obj.pagingTime) ? Math.max(0, Math.floor(obj.pagingTime)) : 0,
     fontSize: typeof obj.fontSize === "string" ? obj.fontSize : "16px",
+    fontWeight: typeof obj.fontWeight === "string" ? obj.fontWeight : "400",
     fontColor: typeof obj.fontColor === "string" ? obj.fontColor : "#ffffff",
+    columns,
   };
 }
 

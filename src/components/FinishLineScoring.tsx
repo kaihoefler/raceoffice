@@ -53,6 +53,8 @@ type Props = {
 
   /** Optional: when a bib is not in starters, ask to create it (same flow as PointsScoring). */
   onCreateStarters?: (bibs: number[]) => Promise<void> | void;
+  onDeleteStarter?: (starter: Athlete) => void;
+  missingInLiveBibs?: Set<number>;
 };
 
 /**
@@ -174,6 +176,8 @@ export default function FinishLineScoring({
   resetKey,
   onChangeRaceResults,
   onCreateStarters,
+  onDeleteStarter,
+  missingInLiveBibs,
 }: Props) {
   /**
    * Starterliste sortieren:
@@ -1025,10 +1029,12 @@ export default function FinishLineScoring({
       {/* Starterliste: zeigt alle Starter und markiert die Finisher (selectedIds) */}
       <ScoringStarterList
         starters={starters}
+        missingInLiveBibs={missingInLiveBibs}
         selectedIds={selectedIds}
         statusByBib={statusByBib}
         pointsByBib={pointsByBib}
         formatAthleteLabel={athleteLabel}
+        onDeleteStarter={onDeleteStarter}
       />
 
       {/* Dialog: clear all finish entries */}

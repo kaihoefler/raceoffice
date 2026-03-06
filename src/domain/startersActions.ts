@@ -30,6 +30,14 @@ export function parseBib(input: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Returns a new starters list without the given athlete id. */
+export function removeStarterById(existing: Athlete[], athleteId: string): Athlete[] {
+  const base = Array.isArray(existing) ? existing : [];
+  const id = String(athleteId ?? "").trim();
+  if (!id) return [...base];
+  return base.filter((a) => String(a.id) !== id);
+}
+
 /**
  * Stable name key used for deduping when bib is missing.
  * Nation is included because names can repeat across nations.

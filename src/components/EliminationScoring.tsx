@@ -60,6 +60,8 @@ type Props = {
 
   /** Optional: when a bib is not in starters, ask to create it (same flow as PointsScoring). */
   onCreateStarters?: (bibs: number[]) => Promise<void> | void;
+  onDeleteStarter?: (starter: Athlete) => void;
+  missingInLiveBibs?: Set<number>;
 
   /** If true, EliminationScoring can react to live lap changes + prefill last-place bib. */
   syncEnabled?: boolean;
@@ -144,6 +146,8 @@ export default function EliminationScoring({
   onAddRaceActivity,
   onAddRaceActivities,
   onCreateStarters,
+  onDeleteStarter,
+  missingInLiveBibs,
   syncEnabled = false,
   liveLapCount = null,
   liveLastEligibleBibs = { lastBib: null, secondLastBib: null },
@@ -842,10 +846,12 @@ export default function EliminationScoring({
 
       <ScoringStarterList
         starters={starters}
+        missingInLiveBibs={missingInLiveBibs}
         selectedIds={selectedIds}
         statusByBib={statusByBib}
         pointsByBib={pointsByBib}
         formatAthleteLabel={athleteLabel}
+        onDeleteStarter={onDeleteStarter}
       />
 
       <Dialog
