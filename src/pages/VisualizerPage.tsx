@@ -77,25 +77,6 @@ function templateValueToString(value: unknown): string {
   return "";
 }
 
-// Rendert einfache Text-Templates.
-// {{dynamicResult}} wird hier bewusst entfernt, weil dieser Platzhalter
-// separat als ReactNode mit Speziallogik behandelt wird.
-function renderColumnTemplate(template: string, result: RaceResult, athlete: Athlete | null): string {
-  return String(template ?? "")
-    .replace(/{{\s*dynamicResult\s*}}/g, "")
-    .replace(/{{\s*(result|athlete)\.([a-zA-Z0-9_]+)\s*}}/g, (_, source: "result" | "athlete", key: string) => {
-      const obj = source === "result" ? (result as Record<string, unknown>) : ((athlete ?? {}) as Record<string, unknown>);
-      return templateValueToString(obj[key]);
-    });
-}
-
-// Liefert den finalen Text einer Spalte oder – falls leer – den konfigurierten Fallback.
-function resolveColumnText(column: VisualizationColumn, result: RaceResult, athlete: Athlete | null): string {
-  const rendered = renderColumnTemplate(column.columnContent, result, athlete).trim();
-  if (rendered) return rendered;
-
-  return String(column.columnFallback ?? "").trim();
-}
 
 // Reproduziert das Verhalten der bisherigen Standard-Result-Spalte.
 // - DSQ / ELIM als hervorgehobener Status

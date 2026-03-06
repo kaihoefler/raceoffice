@@ -51,7 +51,7 @@ import { useEventsActions } from "../hooks/useEventsActions";
 import { useScoringViewModel } from "./scoring/ScoringViewModel";
 
 import { buildRaceResultsCsv } from "../domain/raceResultsCsvExport";
-import { removeStarterById } from "../domain/startersActions";
+
 
 import RaceSelector from "../components/RaceSelector";
 
@@ -91,9 +91,11 @@ export default function ScoringPage() {
         status,
         error,
                 toggleActiveRace: toggleActiveRaceAction,
-                setActiveRace: setActiveRaceAction,
-        replaceRaceStarters,
+                                setActiveRace: setActiveRaceAction,
+        removeRaceStarter,
+
         upsertRaceStarters,
+
         saveRaceWithStarters,
 
 
@@ -220,10 +222,16 @@ export default function ScoringPage() {
     // -------------------------------------------------------------------------
     // Handlers: starters
     // -------------------------------------------------------------------------
-    /**
+        /**
      * Erstellt fehlende Starter anhand der Live-Daten (z.B. wenn Bibs im Live-Feed auftauchen,
      * aber noch nicht in raceStarters existieren).
+     *
+     * Wichtig:
+     * - neue Starter werden aggregate-aware ins Race gemergt
+     * - dabei wird `raceResults` direkt mit aufgebaut / rematerialisiert,
+     *   damit neue Bibs sofort als Result-Zeile im Scoring sichtbar sind
      */
+
     function handleCreateMissingStartersFromLive() {
         if (!race) return;
 
@@ -235,11 +243,14 @@ export default function ScoringPage() {
 
     }
 
-    /**
+        /**
      * Erstellt Starter für eine Liste von Bibs.
      * - vm.buildStartersForBibs(...) baut Athlete-Objekte
      * - wir deduplizieren gegen existierende raceStarters
+     * - anschließend werden `raceResults` neu aufgebaut, damit neue Starter
+     *   sofort im Rennen materialisiert sind
      */
+
         async function handleCreateStartersForBibs(bibs: number[]) {
         if (!race) return;
 
@@ -258,7 +269,8 @@ export default function ScoringPage() {
         const ok = window.confirm(`Starter${bibLabel} löschen?`);
         if (!ok) return;
 
-        replaceRaceStarters(race.id, removeStarterById(race.raceStarters ?? [], starter.id));
+                removeRaceStarter(race.id, starter.id);
+
     }
 
         // -------------------------------------------------------------------------

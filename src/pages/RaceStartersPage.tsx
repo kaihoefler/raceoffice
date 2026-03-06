@@ -1,4 +1,19 @@
 // src/pages/RaceStartersPage.tsx
+//
+// RaceStartersPage
+// ----------------
+// Zweck:
+// - Verwaltung der Starter eines einzelnen Rennens
+// - manuelles Hinzufügen, Editieren und Löschen von Startern
+// - Import von Starterlisten (Overwrite oder Merge)
+// - Navigation zum zugehörigen Scoring-Screen
+//
+// Wichtige Domänenidee:
+// - Änderungen an den Startern sollen nicht nur `raceStarters` verändern,
+//   sondern das Race als Ganzes konsistent halten
+// - deshalb nutzt die Seite die aggregate-aware Actions aus `useEventsActions(...)`
+// - diese Actions bereinigen bei Bedarf auch `raceActivities` und bauen
+//   `raceResults` anschließend neu auf
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
     Box,
@@ -38,17 +53,13 @@ import type { Athlete } from "../types/athlete";
 
 import { useEventsActions } from "../hooks/useEventsActions";
 
-import {
-  mergeStarters,
-  normalizeIoc,
-  parseBib,
-  rowsToAthletes,
-  type StarterImportRow,
-} from "../domain/startersActions";
+import { normalizeIoc, parseBib, rowsToAthletes, type StarterImportRow } from "../domain/startersActions";
+
 
 
 export default function RaceStartersPage() {
     // ---- Hooks (must run unconditionally) ----
+    // Routing + globale Event-Auswahl
     const navigate = useNavigate();
     const { raceId } = useParams<{ raceId: string }>();
     const { eventList } = useEventList();
@@ -56,31 +67,39 @@ export default function RaceStartersPage() {
 
     const activeEventId = eventList?.activeEventId ?? null;
 
-    const { fullEvent: eventDoc, status, error, replaceRaceStarters } = useEventsActions(activeEventId);
+    const { fullEvent: eventDoc, status, error, replaceRaceStarters, removeRaceStarter, upsertRaceStarters } = useEventsActions(activeEventId);
 
-    // Expose null while no activeEventId is selected (used by render guards below)
+
+
+    // Solange kein aktives Event gewählt ist, exponieren wir bewusst `null`.
+    // Das vereinfacht die Render-Guards weiter unten.
     const fullEvent = useMemo(() => (activeEventId ? eventDoc : null), [activeEventId, eventDoc]);
 
 
+    // Das aktuell in der Route ausgewählte Race auflösen.
     const race: Race | null = useMemo(() => {
         if (!fullEvent || !raceId) return null;
         return fullEvent.races.find((r) => r.id === raceId) ?? null;
     }, [fullEvent, raceId]);
 
+    // Altersklasse des Rennens nur für Anzeigezwecke bestimmen.
     const raceAgeGroup = useMemo(() => {
         if (!fullEvent || !race) return null;
         return fullEvent.ageGroups.find((ag) => ag.id === race.ageGroupId) ?? null;
     }, [fullEvent, race]);
 
+    // Wechsel auf ein anderes Race über den Selector im Header.
     function handleRaceSelect(nextRaceId: string) {
         if (!nextRaceId || nextRaceId === raceId) return;
         cancelEdit(); // optional: Edit-State sauber abbrechen
         navigate(`/races/${nextRaceId}/starters`);
     }
 
+    // Komfortable Ableitungen für Rendering und Aktionen.
     const starters: Athlete[] = race?.raceStarters ?? [];
     const startersCount = starters.length;
 
+    // Für die Anzeige sortieren wir nach Bib; Starter ohne Bib wandern ans Ende.
     const startersSorted = useMemo(() => {
         return [...starters].sort((a, b) => {
             const ai = a.bib ?? Number.MAX_SAFE_INTEGER; // bib=null ans Ende
@@ -98,7 +117,7 @@ export default function RaceStartersPage() {
         setTimeout(() => newBibRef.current?.focus(), 0);
     }, [race?.id]);
 
-    // Inline edit state
+    // Inline-Edit-State für genau eine bearbeitete Tabellenzeile.
     const [editingAthleteId, setEditingAthleteId] = useState<string | null>(null);
     const [editingDraft, setEditingDraft] = useState<{
         bib: string;
@@ -107,6 +126,7 @@ export default function RaceStartersPage() {
         nation: string;
     } | null>(null);
 
+    // Eingabemodell für die leere "neuer Starter"-Zeile am Tabellenende.
     const [newDraft, setNewDraft] = useState({
         bib: "",
         firstName: "",
@@ -114,12 +134,30 @@ export default function RaceStartersPage() {
         nation: "",
     });
 
-        function updateRaceStarters(nextStarters: Athlete[]) {
+    /**
+* Aggregate-aware replace:
+* - ersetzt die komplette Starterliste
+* - bereinigt abhängige raceActivities
+* - materialisiert raceResults danach neu
+*/
+    function updateRaceStarters(nextStarters: Athlete[]) {
         if (!raceId) return;
         replaceRaceStarters(raceId, nextStarters);
     }
 
+    /**
+     * Aggregate-aware upsert:
+     * - fügt Starter hinzu oder merged sie per bib/name
+     * - baut raceResults für neue Starter direkt mit auf
+     */
+    function addOrMergeRaceStarters(incoming: Athlete[]) {
+        if (!raceId) return;
+        upsertRaceStarters(raceId, incoming, { recomputeResults: true });
+    }
 
+
+
+    // Startet die Inline-Bearbeitung eines vorhandenen Starters.
     function startEdit(a: Athlete) {
         setEditingAthleteId(a.id);
         setEditingDraft({
@@ -130,11 +168,15 @@ export default function RaceStartersPage() {
         });
     }
 
+    // Bricht die Inline-Bearbeitung ab und verwirft den Draft.
     function cancelEdit() {
         setEditingAthleteId(null);
         setEditingDraft(null);
     }
 
+    // Speichert die aktuell bearbeitete Tabellenzeile.
+    // Wir ersetzen bewusst die komplette Starterliste des Races,
+    // damit die Domain-Logik anschließend Konsistenzregeln anwenden kann.
     function saveEdit() {
         if (!race || !editingAthleteId || !editingDraft) return;
 
@@ -155,14 +197,21 @@ export default function RaceStartersPage() {
         cancelEdit();
     }
 
-        function deleteStarter(athleteId: string) {
+    // Löscht einen einzelnen Starter aggregate-aware.
+    // Dabei werden auch abhängige Race-Strukturen bereinigt.
+    function deleteStarter(athleteId: string) {
         const ok = window.confirm("Delete starter?");
         if (!ok) return;
 
-        updateRaceStarters(starters.filter((a) => a.id !== athleteId));
+        if (!raceId) return;
+
+        removeRaceStarter(raceId, athleteId);
         if (editingAthleteId === athleteId) cancelEdit();
+
     }
 
+    // Löscht alle Starter des Races.
+    // Folge: raceActivities/raceResults werden ebenfalls konsistent zurückgebaut.
     function deleteAllStarters() {
         if (!race) return;
         if (!starters.length) return;
@@ -176,6 +225,8 @@ export default function RaceStartersPage() {
     }
 
 
+    // Fügt einen neuen Starter aus der Eingabezeile hinzu.
+    // Der Upsert ist aggregate-aware, d.h. neue Result-Zeilen werden direkt aufgebaut.
     function addStarter(): boolean {
         if (!race) return false;
 
@@ -192,7 +243,8 @@ export default function RaceStartersPage() {
             ageGroupId: race.ageGroupId,
         };
 
-        updateRaceStarters([...starters, nextAthlete]);
+        addOrMergeRaceStarters([nextAthlete]);
+
 
         // clear row + refocus bib (start next entry)
         setNewDraft({ bib: "", firstName: "", lastName: "", nation: "" });
@@ -201,8 +253,12 @@ export default function RaceStartersPage() {
         return true;
     }
 
-        type ImportPreviewRow = StarterImportRow;
+    // Import-Typalias nur für bessere Lesbarkeit der Handler-Signatur.
+    type ImportPreviewRow = StarterImportRow;
 
+    // Verarbeitet den CSV-/Listen-Import aus RaceStartersImport.
+    // - overwrite: ersetzt die komplette Starterliste
+    // - merge: fügt neue Starter hinzu bzw. merged bestehende und rematerialisiert Ergebnisse
     function handleImport(mode: "overwrite" | "merge", rows: ImportPreviewRow[]) {
 
         if (!race) return;
@@ -213,18 +269,21 @@ export default function RaceStartersPage() {
             return;
         }
 
-        // merge
-        const next = mergeStarters(starters, rows, race.ageGroupId);
-        updateRaceStarters(next);
+        // merge (aggregate-aware): neue/importierte Starter werden dedupliziert
+        // und raceResults danach direkt neu materialisiert.
+        addOrMergeRaceStarters(rowsToAthletes(rows, race.ageGroupId));
+
     }
 
 
-        function goToScoring() {
+    // Komfort-Navigation direkt in die Scoring-Ansicht des aktuellen Races.
+    function goToScoring() {
         if (!race) return;
         cancelEdit();
         navigate(`/races/${race.id}/scoring`);
     }
 
+    // Enter in der neuen Zeile speichert direkt einen Starter.
     function handleNewRowKeyDown(ev: React.KeyboardEvent) {
 
         if (ev.key !== "Enter") return;
@@ -241,6 +300,7 @@ export default function RaceStartersPage() {
     }
 
     // ---- Render guards (after all hooks) ----
+    // Wichtig: Guards erst nach allen Hooks, damit die Hook-Reihenfolge stabil bleibt.
     if (!raceId) return <Typography variant="h6">Missing raceId.</Typography>;
     if (!eventList) return <Typography variant="h6">Loading…</Typography>;
     if (!activeEventId) return <Typography variant="h6">No active event selected.</Typography>;
@@ -275,6 +335,7 @@ export default function RaceStartersPage() {
         );
     }
 
+    // Benutzerfreundliches Label für die Tabellenanzeige.
     const ageGroupLabel = raceAgeGroup ? `${raceAgeGroup.name} (${raceAgeGroup.gender})` : race.ageGroupId;
 
     return (
@@ -283,7 +344,7 @@ export default function RaceStartersPage() {
                 <CardHeader
                     title={race.name}
                     action={
-                                                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                             <RaceSelector
                                 races={fullEvent.races}
                                 ageGroups={fullEvent.ageGroups}
@@ -346,6 +407,7 @@ export default function RaceStartersPage() {
                         </TableHead>
 
                         <TableBody>
+                            {/* Vorhandene Starter in sortierter Reihenfolge */}
                             {startersSorted.map((a) => {
                                 const isEditing = editingAthleteId === a.id;
                                 const d = editingDraft;
@@ -462,7 +524,7 @@ export default function RaceStartersPage() {
                                         size="small"
                                         value={newDraft.bib}
                                         onChange={(e) => setNewDraft((p) => ({ ...p, bib: e.target.value }))}
-                                        onKeyDown={ handleNewRowKeyDown }
+                                        onKeyDown={handleNewRowKeyDown}
                                         placeholder="bib"
                                         inputRef={newBibRef}
                                     />

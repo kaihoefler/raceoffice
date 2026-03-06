@@ -22,6 +22,7 @@ import type { Race, RaceResult } from "../types/race";
 import type { RaceActivity } from "../types/raceactivities";
 
 import { upsertStarters } from "../domain/startersActions";
+import { removeStarterFromRace, replaceRaceStartersInRace, upsertRaceStartersInRace } from "../domain/raceActions";
 
 import {
   applyActivitiesToRaceResults,
@@ -67,6 +68,7 @@ export type UseEventsActionsResult = {
 
   /** Starters helpers. */
   replaceRaceStarters: (raceId: string, nextStarters: Athlete[]) => void;
+  removeRaceStarter: (raceId: string, athleteId: string) => void;
   upsertRaceStarters: (raceId: string, incoming: Athlete[], options?: { recomputeResults?: boolean }) => void;
 
   // ---------------------------------------------------------------------------
@@ -235,32 +237,34 @@ export function useEventsActions(eventId: string | null | undefined): UseEventsA
   );
 
   // Replace the entire starters list for a race.
-  // Use this for bulk editing screens.
+  // This action is aggregate-aware and keeps starters, results and activities consistent.
   const replaceRaceStarters = useCallback(
     (raceId: string, nextStarters: Athlete[]) => {
-      updateRace(raceId, (r) => ({ ...r, raceStarters: Array.isArray(nextStarters) ? nextStarters : [] }));
+      updateRace(raceId, (r) => replaceRaceStartersInRace(r, nextStarters));
     },
     [updateRace],
   );
 
-  // Add/merge starters into an existing starters list (dedupe by bib/id handled by upsertStarters).
-  // Optionally recompute/materialize raceResults so UI stays consistent.
+  // Remove one starter and clean up all dependent race structures in the same update.
+  const removeRaceStarter = useCallback(
+    (raceId: string, athleteId: string) => {
+      updateRace(raceId, (r) => removeStarterFromRace(r, athleteId));
+    },
+    [updateRace],
+  );
+
+  // Add/merge starters into an existing starters list.
+  // If recomputeResults=true, this uses the aggregate-aware domain action so that
+  // newly imported live starters immediately get a consistent default raceResult row.
   const upsertRaceStarters = useCallback(
     (raceId: string, incoming: Athlete[], options?: { recomputeResults?: boolean }) => {
       updateRace(raceId, (r) => {
-        const nextStarters = upsertStarters(r.raceStarters ?? [], incoming ?? []);
-
         if (!options?.recomputeResults) {
+          const nextStarters = upsertStarters(r.raceStarters ?? [], incoming ?? []);
           return { ...r, raceStarters: nextStarters };
         }
 
-        const nextResults = materializeRaceResults({
-          prevResults: Array.isArray(r.raceResults) ? r.raceResults : [],
-          starters: nextStarters,
-          activities: Array.isArray(r.raceActivities) ? r.raceActivities : [],
-        });
-
-        return { ...r, raceStarters: nextStarters, raceResults: nextResults };
+        return upsertRaceStartersInRace(r, incoming ?? []);
       });
     },
     [updateRace],
@@ -380,6 +384,7 @@ export function useEventsActions(eventId: string | null | undefined): UseEventsA
     setActiveRace,
     toggleActiveRace,
     replaceRaceStarters,
+    removeRaceStarter,
     upsertRaceStarters,
 
     addRaceActivity,

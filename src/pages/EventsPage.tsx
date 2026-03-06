@@ -13,7 +13,8 @@
 // - Delete ist per confirm abgesichert
 // - Editor-Dialog wird über lokale State-Maschine (editorMode/editingId/showEditor) gesteuert
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
 import {
   Box,
   Button,
@@ -34,11 +35,16 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import DownloadIcon from "@mui/icons-material/Download";
+
 
 import EventEditor from "../components/EventEditor";
-import type { Event } from "../types/event";
+import type { Event, FullEvent } from "../types/event";
 
 import { useEventList } from "../providers/EventListProvider";
+import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
+import { normalizeFullEvent, slugify } from "../domain/eventActions";
+
 
 export default function EventsPage() {
   /**
@@ -55,20 +61,20 @@ export default function EventsPage() {
    * - editingId: welche Event-ID gerade bearbeitet/angelegt wird
    * - showEditor: Dialog sichtbar ja/nein
    */
-  const [editorMode, setEditorMode] = useState<"new" | "edit">("new");
+    const [editorMode, setEditorMode] = useState<"new" | "edit">("new");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [exportEventId, setExportEventId] = useState<string | null>(null);
 
-  /**
-   * Guard: solange eventList noch nicht geladen/initialisiert ist,
-   * rendern wir nichts.
-   *
-   * (Optional könntest du hier auch einen Loading-State anzeigen.)
-   */
-  if (!eventList) return null;
+  const exportDocId = exportEventId ? `Event-${exportEventId}` : null;
+  const { data: rawExportEvent, status: exportStatus, error: exportError } = useRealtimeDoc<Partial<FullEvent>>(exportDocId);
+
+
+  
 
   /**
    * Setzt den Editor in den Ausgangszustand zurück:
+
    * - Dialog schließen
    * - editingId löschen
    * - Mode zurück auf "new"
@@ -112,7 +118,7 @@ export default function EventsPage() {
    * - ruft deleteEvent im Provider
    * - falls gerade dieses Event im Editor offen ist: Editor schließen/resetten
    */
-  function handleDelete(e: Event) {
+    function handleDelete(e: Event) {
     const ok = window.confirm(`Event "${e.name}" wirklich löschen?`);
     if (!ok) return;
 
@@ -122,7 +128,60 @@ export default function EventsPage() {
     if (editingId === e.id) resetForm();
   }
 
+  /**
+   * Startet den Export eines FullEvent-Dokuments.
+   * Das eigentliche Lesen passiert über useRealtimeDoc("Event-{id}").
+   * Sobald der Snapshot verfügbar ist, wird er über normalizeFullEvent(...) defensiv
+   * normalisiert und als JSON-Datei heruntergeladen.
+   */
+  function startExportEvent(e: Event) {
+    setExportEventId(e.id);
+  }
+
+  useEffect(() => {
+    if (!exportEventId) return;
+    if (exportStatus !== "connected") return;
+    if (!rawExportEvent) return;
+
+    const normalized = normalizeFullEvent(rawExportEvent, exportEventId);
+    if (normalized.id !== exportEventId) return;
+
+    const filenameBase = slugify(normalized.slug || normalized.name || exportEventId) || exportEventId;
+    const filename = `${filenameBase}.json`;
+    const json = JSON.stringify(normalized, null, 2);
+
+    const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    setExportEventId(null);
+  }, [exportEventId, rawExportEvent, exportStatus]);
+
+    useEffect(() => {
+    if (!exportEventId) return;
+    if (!exportError) return;
+
+    window.alert(`Event export failed: ${exportError}`);
+    setExportEventId(null);
+  }, [exportEventId, exportError]);
+
+  /**
+   * Guard: solange eventList noch nicht geladen/initialisiert ist,
+   * rendern wir nichts.
+   *
+   * Wichtig: erst NACH allen Hooks returnen, damit die Hook-Reihenfolge
+   * zwischen den Renders stabil bleibt.
+   */
+  if (!eventList) return null;
+
   return (
+
     <Box>
       {/* Card: Event-Liste */}
       <Card variant="outlined">
@@ -194,8 +253,24 @@ export default function EventsPage() {
                       </Button>
                     </TableCell>
 
-                    {/* Actions: Edit / Delete */}
+                                        {/* Actions: Export / Edit / Delete */}
                     <TableCell align="right">
+                      <Tooltip
+                        title={exportEventId === e.id ? `Exporting... (${exportStatus})` : "Export JSON"}
+                        arrow
+                      >
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => startExportEvent(e)}
+                            aria-label="Export Event JSON"
+                            disabled={exportEventId !== null}
+                          >
+                            <DownloadIcon />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+
                       <Tooltip title="Edit" arrow>
                         <IconButton size="small" onClick={() => startEdit(e)} aria-label="Edit Event">
                           <EditIcon />
@@ -214,6 +289,7 @@ export default function EventsPage() {
                         </IconButton>
                       </Tooltip>
                     </TableCell>
+
                   </TableRow>
                 );
               })}
