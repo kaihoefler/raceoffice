@@ -285,12 +285,25 @@ export default function FinishLineScoring({
   const canFillFromLive = true;
   //const canFillFromLive = Number(liveMeta.lapsToGo ?? NaN) === 0;
 
+  /**
+   * Übernimmt Finish-Daten aus dem Live-Feed und baut daraus RaceResults.
+   *
+   * Regeln:
+   * - nur eindeutige, gültige Bibs werden übernommen
+   * - Fahrer ohne absolvierte Runde erhalten keinen Finish-Rank (finishRank = 0)
+   * - Fahrer ohne gültige Live-Position erhalten ebenfalls keinen Finish-Rank (finishRank = 0)
+   * - finishTime wird nur gesetzt, wenn die gefahrenen Runden exakt der Race-Lap-Anzahl entsprechen
+   *
+   * Hinweis:
+   * Diese Aktion ersetzt die bisherigen RaceResults vollständig durch den Live-Snapshot.
+   */
   function handleFillFromLive() {
     if (!canFillFromLive) return;
 
     const raceLap = liveMeta.lapsComplete;
 
-    const sorted = Array.isArray(liveCompetitors)
+    // Für stabile Verarbeitung sortieren wir nach Live-Position.
+    const sortedLiveCompetitors = Array.isArray(liveCompetitors)
       ? [...liveCompetitors].sort((a, b) => (Number(a.position ?? 9999) || 9999) - (Number(b.position ?? 9999) || 9999))
       : [];
 
@@ -298,15 +311,21 @@ export default function FinishLineScoring({
     const seen = new Set<number>();
     const nextRaceResults: RaceResult[] = [];
 
-    for (let i = 0; i < sorted.length; i++) {
-      const c = sorted[i];
+    for (let i = 0; i < sortedLiveCompetitors.length; i++) {
+      const c = sortedLiveCompetitors[i];
       const bib = bibToInt(String(c.number ?? ""));
       if (bib == null) continue;
       if (seen.has(bib)) continue;
       seen.add(bib);
 
-      const finishRank = Number(c.position ?? 0) > 0 ? Number(c.position) : i + 1;
       const lapsCompleted = Number.isFinite(Number(c.lapsComplete)) ? Number(c.lapsComplete) : 0;
+
+      // Live-Import-Regeln für finishRank:
+      // - ohne absolvierte Runde => kein Finish-Rank
+      // - ohne gültige Position  => kein Finish-Rank
+      const hasCompletedLaps = lapsCompleted > 0;
+      const hasLivePosition = Number(c.position ?? 0) > 0;
+      const finishRank = hasCompletedLaps && hasLivePosition ? Number(c.position) : 0;
 
       const shouldCopyTime = raceLap != null && Number.isFinite(Number(raceLap)) && lapsCompleted === Number(raceLap);
       const finishTime = shouldCopyTime ? String(c.totalTime ?? "") : "";

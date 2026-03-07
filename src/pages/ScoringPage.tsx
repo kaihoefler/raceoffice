@@ -25,18 +25,18 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  Chip,
-  Divider,
-  IconButton,
-  Tab,
-  Tabs,
-  Tooltip,
-  Typography,
+    Box,
+    Button,
+    Card,
+    CardContent,
+    CardHeader,
+    Chip,
+    Divider,
+    IconButton,
+    Tab,
+    Tabs,
+    Tooltip,
+    Typography,
 } from "@mui/material";
 
 import HomeIcon from "@mui/icons-material/Home";
@@ -84,14 +84,14 @@ export default function ScoringPage() {
     const { raceId } = useParams<{ raceId: string }>();
     const { eventList } = useEventList();
 
-        const activeEventId = eventList?.activeEventId ?? null;
+    const activeEventId = eventList?.activeEventId ?? null;
 
-                const {
+    const {
         fullEvent: eventDoc,
         status,
         error,
-                toggleActiveRace: toggleActiveRaceAction,
-                                setActiveRace: setActiveRaceAction,
+        toggleActiveRace: toggleActiveRaceAction,
+        setActiveRace: setActiveRaceAction,
         removeRaceStarter,
 
         upsertRaceStarters,
@@ -101,7 +101,7 @@ export default function ScoringPage() {
 
 
         // Scoring-specific actions (centralized in useEventsActions)
-                addRaceActivity,
+        addRaceActivity,
         addRaceActivities,
         updateRaceActivity,
         replaceRaceActivities,
@@ -135,7 +135,7 @@ export default function ScoringPage() {
     // -------------------------------------------------------------------------
     // Local UI state
     // -------------------------------------------------------------------------
-        const [syncEnabled, setSyncEnabled] = useState(false);
+    const [syncEnabled, setSyncEnabled] = useState(false);
     const [col1Tab, setCol1Tab] = useState<"points" | "finish" | "elimination">("points");
 
     /**
@@ -165,7 +165,7 @@ export default function ScoringPage() {
      * - Aktivieren setzt activeRaceId immer auf dieses Race (überschreibt ggf. ein anderes aktives Race)
      * - Deaktivieren setzt activeRaceId nur dann auf null, wenn dieses Race aktuell aktiv ist
      */
-        function toggleActiveRace() {
+    function toggleActiveRace() {
         if (!race) return;
         toggleActiveRaceAction(race.id);
     }
@@ -174,40 +174,40 @@ export default function ScoringPage() {
     // -------------------------------------------------------------------------
     // Handlers: race activities (points sprint / elimination / etc.)
     // -------------------------------------------------------------------------
-        /**
-         * Update einer existierenden RaceActivity.
-         *
-         * Wichtig:
-         * - Diese App ist non-optimistic: wir patchen das Realtime-Dokument und berechnen davor den Folgezustand.
-         * - Nach jeder Activity-Änderung werden raceResults neu materialisiert:
-         *   applyActivitiesToRaceResults(...) -> recomputeRaceResults(...)
-         */
-                function handleUpdateActivity(updated: RaceActivity) {
+    /**
+     * Update einer existierenden RaceActivity.
+     *
+     * Wichtig:
+     * - Diese App ist non-optimistic: wir patchen das Realtime-Dokument und berechnen davor den Folgezustand.
+     * - Nach jeder Activity-Änderung werden raceResults neu materialisiert:
+     *   applyActivitiesToRaceResults(...) -> recomputeRaceResults(...)
+     */
+    function handleUpdateActivity(updated: RaceActivity) {
         if (!race) return;
         updateRaceActivity(race.id, updated);
     }
 
 
-        /**
-         * Ersetzt die komplette Activities-Liste eines Rennens.
-         * Danach müssen derived fields + rank neu berechnet werden.
-         */
-                function handleReplaceActivities(nextActivities: RaceActivity[]) {
+    /**
+     * Ersetzt die komplette Activities-Liste eines Rennens.
+     * Danach müssen derived fields + rank neu berechnet werden.
+     */
+    function handleReplaceActivities(nextActivities: RaceActivity[]) {
         if (!race) return;
         replaceRaceActivities(race.id, nextActivities);
     }
 
 
-        /**
-         * Fügt eine PointsSprint-Activity hinzu.
-         * Wir hängen die Activity an und materialisieren anschließend raceResults + rank neu.
-         */
-                                function handleAddPointsSprintActivity(activity: RaceActivityPointsSprint) {
+    /**
+     * Fügt eine PointsSprint-Activity hinzu.
+     * Wir hängen die Activity an und materialisieren anschließend raceResults + rank neu.
+     */
+    function handleAddPointsSprintActivity(activity: RaceActivityPointsSprint) {
         if (!race) return;
         addRaceActivity(race.id, activity);
     }
 
-        function handleAddRaceActivity(activity: RaceActivity) {
+    function handleAddRaceActivity(activity: RaceActivity) {
         if (!race) return;
         addRaceActivity(race.id, activity);
     }
@@ -222,15 +222,15 @@ export default function ScoringPage() {
     // -------------------------------------------------------------------------
     // Handlers: starters
     // -------------------------------------------------------------------------
-        /**
-     * Erstellt fehlende Starter anhand der Live-Daten (z.B. wenn Bibs im Live-Feed auftauchen,
-     * aber noch nicht in raceStarters existieren).
-     *
-     * Wichtig:
-     * - neue Starter werden aggregate-aware ins Race gemergt
-     * - dabei wird `raceResults` direkt mit aufgebaut / rematerialisiert,
-     *   damit neue Bibs sofort als Result-Zeile im Scoring sichtbar sind
-     */
+    /**
+ * Erstellt fehlende Starter anhand der Live-Daten (z.B. wenn Bibs im Live-Feed auftauchen,
+ * aber noch nicht in raceStarters existieren).
+ *
+ * Wichtig:
+ * - neue Starter werden aggregate-aware ins Race gemergt
+ * - dabei wird `raceResults` direkt mit aufgebaut / rematerialisiert,
+ *   damit neue Bibs sofort als Result-Zeile im Scoring sichtbar sind
+ */
 
     function handleCreateMissingStartersFromLive() {
         if (!race) return;
@@ -238,26 +238,26 @@ export default function ScoringPage() {
         const missing = vm.getMissingStarterBibsFromLive();
         if (!missing.length) return;
 
-                                upsertRaceStarters(race.id, missing, { recomputeResults: true });
+        upsertRaceStarters(race.id, missing, { recomputeResults: true });
 
 
     }
 
-        /**
-     * Erstellt Starter für eine Liste von Bibs.
-     * - vm.buildStartersForBibs(...) baut Athlete-Objekte
-     * - wir deduplizieren gegen existierende raceStarters
-     * - anschließend werden `raceResults` neu aufgebaut, damit neue Starter
-     *   sofort im Rennen materialisiert sind
-     */
+    /**
+ * Erstellt Starter für eine Liste von Bibs.
+ * - vm.buildStartersForBibs(...) baut Athlete-Objekte
+ * - wir deduplizieren gegen existierende raceStarters
+ * - anschließend werden `raceResults` neu aufgebaut, damit neue Starter
+ *   sofort im Rennen materialisiert sind
+ */
 
-        async function handleCreateStartersForBibs(bibs: number[]) {
+    async function handleCreateStartersForBibs(bibs: number[]) {
         if (!race) return;
 
         const toAdd = vm.buildStartersForBibs(bibs);
         if (!toAdd.length) return;
 
-                                upsertRaceStarters(race.id, toAdd, { recomputeResults: true });
+        upsertRaceStarters(race.id, toAdd, { recomputeResults: true });
 
 
     }
@@ -269,25 +269,25 @@ export default function ScoringPage() {
         const ok = window.confirm(`Starter${bibLabel} löschen?`);
         if (!ok) return;
 
-                removeRaceStarter(race.id, starter.id);
+        removeRaceStarter(race.id, starter.id);
 
     }
 
-        // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
 
     // Handlers: race results (manual finish entry)
     // -------------------------------------------------------------------------
     // FinishLineScoring edits manual finish fields in raceResults (finishRank/finishTime).
     // We must merge these manual edits with derived fields from activities and finally recompute rank.
-                                /**
-                                 * Übernimmt manuell editierte RaceResults (z.B. FinishLineScoring) ins Event-Dokument.
-                                 *
-                                 * Wichtig:
-                                 * - Manuelle Felder (finishRank/finishTime/...) kommen aus dem UI.
-                                 * - Abgeleitete Felder (points/eliminated/...) werden aus Activities neu berechnet.
-                                 * - Danach wird rank neu berechnet.
-                                 */
-                                function handleChangeRaceResults(nextResults: RaceResult[]) {
+    /**
+     * Übernimmt manuell editierte RaceResults (z.B. FinishLineScoring) ins Event-Dokument.
+     *
+     * Wichtig:
+     * - Manuelle Felder (finishRank/finishTime/...) kommen aus dem UI.
+     * - Abgeleitete Felder (points/eliminated/...) werden aus Activities neu berechnet.
+     * - Danach wird rank neu berechnet.
+     */
+    function handleChangeRaceResults(nextResults: RaceResult[]) {
 
         if (!race) return;
         setRaceResultsManual(race.id, nextResults);
@@ -403,7 +403,7 @@ export default function ScoringPage() {
                     }
                     action={
                         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                                                        <RaceSelector
+                            <RaceSelector
                                 races={fullEvent.races}
                                 ageGroups={fullEvent.ageGroups}
                                 value={race.id}
@@ -412,7 +412,7 @@ export default function ScoringPage() {
                                 activeRaceId={fullEvent.activeRaceId}
                             />
 
-                                                        <Tooltip title="Export results as CSV" arrow>
+                            <Tooltip title="Export results as CSV" arrow>
                                 <span>
                                     <IconButton
                                         size="small"
@@ -470,7 +470,7 @@ export default function ScoringPage() {
                             alignItems: "start",
                         }}
                     >
-                                                {/* Spalte 1: Tabs (Points / Finish / Elimination) */}
+                        {/* Spalte 1: Tabs (Points / Finish / Elimination) */}
                         <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, minHeight: 0 }}>
                             <Tabs
                                 value={col1Tab}
@@ -485,7 +485,7 @@ export default function ScoringPage() {
 
                             <Box sx={{ p: 1 }}>
                                 {col1Tab === "points" ? (
-                                                                        <PointsScoring
+                                    <PointsScoring
                                         race={race}
                                         resetKey={race.id}
                                         onAddRaceActivity={handleAddPointsSprintActivity}
@@ -499,7 +499,7 @@ export default function ScoringPage() {
                                     />
 
                                 ) : col1Tab === "finish" ? (
-                                                                        <FinishLineScoring
+                                    <FinishLineScoring
                                         race={race}
                                         resetKey={race.id}
                                         onChangeRaceResults={handleChangeRaceResults}
@@ -509,7 +509,7 @@ export default function ScoringPage() {
                                     />
 
                                 ) : (
-                                                                                                                                                                                                                                                                                                                                                                                                                                                <EliminationScoring
+                                    <EliminationScoring
                                         race={race}
                                         resetKey={race.id}
                                         onAddRaceActivity={handleAddRaceActivity}
@@ -519,7 +519,7 @@ export default function ScoringPage() {
                                         missingInLiveBibs={vm.missingInLiveBibs}
                                         syncEnabled={vm.syncEnabled}
                                         liveLapCount={vm.liveLapCount}
-                                                                                liveLastEligibleBibs={vm.liveLastEligibleBibs}
+                                        liveLastEligibleBibs={vm.liveLastEligibleBibs}
                                         liveZeroLapBibs={vm.liveZeroLapBibs}
                                     />
 
@@ -534,7 +534,7 @@ export default function ScoringPage() {
 
 
                         {/* Spalte 4: Live race status (polled via RaceStatusProvider) */}
-                                                                        <LiveRaceStatus
+                        <LiveRaceStatus
                             unknownLiveBibs={vm.unknownLiveBibs}
                             onCreateStarters={handleCreateMissingStartersFromLive}
                             syncEnabled={syncEnabled}
@@ -544,8 +544,8 @@ export default function ScoringPage() {
 
                             // Create race from live status
                             eventId={activeEventId}
-                                                        ageGroups={fullEvent.ageGroups}
-                                                        onCreateRaceFromLive={(draft, starters) => {
+                            ageGroups={fullEvent.ageGroups}
+                            onCreateRaceFromLive={(draft, starters) => {
                                 // 1) create the race (incl. starters + materialized results)
                                 saveRaceWithStarters(draft, starters);
 

@@ -195,6 +195,15 @@ export default function EliminationScoring({
   const [rows, setRows] = useState<Array<{ sel: Athlete | null; input: string }>>([{ sel: null, input: "" }]);
   const [error, setError] = useState<string | null>(null);
 
+  // Beim Wechsel auf DNS/DSQ Eingaben immer leeren.
+  useEffect(() => {
+    if (mode !== "DNS" && mode !== "DSQ") return;
+
+    setRows([{ sel: null, input: "" }]);
+    setError(null);
+    focusIndex(0);
+  }, [mode]);
+
   // Normalize row count when switching modes:
   // - elim1/elim2 => exactly 1 or 2 rows
   // - DNS/DSQ => keep current rows but ensure a trailing empty row exists
@@ -221,6 +230,7 @@ export default function EliminationScoring({
   }, [isFixedElimMode, elimBibCount, allowAutoGrow]);
 
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const saveButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // ---------------------------------------------------------------------------
   // Dialog: missing starters (non-optimistic flow)
@@ -303,6 +313,17 @@ export default function EliminationScoring({
   // ---------------------------------------------------------------------------
   const prevLiveLapRef = useRef<number | null>(null);
   const autoPrefillBibsRef = useRef<{ bib0: number | null; bib1: number | null }>({ bib0: null, bib1: null });
+
+  function setAutoPrefillBib(idx: 0 | 1, bib: number | null) {
+    autoPrefillBibsRef.current = {
+      ...autoPrefillBibsRef.current,
+      [`bib${idx}`]: bib,
+    } as { bib0: number | null; bib1: number | null };
+  }
+
+  function clearAutoPrefillBib(idx: 0 | 1) {
+    setAutoPrefillBib(idx, null);
+  }
 
   // When sync is turned off, forget previous live lap (so re-enabling doesn't trigger a stale "change").
   useEffect(() => {
@@ -429,6 +450,17 @@ export default function EliminationScoring({
     setTimeout(() => inputRefs.current[i]?.focus(), 0);
   }
 
+  function isAutoHighlighted(row: { sel: Athlete | null; input: string }, idx: number): boolean {
+    if (!syncEnabled || !isFixedElimMode) return false;
+    if (idx > 1) return false;
+
+    const autoBib = idx === 0 ? autoPrefillBibsRef.current.bib0 : autoPrefillBibsRef.current.bib1;
+    if (autoBib == null) return false;
+
+    const currentBib = row.sel?.bib ?? bibToInt(row.input);
+    return currentBib != null && currentBib === autoBib;
+  }
+
   function makePlaceholderAthlete(bib: number): Athlete {
     return {
       id: `placeholder_${race.id}_${bib}`,
@@ -497,14 +529,15 @@ export default function EliminationScoring({
     });
   }
 
-  function resetRows() {
+  function resetRows(shouldFocusFirst = true) {
     if (isFixedElimMode) {
       setRows(Array.from({ length: elimBibCount }, () => ({ sel: null, input: "" })));
     } else {
       // DNS/DSQ: keep one empty row at the end.
       setRows([{ sel: null, input: "" }]);
     }
-    focusIndex(0);
+
+    if (shouldFocusFirst) focusIndex(0);
   }
 
   function clearNow() {
@@ -563,7 +596,11 @@ export default function EliminationScoring({
       if (!syncEnabled) setLap(lapNum + 1);
 
       setError(null);
-      resetRows();
+      const keepSaveButtonFocus = syncEnabled;
+      resetRows(!keepSaveButtonFocus);
+      if (keepSaveButtonFocus) {
+        setTimeout(() => saveButtonRef.current?.focus(), 0);
+      }
       return;
     }
 
@@ -717,6 +754,7 @@ export default function EliminationScoring({
                 <PointsBibField
                 value={row.sel}
                 inputValue={row.input}
+                highlight={isAutoHighlighted(row, idx)}
                 inputRef={(el) => {
                   inputRefs.current[idx] = el;
                 }}
@@ -727,6 +765,10 @@ export default function EliminationScoring({
                 placeholder={idx === 0 ? "Bib" : `Bib ${idx + 1}`}
                 nameAdornmentMaxWidth={180}
                 onInputValueChange={(v, reason) => {
+                  if (isFixedElimMode && idx <= 1 && reason === "input") {
+                    clearAutoPrefillBib(idx as 0 | 1);
+                  }
+
                   setRows((prev) => {
                     const copy = prev.slice();
                     const isLastField = idx === prev.length - 1;
@@ -764,6 +806,10 @@ export default function EliminationScoring({
                   }
                 }}
                 onSelect={(next) => {
+                  if (isFixedElimMode && idx <= 1) {
+                    clearAutoPrefillBib(idx as 0 | 1);
+                  }
+
                   setRows((prev) => {
                     const copy = prev.slice();
                     const isLastField = idx === prev.length - 1;
@@ -831,7 +877,7 @@ export default function EliminationScoring({
         ) : null}
 
         <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 0.5 }}>
-          <Button size="small" variant="contained" onClick={saveIfPossible} disabled={!canSave}>
+          <Button size="small" variant="contained" onClick={saveIfPossible} disabled={!canSave} ref={saveButtonRef}>
             Save
           </Button>
           <Button size="small" variant="outlined" onClick={clearNow}>

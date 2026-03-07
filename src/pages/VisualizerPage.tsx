@@ -47,6 +47,28 @@ const flagByNation = Object.fromEntries(
 
 type StatusKind = "DSQ" | "DNS" | "ELIM" | null;
 
+// Interner Zeilentyp für die Tabellenansicht:
+// - "result": normale Ergebniszeile
+// - "skippedIndicator": Platzhalterzeile "..." für ausgeblendete Fahrer ohne Resultat
+type ResultRow = {
+  kind: "result";
+  key: number;
+  result: RaceResult;
+  athlete: Athlete | null;
+  bib: number;
+  rank: number;
+  points: number;
+  status: { kind: StatusKind; label: string | null };
+  name: string;
+};
+
+type SkippedRowsIndicatorRow = {
+  kind: "skippedIndicator";
+  key: string;
+};
+
+type VisualizerRow = ResultRow | SkippedRowsIndicatorRow;
+
 // Leitet aus einem RaceResult den darzustellenden Status ab.
 function getStatus(r: RaceResult): { kind: StatusKind; label: string | null } {
   if (r.dsq) return { kind: "DSQ", label: "DSQ" };
@@ -79,18 +101,30 @@ function templateValueToString(value: unknown): string {
 
 
 // Reproduziert das Verhalten der bisherigen Standard-Result-Spalte.
-// - DSQ / ELIM als hervorgehobener Status
+// - DSQ immer als hervorgehobener Status
+// - ELIM nur bei Elimination-Rennen als hervorgehobener Status
 // - DNS als Chip
 // - bei Punkte-Rennen: Punkte
 // - sonst: Zielzeit
 function renderDynamicResultNode(
   result: RaceResult,
   isPointsRace: boolean,
+  isEliminationRace: boolean,
   statusColorValue: string,
 ): ReactNode {
   const status = getStatus(result);
 
-  if (status.kind === "ELIM" || status.kind === "DSQ") {
+  if (status.kind === "DSQ") {
+    return (
+      <Box component="span" sx={{ color: statusColorValue, fontWeight: 800 }}>
+        {status.label}
+      </Box>
+    );
+  }
+
+  if (status.kind === "ELIM") {
+    if (!isEliminationRace) return "";
+
     return (
       <Box component="span" sx={{ color: statusColorValue, fontWeight: 800 }}>
         {status.label}
@@ -164,6 +198,7 @@ function resolveColumnNode(
   result: RaceResult,
   athlete: Athlete | null,
   isPointsRace: boolean,
+  isEliminationRace: boolean,
   statusColorValue: string,
 ): ReactNode {
   const template = String(column.columnContent ?? "");
@@ -179,7 +214,7 @@ function resolveColumnNode(
     }
 
     if (match[1] === "dynamicResult") {
-      parts.push(renderDynamicResultNode(result, isPointsRace, statusColorValue));
+      parts.push(renderDynamicResultNode(result, isPointsRace, isEliminationRace, statusColorValue));
     } else {
       parts.push(
         renderPlaceholderNode(match[2] as "result" | "athlete", match[3], result, athlete, `${match[2]}-${match[3]}-${match.index}`),
@@ -214,6 +249,8 @@ export default function VisualizerPage() {
   const fontSize = visualization?.fontSize ?? "16px";
   const fontWeight = String(visualization?.fontWeight ?? "400").trim() || "400";
   const fontColor = visualization?.fontColor ?? "#ffffff";
+  // Optionales UI-Feature: zeigt "..." für ausgelassene Fahrer ohne Resultat.
+  const showSkippedRowsIndicator = Boolean(visualization?.showSkippedRowsIndicator);
 
   // Aktives Rennen aus dem aktuell geladenen Event bestimmen.
   const activeRace: Race | null = useMemo(() => {
@@ -243,29 +280,48 @@ export default function VisualizerPage() {
   }, [activeRace?.raceStarters, event?.athletes]);
 
   // Sichtbare Tabellenzeilen in Anzeige-Reihenfolge vorbereiten.
-  const rows = useMemo(() => {
+  //
+  // Wichtige Regeln:
+  // 1) DNS wird nie angezeigt und erzeugt auch nie eine "..."-Zeile.
+  // 2) Fahrer ohne anzeigbares Resultat werden ausgeblendet.
+  // 3) Für zusammenhängende Blöcke solcher ausgeblendeten Fahrer kann optional
+  //    eine einzelne "..."-Zeile eingefügt werden (showSkippedRowsIndicator).
+  const rows = useMemo<VisualizerRow[]>(() => {
     const base = Array.isArray(activeRace?.raceResults) ? activeRace.raceResults : [];
 
     // Scoreboard "With Result" rules:
     // - DNS never shown
     // - only entries with a display result
-    const filtered = base.filter((r) => {
-      if (r.dns) return false;
-      return hasDisplayResult(r);
-    });
-
-    const list = [...filtered];
-
-    list.sort((a, b) => {
+    const sorted = [...base].sort((a, b) => {
       const ra = a.rank > 0 ? a.rank : Number.POSITIVE_INFINITY;
       const rb = b.rank > 0 ? b.rank : Number.POSITIVE_INFINITY;
       if (ra !== rb) return ra - rb;
       return (a.bib ?? 0) - (b.bib ?? 0);
     });
 
-    return list.map((result) => {
+    const mapped: VisualizerRow[] = [];
+    let skippedRunCount = 0;
+
+    for (const result of sorted) {
+      // DNS: komplett ignorieren (keine Anzeige, kein "..."-Trigger).
+      if (result.dns) continue;
+
+      // Ohne Resultat wird die Zeile ausgelassen; wir zählen nur den aktuellen Skip-Block.
+      if (!hasDisplayResult(result)) {
+        if (showSkippedRowsIndicator) skippedRunCount += 1;
+        continue;
+      }
+
+      // Sobald nach einem Skip-Block wieder eine sichtbare Zeile kommt,
+      // wird genau eine "..."-Zeile davor eingefügt.
+      if (showSkippedRowsIndicator && skippedRunCount > 0) {
+        mapped.push({ kind: "skippedIndicator", key: `skipped-rows-indicator-${mapped.length}` });
+        skippedRunCount = 0;
+      }
+
       const athlete = starterByBib.get(result.bib) ?? null;
-      return {
+      mapped.push({
+        kind: "result",
         key: result.bib,
         result,
         athlete,
@@ -274,9 +330,17 @@ export default function VisualizerPage() {
         points: result.points,
         status: getStatus(result),
         name: athleteName(athlete),
-      };
     });
-  }, [activeRace?.raceResults, starterByBib]);
+    }
+
+    // Falls der letzte Block der sortierten Liste nur aus "skipped" besteht,
+    // kommt der Indicator ans Ende (DNS wurde bereits vorher ausgeschlossen).
+    if (showSkippedRowsIndicator && skippedRunCount > 0) {
+      mapped.push({ kind: "skippedIndicator", key: `skipped-rows-indicator-${mapped.length}` });
+    }
+
+    return mapped;
+  }, [activeRace?.raceResults, starterByBib, showSkippedRowsIndicator]);
 
   // Nur tatsächlich konfigurierte dynamische Spalten verwenden.
   const dynamicColumns = useMemo(() => {
@@ -289,6 +353,7 @@ export default function VisualizerPage() {
   // Wenn Columns definiert sind, wird die Standardansicht ersetzt.
   const useDynamicColumns = dynamicColumns.length > 0;
   const isPointsRace = Boolean(activeRace?.racemode?.isPointsRace);
+  const isEliminationRace = Boolean(activeRace?.racemode?.isEliminationRace);
   const pagingEnabledByConfig = Boolean(visualization?.usePaging);
   const pagingLines = Math.max(1, Math.floor(Number(visualization?.pagingLines ?? 10) || 10));
   const pagingTime = Math.max(0, Math.floor(Number(visualization?.pagingTime ?? 0) || 0));
@@ -379,7 +444,8 @@ export default function VisualizerPage() {
         fontWeight,
         display: "flex",
         flexDirection: "column",
-        p: 4,
+        px: 6,
+        py: 4,
         gap: 2,
         boxSizing: "border-box",
       }}
@@ -393,8 +459,17 @@ export default function VisualizerPage() {
         {pagingEnabledByConfig ? (
           <Typography
             component="div"
-            sx={{ fontSize: "0.9em", fontWeight: "inherit", color: alpha(fontColor, 0.65), whiteSpace: "nowrap" }}
+            sx={{
+              fontSize: "0.9em",
+              fontWeight: "inherit",
+              color: alpha(fontColor, 0.65),
+              whiteSpace: "nowrap",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 0.5,
+            }}
           >
+            {!autoPagingRunning && pagingTime > 0 ? "⏸ " : null}
             {Math.min(currentPage + 1, totalPages)} / {totalPages}
           </Typography>
         ) : null}
@@ -453,10 +528,53 @@ export default function VisualizerPage() {
 
           <TableBody>
             {visibleRows.map((r, idx) => {
+              const rowBg = alternateRowBackgroundColor && idx % 2 === 1 ? alternateRowBackgroundColor : undefined;
+
+              // Platzhalterzeile für ausgelassene Fahrer ohne anzeigbares Resultat.
+              if (r.kind === "skippedIndicator") {
+                return (
+                  <TableRow
+                    key={r.key}
+                    sx={
+                      rowBg
+                        ? {
+                            "& .MuiTableCell-root": {
+                              backgroundColor: rowBg,
+                            },
+                          }
+                        : undefined
+                    }
+                  >
+                    {useDynamicColumns ? (
+                      dynamicColumns.map((col, colIdx) => {
+                        // In dynamischen Spalten wird "..." nur in der Rank-Spalte gerendert.
+                        const isRankColumn = String(col.columnTitle ?? "").trim().toLowerCase() === "rank";
+                        return (
+                          <TableCell
+                            key={`${r.key}-${colIdx}`}
+                            align={col.columnAlign}
+                            sx={{ whiteSpace: "nowrap", width: col.columnWidth || undefined }}
+                          >
+                            {isRankColumn ? "..." : ""}
+                          </TableCell>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <TableCell>...</TableCell>
+                        <TableCell />
+                        <TableCell align="center" sx={{ width: 70 }} />
+                        <TableCell />
+                        <TableCell align="right" />
+                      </>
+                    )}
+                  </TableRow>
+                );
+              }
+
               // Zeilenweise Statusfarbe und optionale Zebra-Färbung vorbereiten.
               const c = statusColor(r.status.kind);
               const isStatus = Boolean(r.status.kind);
-              const rowBg = alternateRowBackgroundColor && idx % 2 === 1 ? alternateRowBackgroundColor : undefined;
 
               return (
                 <TableRow
@@ -474,13 +592,13 @@ export default function VisualizerPage() {
                 >
                   {useDynamicColumns ? (
                     // Frei konfigurierte Zellen aus den Column-Definitionen rendern.
-                    dynamicColumns.map((col, idx) => (
+                    dynamicColumns.map((col, colIdx) => (
                       <TableCell
-                        key={`${r.key}-${idx}`}
+                        key={`${r.key}-${colIdx}`}
                         align={col.columnAlign}
                         sx={{ whiteSpace: "nowrap", width: col.columnWidth || undefined }}
                       >
-                        {resolveColumnNode(col, r.result, r.athlete, isPointsRace, c)}
+                        {resolveColumnNode(col, r.result, r.athlete, isPointsRace, isEliminationRace, c)}
                       </TableCell>
                     ))
                   ) : (
@@ -494,7 +612,7 @@ export default function VisualizerPage() {
                       <TableCell sx={{ whiteSpace: "nowrap" }}>{r.name}</TableCell>
 
                       <TableCell align="right">
-                        {renderDynamicResultNode(r.result, isPointsRace, c)}
+                        {renderDynamicResultNode(r.result, isPointsRace, isEliminationRace, c)}
                       </TableCell>
                     </>
                   )}

@@ -39,11 +39,16 @@ import { useVisualizationList } from "../providers/VisualizationListProvider";
 
 import type { FullVisualization, VisualizationColumn, VisualizationColumnAlign } from "../types/visualization";
 
+// Lokale, editierbare Form der FullVisualization-Konfiguration.
 export type VisualizationDraft = {
   name: string;
   backgroundColor: string;
   alternateRowBackgroundColor: string;
   usePaging: boolean;
+  // Wenn true, kann die Visualizer-Tabelle "..."-Zeilen zwischen sichtbaren
+  // Ergebnisblöcken einfügen, sofern Fahrer ohne Resultat ausgeblendet werden.
+  // DNS-Zeilen bleiben davon ausgenommen und erscheinen nie.
+  showSkippedRowsIndicator: boolean;
   pagingLines: number;
   pagingTime: number;
   fontSize: string;
@@ -111,6 +116,9 @@ function makeEmptyColumn(): VisualizationColumn {
 }
 
 function normalizeFullVisualization(raw: unknown, visualizationId: string): FullVisualization {
+  // Defensive Normalisierung für bestehende/ältere Dokumente.
+  // Neue Felder (z. B. showSkippedRowsIndicator) bekommen Defaults,
+  // damit der Editor jederzeit mit einem vollständigen Modell arbeitet.
   const obj = raw && typeof raw === "object" ? (raw as any) : {};
 
   return {
@@ -120,6 +128,7 @@ function normalizeFullVisualization(raw: unknown, visualizationId: string): Full
     alternateRowBackgroundColor:
       typeof obj.alternateRowBackgroundColor === "string" ? obj.alternateRowBackgroundColor : "",
     usePaging: typeof obj.usePaging === "boolean" ? obj.usePaging : false,
+    showSkippedRowsIndicator: typeof obj.showSkippedRowsIndicator === "boolean" ? obj.showSkippedRowsIndicator : false,
     pagingLines: normalizeNonNegativeInteger(obj.pagingLines, 10),
     pagingTime: normalizeNonNegativeInteger(obj.pagingTime, 0),
     fontSize: typeof obj.fontSize === "string" ? obj.fontSize : "16px",
@@ -196,6 +205,8 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
   const [backgroundColor, setBackgroundColor] = useState("#000000");
   const [alternateRowBackgroundColor, setAlternateRowBackgroundColor] = useState("");
   const [usePaging, setUsePaging] = useState(false);
+  // UI-Schalter für die optionale "..."-Zeile bei ausgelassenen Non-Result-Ridern.
+  const [showSkippedRowsIndicator, setShowSkippedRowsIndicator] = useState(false);
   const [pagingLines, setPagingLines] = useState("10");
   const [pagingTime, setPagingTime] = useState("0");
   const [fontSize, setFontSize] = useState("16px");
@@ -215,6 +226,7 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
       backgroundColor: "#000000",
       alternateRowBackgroundColor: "",
       usePaging: false,
+      showSkippedRowsIndicator: false,
       pagingLines: 10,
       pagingTime: 0,
       fontSize: "16px",
@@ -230,6 +242,7 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
       backgroundColor: backgroundColor.trim(),
       alternateRowBackgroundColor: alternateRowBackgroundColor.trim(),
       usePaging,
+      showSkippedRowsIndicator,
       pagingLines: normalizeNonNegativeInteger(pagingLines, 10),
       pagingTime: normalizeNonNegativeInteger(pagingTime, 0),
       fontSize: fontSize.trim(),
@@ -237,7 +250,7 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
       fontColor: fontColor.trim(),
       columns: normalizeEditableColumns(columns),
     });
-  }, [name, backgroundColor, alternateRowBackgroundColor, usePaging, pagingLines, pagingTime, fontSize, fontWeight, fontColor, columns]);
+  }, [name, backgroundColor, alternateRowBackgroundColor, usePaging, showSkippedRowsIndicator, pagingLines, pagingTime, fontSize, fontWeight, fontColor, columns]);
 
   const isDirty = draftJson !== baseJson;
 
@@ -254,6 +267,8 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
     const sourceBg = String(normalized?.backgroundColor ?? "#000000");
     const sourceAltRowBg = String(normalized?.alternateRowBackgroundColor ?? "");
     const sourceUsePaging = Boolean(normalized?.usePaging ?? false);
+    // Beim Laden aus dem Doc den gespeicherten Indicator-Status übernehmen.
+    const sourceShowSkippedRowsIndicator = Boolean(normalized?.showSkippedRowsIndicator ?? false);
     const sourcePagingLines = String(normalized?.pagingLines ?? 10);
     const sourcePagingTime = String(normalized?.pagingTime ?? 0);
     const sourceFontSize = String(normalized?.fontSize ?? "16px");
@@ -265,6 +280,7 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
     setBackgroundColor(sourceBg);
     setAlternateRowBackgroundColor(sourceAltRowBg);
     setUsePaging(sourceUsePaging);
+    setShowSkippedRowsIndicator(sourceShowSkippedRowsIndicator);
     setPagingLines(sourcePagingLines);
     setPagingTime(sourcePagingTime);
     setFontSize(sourceFontSize);
@@ -278,6 +294,7 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
         backgroundColor: sourceBg.trim(),
         alternateRowBackgroundColor: sourceAltRowBg.trim(),
         usePaging: sourceUsePaging,
+        showSkippedRowsIndicator: sourceShowSkippedRowsIndicator,
         pagingLines: normalizeNonNegativeInteger(sourcePagingLines, 10),
         pagingTime: normalizeNonNegativeInteger(sourcePagingTime, 0),
         fontSize: sourceFontSize.trim(),
@@ -294,6 +311,7 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
     normalized?.backgroundColor,
     normalized?.alternateRowBackgroundColor,
     normalized?.usePaging,
+    normalized?.showSkippedRowsIndicator,
     normalized?.pagingLines,
     normalized?.pagingTime,
     normalized?.fontSize,
@@ -377,6 +395,8 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
         backgroundColor: String(backgroundColor ?? "").trim() || "#000000",
         alternateRowBackgroundColor: String(alternateRowBackgroundColor ?? "").trim(),
         usePaging,
+        // Persistiert die Option im FullVisualization-Dokument.
+        showSkippedRowsIndicator,
         pagingLines: normalizeNonNegativeInteger(pagingLines, 10),
         pagingTime: normalizeNonNegativeInteger(pagingTime, 0),
         fontSize: String(fontSize ?? "").trim() || "16px",
@@ -475,6 +495,18 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
               onChange={(e) => setUsePaging(e.target.value === "true")}
               fullWidth
               helperText="Enable multi-page result display."
+            >
+              <MenuItem value="false">No</MenuItem>
+              <MenuItem value="true">Yes</MenuItem>
+            </TextField>
+
+            <TextField
+              select
+              label="Show skipped rows indicator"
+              value={showSkippedRowsIndicator ? "true" : "false"}
+              onChange={(e) => setShowSkippedRowsIndicator(e.target.value === "true")}
+              fullWidth
+              helperText='Show one "..." row for skipped riders without result (DNS rows are still never shown).'
             >
               <MenuItem value="false">No</MenuItem>
               <MenuItem value="true">Yes</MenuItem>

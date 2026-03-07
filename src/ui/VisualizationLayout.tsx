@@ -57,6 +57,9 @@ function normalizeColumnAlign(value: unknown): VisualizationColumnAlign {
 }
 
 function normalizeFullVisualization(raw: unknown, visualizationId: string, listEntry: Visualization | null): FullVisualization {
+  // Normalisiert das Realtime-Dokument robust auf FullVisualization.
+  // Fehlende/ungültige Felder erhalten sinnvolle Defaults, damit die Anzeige
+  // auch bei unvollständigen Alt-Dokumenten stabil bleibt.
   const obj = raw && typeof raw === "object" ? (raw as any) : {};
   const columns = Array.isArray(obj.columns)
     ? obj.columns.map((col: any) => ({
@@ -81,6 +84,10 @@ function normalizeFullVisualization(raw: unknown, visualizationId: string, listE
     alternateRowBackgroundColor:
       typeof obj.alternateRowBackgroundColor === "string" ? obj.alternateRowBackgroundColor : "",
     usePaging: typeof obj.usePaging === "boolean" ? obj.usePaging : false,
+    // Steuert die optionale "..."-Indikatorzeile in VisualizerPage für
+    // ausgeblendete Fahrer ohne anzeigbares Resultat (DNS bleibt weiterhin komplett unsichtbar).
+    showSkippedRowsIndicator:
+      typeof obj.showSkippedRowsIndicator === "boolean" ? obj.showSkippedRowsIndicator : false,
     pagingLines: typeof obj.pagingLines === "number" && Number.isFinite(obj.pagingLines) ? Math.max(0, Math.floor(obj.pagingLines)) : 10,
     pagingTime: typeof obj.pagingTime === "number" && Number.isFinite(obj.pagingTime) ? Math.max(0, Math.floor(obj.pagingTime)) : 0,
     fontSize: typeof obj.fontSize === "string" ? obj.fontSize : "16px",
