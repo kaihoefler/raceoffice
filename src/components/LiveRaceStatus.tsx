@@ -307,8 +307,14 @@ export default function LiveRaceStatus({
   // Wir normalisieren Flag in uppercase, um Vergleiche robust zu machen
   const flagKey = flagTrim.toUpperCase();
 
-  // Sync ist nur erlaubt bei GREEN oder PURPLE (Business-Rule)
+    // Sync ist nur erlaubt bei GREEN oder PURPLE (Business-Rule)
   const canSync = flagKey === "GREEN" || flagKey === "PURPLE";
+
+  // Zeige elapsedTime im Header nur bei GREEN (Anforderung).
+  // Leer/fehlend => keine Anzeige.
+  const elapsedTimeText = String((currentRace as any)?.elapsedTime ?? "").trim();
+  const showElapsedTime = flagKey === "GREEN" && elapsedTimeText.length > 0;
+
 
   // -----------------------
   // Sync reset on race change
@@ -572,9 +578,15 @@ export default function LiveRaceStatus({
             </Box>
           </Box>
 
-          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                    <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+            {showElapsedTime ? (
+              <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                {elapsedTimeText}
+              </Typography>
+            ) : null}
             <Chip size="small" label={flagTrim || "—"} variant={flagChipVariant} sx={flagChipSx} />
           </Box>
+
         </Box>
 
         {/* Warnung, wenn nicht connected und nicht paused */}
@@ -694,10 +706,17 @@ export default function LiveRaceStatus({
           </Box>
         </Box>
 
-        {/* Rechts im Header: Flag-Status (farbiger Chip) */}
-        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-          <Chip size="small" label={flagTrim || "—"} variant={flagChipVariant} sx={flagChipSx} />
-        </Box>
+                {/* Rechts im Header: optional elapsedTime (nur GREEN) + Flag-Status (farbiger Chip) */}
+
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+            {showElapsedTime ? (
+              <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                {elapsedTimeText}
+              </Typography>
+            ) : null}
+            <Chip size="small" label={flagTrim || "—"} variant={flagChipVariant} sx={flagChipSx} />
+          </Box>
+
       </Box>
 
       {/* Warnung, wenn der Service “nicht reagiert” (aber wir nicht pausiert haben) */}

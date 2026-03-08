@@ -1,12 +1,26 @@
+// scripts/deploy.mjs
+//
+// Build + package helper for copy-based deployments.
+//
+// What it does (high level):
+// 1) Build frontend + backend
+// 2) Create clean ./deploy folder
+// 3) Copy runtime server artifacts
+// 4) Install production-only node_modules into deploy/server
+// 5) Optionally copy portable Node + WinSW from ./tools
+// 6) Emit default WinSW XML + next-step instructions if needed
+
 import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
 
+// Run a shell command and stream output directly to the current terminal.
 function run(cmd, opts = {}) {
   execSync(cmd, { stdio: "inherit", ...opts });
 }
 
+// Small async exists helper (for optional files/tools).
 async function exists(p) {
   try {
     await fs.access(p);
@@ -16,12 +30,16 @@ async function exists(p) {
   }
 }
 
+// Copy directory with replacement semantics.
+// Destination is removed first to avoid stale files from previous deploys.
 async function copyDir(src, dst) {
   await fs.rm(dst, { recursive: true, force: true });
   await fs.mkdir(path.dirname(dst), { recursive: true });
   await fs.cp(src, dst, { recursive: true });
 }
 
+// Copy file only when present.
+// Returns true when copied, false when source does not exist.
 async function copyFileIfExists(src, dst) {
   if (!(await exists(src))) return false;
   await fs.mkdir(path.dirname(dst), { recursive: true });
@@ -49,20 +67,21 @@ async function main() {
   await copyDir(path.join(serverSrcDir, "dist"), path.join(serverOutDir, "dist"));
   await copyDir(path.join(serverSrcDir, "public"), path.join(serverOutDir, "public"));
 
-  // Needed for npm install in deploy/server
+  // Needed so deploy/server can run npm ci / npm install locally.
   await copyFileIfExists(path.join(serverSrcDir, "package.json"), path.join(serverOutDir, "package.json"));
   await copyFileIfExists(path.join(serverSrcDir, "package-lock.json"), path.join(serverOutDir, "package-lock.json"));
 
-  // 4) Install production dependencies into deploy/server/node_modules
+  // 4) Install production dependencies into deploy/server/node_modules.
+  // Prefer npm ci when lockfile exists for deterministic installs.
   const lockPresent = fsSync.existsSync(path.join(serverOutDir, "package-lock.json"));
   run(lockPresent ? "npm ci --omit=dev" : "npm install --omit=dev", { cwd: serverOutDir });
 
-  // 5) Create standard folders
+  // 5) Create standard runtime folders used by service/default config.
   await fs.mkdir(path.join(serverOutDir, "logs"), { recursive: true });
   await fs.mkdir(path.join(serverOutDir, "node"), { recursive: true });
   await fs.mkdir(path.join(serverOutDir, "winsw"), { recursive: true });
 
-  // 6) Optional: copy portable Node runtime + WinSW if you provide them under tools/
+  // 6) Optional: copy portable Node runtime + WinSW if provided under ./tools.
   // Place these manually (not committed):
   // - tools/node/node.exe
   // - tools/winsw/RaceOfficeServer.exe
@@ -82,7 +101,8 @@ async function main() {
     path.join(serverOutDir, "RaceOfficeServer.xml")
   );
 
-  // If no WinSW XML was provided, write a default one (network reachable, port 8787)
+  // If no WinSW XML was provided, write a sane default config.
+  // Default binds publicly (0.0.0.0) on port 8787 and points to ProgramData DB path.
   const defaultDbPath = "C:\\ProgramData\\RaceOffice\\data\\raceoffice.db";
   const winSwXmlPath = path.join(serverOutDir, "RaceOfficeServer.xml");
   if (!fsSync.existsSync(winSwXmlPath)) {
@@ -114,6 +134,7 @@ async function main() {
     );
   }
 
+  // Write a human-friendly handover file with required target-machine steps.
   await fs.writeFile(
     path.join(deployDir, "DEPLOY-NEXT-STEPS.txt"),
     [
@@ -150,6 +171,7 @@ async function main() {
 }
 
 main().catch((err) => {
+  // Keep failure explicit in CI/automation.
   console.error(err);
   process.exit(1);
 });
