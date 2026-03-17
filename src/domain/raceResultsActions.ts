@@ -1,15 +1,22 @@
 /**
  * raceResultsActions
- * -----------------
- * Centralized domain logic for keeping `raceResults` consistent.
+ * ------------------
+ * Domain helpers to keep `raceResults` deterministic and easy to rebuild.
  *
- * `raceResults` is treated as a materialized view of:
- * - manual fields (e.g. finishRank/finishTime/lapsCompleted) edited in dedicated UIs
- * - derived fields (e.g. points/eliminations/dsq/dns) computed from the event log (`raceActivities`)
+ * Mental model:
+ * `raceResults` behaves like a materialized view with two data sources:
+ * 1) Manual input fields maintained in dedicated UIs
+ *    (e.g. finishRank, finishTime, lapsCompleted)
+ * 2) Derived fields calculated from the activity stream (`raceActivities`)
+ *    (e.g. points, eliminated/eliminationLap, dsq, dns)
  *
- * Whenever activities or manual results change, callers should:
- * 1) applyActivitiesToRaceResults(...)   -> derive activity-based fields
- * 2) recomputeRaceResults(...)          -> compute consolidated rank
+ * Expected update pipeline for callers:
+ * 1) `applyActivitiesToRaceResults(...)`
+ *    -> merges all known bibs and recalculates activity-derived fields
+ * 2) `recomputeRaceResults(...)`
+ *    -> recomputes consolidated standings rank with tie handling
+ *
+ * Use `materializeRaceResults(...)` when both steps should be executed together.
  */
 
 import type { Athlete } from "../types/athlete";
@@ -22,7 +29,12 @@ import type {
 } from "../types/raceactivities";
 import type { RaceResult } from "../types/race";
 
-// Small parsing helper: allow bib as number or string; normalize to positive integer.
+/**
+ * Parses an unknown bib value into a normalized positive integer.
+ *
+ * Accepted inputs: number or numeric string (e.g. 12, "12", " 12 ").
+ * Returns `null` for missing/invalid/non-positive values.
+ */
 export function bibToInt(bib: unknown): number | null {
   if (bib == null) return null;
   const n = typeof bib === "number" ? bib : Number(String(bib).trim());
@@ -31,7 +43,13 @@ export function bibToInt(bib: unknown): number | null {
   return i > 0 ? i : null;
 }
 
-// Default RaceResult entry for a bib that exists in starters/activities but not yet in raceResults.
+/**
+ * Creates a default `RaceResult` row for bibs that are discovered via starters
+ * or activities but do not yet exist in persisted `raceResults`.
+ *
+ * Defaults are intentionally neutral so later derivation can safely overwrite
+ * activity-based fields without affecting manual input semantics.
+ */
 export function makeDefaultRaceResult(bib: number): RaceResult {
   return {
     bib,
@@ -47,6 +65,7 @@ export function makeDefaultRaceResult(bib: number): RaceResult {
   };
 }
 
+// Narrow, explicit activity type guards used to keep the derivation pass readable.
 function isPointsSprintActivity(a: RaceActivity | any): a is RaceActivityPointsSprint {
   return a?.type === "pointsSprint";
 }
@@ -64,15 +83,25 @@ function isDnsActivity(a: RaceActivity | any): a is RaceActivityDns {
 }
 
 /**
- * Derive the activity-based fields of RaceResults.
+ * Rebuilds all activity-derived fields of `RaceResult` rows.
  *
- * Current derived fields:
- * - points: sum of all non-deleted pointsSprint activity results
- * - eliminated/eliminationLap: from non-deleted elimination activities (per bib we keep the max lap)
- * - dsq/dns: from non-deleted DSQ/DNS activities
+ * What this function does:
+ * - discovers the complete bib universe from previous results, starters and activities
+ * - ensures each discovered bib has a `RaceResult` row
+ * - recomputes derived fields from non-deleted activities only
  *
- * Preserved fields (examples):
- * - finishRank, finishTime, lapsCompleted
+ * Derived fields:
+ * - `points`: summed from pointsSprint activity entries
+ * - `eliminated` + `eliminationLap`: from elimination activities
+ *   (if multiple entries exist for one bib, the highest lap wins)
+ * - `dsq` / `dns`: set by DSQ/DNS activities
+ *
+ * Preserved (not derived here):
+ * - manual fields such as `finishRank`, `finishTime`, `lapsCompleted`
+ *
+ * Ordering contract:
+ * - existing row order is preserved first
+ * - newly discovered bibs are appended in ascending bib order
  */
 export function applyActivitiesToRaceResults(args: {
   prevResults: RaceResult[];
@@ -112,7 +141,7 @@ export function applyActivitiesToRaceResults(args: {
       continue;
     }
 
-    // Fallback for potential future activity shapes.
+    // Forward-compatibility fallback for potential future activity payload shapes.
     const maybeBib = bibToInt((a as any)?.data?.bib);
     if (maybeBib != null) bibs.add(maybeBib);
 
@@ -123,7 +152,7 @@ export function applyActivitiesToRaceResults(args: {
     }
   }
 
-  // Base map: preserve existing RaceResult rows (manual fields live here).
+  // Base map: copy existing rows first so manual fields are preserved as-is.
   const byBib = new Map<number, RaceResult>();
   for (const r of prevResults) {
     const bib = bibToInt((r as any)?.bib);
@@ -136,7 +165,7 @@ export function applyActivitiesToRaceResults(args: {
     if (!byBib.has(bib)) byBib.set(bib, makeDefaultRaceResult(bib));
   }
 
-  // Derive fields from activities.
+  // Accumulators for a single derivation pass over the activity stream.
   const pointsByBib = new Map<number, number>();
   const elimLapByBib = new Map<number, number>();
   const dsqBibs = new Set<number>();
@@ -182,7 +211,7 @@ export function applyActivitiesToRaceResults(args: {
       continue;
     }
 
-    // Fallback for potential future activity shapes.
+    // Forward-compatibility fallback for potential future activity payload shapes.
     const t = String((a as any)?.type ?? "");
     const isDeleted = !!(a as any)?.data?.isDeleted;
     if (isDeleted) continue;
@@ -194,7 +223,13 @@ export function applyActivitiesToRaceResults(args: {
     else if (t === "DNS") dnsBibs.add(bib);
   }
 
-  // Build next array in stable order: keep previous ordering first, then append new bibs.
+  // Business rule: any bib marked as eliminated loses all points.
+  // Apply this after the full activity pass so elimination always wins.
+  for (const [bib, lap] of elimLapByBib) {
+    if (lap > 0) pointsByBib.set(bib, 0);
+  }
+
+  // Build output in stable order: keep prior ordering, then append newly introduced bibs.
   const used = new Set<number>();
 
   const applyDerived = (base: RaceResult): RaceResult => {
@@ -238,7 +273,7 @@ export function applyActivitiesToRaceResults(args: {
 }
 
 // -----------------------------------------------------------------------------
-// Rank computation
+// Standings / rank computation
 // -----------------------------------------------------------------------------
 
 type SortKey = {
@@ -248,12 +283,18 @@ type SortKey = {
   finishRankKey: number; // finishRank=0 => Infinity (treated as "no finish" -> last)
 };
 
+/**
+ * Coerces unknown input into a finite integer; otherwise returns fallback.
+ */
 function toFiniteInt(n: unknown, fallback = 0): number {
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
   return Math.floor(v);
 }
 
+/**
+ * Coerces unknown input into a finite number; otherwise returns fallback.
+ */
 function toFiniteNumber(n: unknown, fallback = 0): number {
   const v = Number(n);
   return Number.isFinite(v) ? v : fallback;
@@ -272,6 +313,9 @@ function statusBucket(r: RaceResult): number {
   return r.eliminated ? 1 : 0;
 }
 
+/**
+ * Converts a row into a normalized comparison key used for ordering and tie checks.
+ */
 function sortKey(r: RaceResult): SortKey {
   const finishRank = toFiniteInt(r.finishRank, 0);
 
@@ -283,6 +327,16 @@ function sortKey(r: RaceResult): SortKey {
   };
 }
 
+/**
+ * Comparator used for standings sorting.
+ *
+ * Sort priority (best to worst):
+ * 1) status bucket (active, eliminated, DSQ, DNS)
+ * 2) elimination lap (higher is better)
+ * 3) points (higher is better)
+ * 4) finishRank (lower is better; 0 behaves like "no finish" and is pushed back)
+ * 5) bib (stable deterministic tie-breaker only)
+ */
 function compareRaceResultsForStandings(ra: RaceResult, rb: RaceResult): number {
   const a = sortKey(ra);
   const b = sortKey(rb);
@@ -303,6 +357,10 @@ function compareRaceResultsForStandings(ra: RaceResult, rb: RaceResult): number 
   return toFiniteInt(ra.bib, 0) - toFiniteInt(rb.bib, 0);
 }
 
+/**
+ * Equality check for ranking-relevant fields.
+ * Used to detect ties when assigning rank numbers (1, 1, 3 ...).
+ */
 function keysEqual(a: SortKey, b: SortKey): boolean {
   return (
     a.bucket === b.bucket &&
@@ -313,19 +371,29 @@ function keysEqual(a: SortKey, b: SortKey): boolean {
 }
 
 /**
- * Computes the consolidated `rank` field for each `RaceResult`.
+ * Returns a new array sorted by standings criteria.
  *
- * IMPORTANT: This helper only sets `rank`. It does not modify points/finishRank/etc.
+ * IMPORTANT: This helper only sorts; it does not assign or modify `rank`.
  */
 export function sortRaceResultsForStandings(input: RaceResult[]): RaceResult[] {
   const list = Array.isArray(input) ? [...input] : [];
   return list.sort(compareRaceResultsForStandings);
 }
 
+/**
+ * Recomputes the consolidated `rank` field for each row.
+ *
+ * Ranking behavior:
+ * - Uses the same comparator as standings sort
+ * - Supports ties (e.g. 1, 1, 3)
+ * - Special rule: eliminated riders in the same elimination lap share the same rank,
+ *   regardless of points or finishRank
+ * - Keeps original array order in the return value to minimize document churn
+ */
 export function recomputeRaceResults(input: RaceResult[]): RaceResult[] {
   const list = Array.isArray(input) ? [...input] : [];
 
-  // Deterministic sort by the configured priority criteria.
+  // Deterministic sort by configured standings criteria.
   const sorted = [...list].sort(compareRaceResultsForStandings);
 
   // Assign ranks with ties: 1, 1, 3 ...
@@ -339,7 +407,17 @@ export function recomputeRaceResults(input: RaceResult[]): RaceResult[] {
     if (bib <= 0) continue;
 
     const key = sortKey(r);
-    const isTie = prevKey !== null && keysEqual(prevKey, key);
+
+    // Special tie rule: riders eliminated in the same lap share rank,
+    // independent from points/finishRank.
+    const sameEliminationLapTie =
+      prevKey !== null &&
+      prevKey.bucket === 1 &&
+      key.bucket === 1 &&
+      prevKey.eliminationLap > 0 &&
+      prevKey.eliminationLap === key.eliminationLap;
+
+    const isTie = prevKey !== null && (keysEqual(prevKey, key) || sameEliminationLapTie);
 
     const rank = isTie ? prevRank : i + 1;
 
@@ -348,7 +426,7 @@ export function recomputeRaceResults(input: RaceResult[]): RaceResult[] {
     prevRank = rank;
   }
 
-  // Return in original order to minimize document churn.
+  // Re-apply ranks onto the original order to minimize persistence churn.
   return list.map((r) => {
     const bib = toFiniteInt(r.bib, 0);
     const nextRank = rankByBib.get(bib);

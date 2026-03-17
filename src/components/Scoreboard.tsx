@@ -14,6 +14,7 @@ import { useMemo, useState } from "react";
 import {
   Box,
   Chip,
+  IconButton,
   Table,
   TableBody,
   TableCell,
@@ -22,9 +23,11 @@ import {
   TableRow,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
+import RefreshIcon from "@mui/icons-material/Refresh";
 
 import type { RaceResult } from "../types/race";
 
@@ -38,6 +41,8 @@ type Props = {
    * (Realisiert über maxHeight + overflow:auto im TableContainer)
    */
   maxHeight?: number;
+  /** Optional action to force a full results recomputation. */
+  onRecalculateResults?: () => void;
 };
 
 /**
@@ -81,7 +86,12 @@ function hasDisplayResult(r: RaceResult): boolean {
   return Boolean(r.dsq || r.eliminated || hasFinish || hasPoints);
 }
 
-export default function Scoreboard({ results, title = "Standings", maxHeight = 900 }: Props) {
+export default function Scoreboard({
+  results,
+  title = "Standings",
+  maxHeight = 900,
+  onRecalculateResults,
+}: Props) {
   const theme = useTheme();
 
   /**
@@ -155,12 +165,28 @@ export default function Scoreboard({ results, title = "Standings", maxHeight = 9
   return (
     <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1, minWidth: 0 }}>
       {/* Header: Titel + Mode-Umschalter + Count */}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1, gap: 1 }}>
+            <Box sx={{ display: "flex", alignItems: "center", mb: 1, gap: 0.5, flexWrap: "wrap" }}>
         <Typography variant="subtitle2" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
           {title}
         </Typography>
 
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap" }}>
+          {/* Neu-Berechnung der Ergebnisse (optional, vom Parent gesteuert) */}
+          {onRecalculateResults ? (
+            <Tooltip title="Recalculate results" arrow>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={onRecalculateResults}
+                  aria-label="Recalculate results"
+                  sx={{ p: 0.5 }}
+                >
+                  <RefreshIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+          ) : null}
+
           {/* Umschalten zwischen "All" und "With Result" */}
           <ToggleButtonGroup
             size="small"
@@ -171,6 +197,13 @@ export default function Scoreboard({ results, title = "Standings", maxHeight = 9
               if (next) setMode(next);
             }}
             aria-label="scoreboard display mode"
+            sx={{
+              "& .MuiToggleButton-root": {
+                px: 0.75,
+                py: 0.25,
+                fontSize: 12,
+              },
+            }}
           >
             <ToggleButton value="all" aria-label="all results">
               All
@@ -179,6 +212,7 @@ export default function Scoreboard({ results, title = "Standings", maxHeight = 9
               With Result
             </ToggleButton>
           </ToggleButtonGroup>
+
 
           {/* Anzahl: im WithResult-Modus als "gefiltert / gesamt(ohne DNS)" */}
           <Typography variant="caption" color="text.secondary">

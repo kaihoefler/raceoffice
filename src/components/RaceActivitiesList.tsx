@@ -398,13 +398,13 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
           No activities.
         </Typography>
       ) : (
-        <List dense sx={{ maxHeight: 420, overflow: "auto", py: 0 }}>
+        <List dense sx={{ overflow: "auto", py: 0 }}>
           {/* header */}
           <ListItem
             disableGutters
             sx={{
               px: 1,
-              py: 0.5,
+              py: 0,
               borderBottom: "1px solid",
               borderColor: "divider",
               position: "sticky",
@@ -484,7 +484,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
                 disableGutters
                 sx={{
                   px: 1,
-                  py: 0.75,
+                  py: 0.4,
                   borderBottom: "1px solid",
                   borderColor: "divider",
                   bgcolor: isEditing ? "action.selected" : "transparent",
@@ -496,7 +496,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
                     display: "grid",
                     gridTemplateColumns: "28px 42px 1fr auto",
                     columnGap: 1,
-                    rowGap: 0.25,
+                    rowGap: 0.15,
                     alignItems: "center",
                   }}
                 >
@@ -513,7 +513,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
                   </Box>
 
                   <Box sx={{ justifySelf: "end", alignSelf: "start" }}>
-                    <Stack direction="row" spacing={0.1} sx={{ mt: 0.15 }}>
+                    <Stack direction="row" spacing={0.1} sx={{ mt: 0 }}>
                       {isEditing ? (
                         <>
                           <Tooltip title="Save" arrow>

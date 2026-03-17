@@ -237,7 +237,7 @@ describe("raceResultsActions", () => {
         {
           bib: 13,
           rank: 0,
-          points: 3,
+          points: 0,
           eliminated: true,
           eliminationLap: 9,
           dns: false,
@@ -367,6 +367,34 @@ describe("raceResultsActions", () => {
         { bib: 40, rank: 4 },
       ]);
     });
+
+    it("assigns the same rank to riders eliminated in the same lap, regardless of points/finishRank", () => {
+      const input = [
+        raceResult({ bib: 100, points: 5, finishRank: 1 }),
+        raceResult({ bib: 200, points: 2, finishRank: 2 }),
+
+        // gleiche Eliminationsrunde, aber absichtlich unterschiedliche Werte:
+        raceResult({ bib: 513, eliminated: true, eliminationLap: 24, points: 7, finishRank: 16 }),
+        raceResult({ bib: 445, eliminated: true, eliminationLap: 24, points: 0, finishRank: 17 }),
+
+        // spätere Platzierung, weil geringere Eliminationsrunde
+        raceResult({ bib: 471, eliminated: true, eliminationLap: 23, points: 0, finishRank: 0 }),
+      ];
+
+      const recomputed = recomputeRaceResults(input);
+
+      // Erwartung:
+      // - normale Fahrer zuerst
+      // - bib 513 und 445 teilen sich den Rang, weil beide in Lap 24 eliminiert wurden
+      // - danach Rangsprung auf 5 für den nächsten Fahrer
+      expect(recomputed.map((r) => ({ bib: r.bib, rank: r.rank }))).toEqual([
+        { bib: 100, rank: 1 },
+        { bib: 200, rank: 2 },
+        { bib: 513, rank: 3 },
+        { bib: 445, rank: 3 },
+        { bib: 471, rank: 5 },
+      ]);
+    });
   });
 
   // Reales Rennbeispiel als Regression-Test für die aktuelle Ranking-Logik.
@@ -390,11 +418,11 @@ describe("raceResultsActions", () => {
         raceResult({ bib: 349, rank: 0, points: 0, eliminated: false, eliminationLap: 0, dns: false, dsq: false, lapsCompleted: 23, finishTime: "", finishRank: 8 }),
         raceResult({ bib: 358, rank: 0, points: 0, eliminated: false, eliminationLap: 0, dns: false, dsq: false, lapsCompleted: 20, finishTime: "", finishRank: 9 }),
         raceResult({ bib: 345, rank: 0, points: 0, eliminated: false, eliminationLap: 0, dns: false, dsq: false, lapsCompleted: 18, finishTime: "", finishRank: 10 }),
-        raceResult({ bib: 342, rank: 11, points: 0, eliminated: false, eliminationLap: 0, dns: false, dsq: false, lapsCompleted: 16, finishTime: "", finishRank: 11 }),
-        raceResult({ bib: 371, rank: 12, points: 0, eliminated: false, eliminationLap: 0, dns: false, dsq: false, lapsCompleted: 14, finishTime: "", finishRank: 12 }),
-        raceResult({ bib: 298, rank: 14, points: 0, eliminated: true, eliminationLap: 17, dns: false, dsq: false, lapsCompleted: 12, finishTime: "", finishRank: 13 }),
-        raceResult({ bib: 352, rank: 15, points: 0, eliminated: true, eliminationLap: 16, dns: false, dsq: false, lapsCompleted: 11, finishTime: "", finishRank: 14 }),
-        raceResult({ bib: 383, rank: 16, points: 0, eliminated: true, eliminationLap: 15, dns: false, dsq: false, lapsCompleted: 8, finishTime: "", finishRank: 15 }),
+        raceResult({ bib: 342, rank: 0, points: 0, eliminated: false, eliminationLap: 0, dns: false, dsq: false, lapsCompleted: 16, finishTime: "", finishRank: 11 }),
+        raceResult({ bib: 371, rank: 0, points: 0, eliminated: false, eliminationLap: 0, dns: false, dsq: false, lapsCompleted: 14, finishTime: "", finishRank: 12 }),
+        raceResult({ bib: 298, rank: 0, points: 0, eliminated: true, eliminationLap: 17, dns: false, dsq: false, lapsCompleted: 12, finishTime: "", finishRank: 13 }),
+        raceResult({ bib: 352, rank: 0, points: 0, eliminated: true, eliminationLap: 16, dns: false, dsq: false, lapsCompleted: 11, finishTime: "", finishRank: 14 }),
+        raceResult({ bib: 383, rank: 0, points: 0, eliminated: true, eliminationLap: 15, dns: false, dsq: false, lapsCompleted: 8, finishTime: "", finishRank: 15 }),
         raceResult({ bib: 294, rank: 17, points: 0, eliminated: true, eliminationLap: 15, dns: false, dsq: false, lapsCompleted: 6, finishTime: "", finishRank: 16 }),
         raceResult({ bib: 302, rank: 18, points: 0, eliminated: true, eliminationLap: 14, dns: false, dsq: false, lapsCompleted: 5, finishTime: "", finishRank: 17 }),
         raceResult({ bib: 331, rank: 20, points: 0, eliminated: false, eliminationLap: 0, dns: true, dsq: false, lapsCompleted: 0, finishTime: "", finishRank: 18 }),
@@ -433,7 +461,7 @@ describe("raceResultsActions", () => {
         { bib: 298, rank: 13 },
         { bib: 352, rank: 14 },
         { bib: 383, rank: 15 },
-        { bib: 294, rank: 16 },
+        { bib: 294, rank: 15 },
         { bib: 302, rank: 17 },
         { bib: 331, rank: 19 },
         { bib: 356, rank: 20 },

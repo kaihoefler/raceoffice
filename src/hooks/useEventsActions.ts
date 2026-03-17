@@ -82,6 +82,8 @@ export type UseEventsActionsResult = {
   updateRaceActivity: (raceId: string, updated: RaceActivity) => void;
   replaceRaceActivities: (raceId: string, nextActivities: RaceActivity[]) => void;
   setRaceResultsManual: (raceId: string, nextResults: RaceResult[]) => void;
+  /** Fully rebuild raceResults from starters + activities and recompute rank. */
+  recalculateRaceResults: (raceId: string) => void;
 
   /** Convenience helper for the UI "Next race" flow. */
   makeNextRaceTemplate: (from: Race) => Race;
@@ -369,6 +371,22 @@ export function useEventsActions(eventId: string | null | undefined): UseEventsA
     [updateRace],
   );
 
+  // Force full recomputation of raceResults from current race document state.
+  const recalculateRaceResults = useCallback(
+    (raceId: string) => {
+      updateRace(raceId, (r) => {
+        const nextResults = materializeRaceResults({
+          prevResults: Array.isArray(r.raceResults) ? r.raceResults : [],
+          starters: Array.isArray(r.raceStarters) ? r.raceStarters : [],
+          activities: Array.isArray(r.raceActivities) ? r.raceActivities : [],
+        });
+
+        return { ...r, raceResults: nextResults };
+      });
+    },
+    [updateRace],
+  );
+
   // UI helper: create a "next race" template from an existing race.
   // This is pure and does not touch realtime state.
   const nextRaceTemplate = useCallback((from: Race) => makeNextRaceTemplate(from), []);
@@ -392,6 +410,7 @@ export function useEventsActions(eventId: string | null | undefined): UseEventsA
     updateRaceActivity,
     replaceRaceActivities,
     setRaceResultsManual,
+    recalculateRaceResults,
 
     makeNextRaceTemplate: nextRaceTemplate,
   };

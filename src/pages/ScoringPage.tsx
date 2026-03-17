@@ -104,8 +104,9 @@ export default function ScoringPage() {
         addRaceActivity,
         addRaceActivities,
         updateRaceActivity,
-        replaceRaceActivities,
+                replaceRaceActivities,
         setRaceResultsManual,
+        recalculateRaceResults,
     } = useEventsActions(activeEventId);
 
 
@@ -307,7 +308,7 @@ export default function ScoringPage() {
         URL.revokeObjectURL(url);
     }
 
-    function handleExportRaceResultsCsv() {
+        function handleExportRaceResultsCsv() {
         if (!race) return;
 
         const csv = buildRaceResultsCsv(race.raceResults ?? []);
@@ -315,6 +316,12 @@ export default function ScoringPage() {
 
         downloadTextFile(filename, csv, "text/csv;charset=utf-8");
     }
+
+    function handleRecalculateResults() {
+        if (!race) return;
+        recalculateRaceResults(race.id);
+    }
+
 
 
 
@@ -530,7 +537,11 @@ export default function ScoringPage() {
                         <RaceActivitiesList race={race} onUpdateActivity={handleUpdateActivity} onReplaceActivities={handleReplaceActivities} />
 
                         {/* Spalte 3: Standings */}
-                        <Scoreboard results={race.raceResults} title="Standings" />
+                        <Scoreboard
+                            results={race.raceResults}
+                            title="Standings"
+                            onRecalculateResults={handleRecalculateResults}
+                        />
 
 
                         {/* Spalte 4: Live race status (polled via RaceStatusProvider) */}
