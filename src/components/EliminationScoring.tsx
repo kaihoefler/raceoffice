@@ -670,6 +670,53 @@ export default function EliminationScoring({
     setPendingSaveBibs(null);
   }
 
+  function handleStarterClick(starter: Athlete) {
+    const bib = starter.bib;
+    if (bib == null) return;
+    if (parsedBibs.includes(bib)) return;
+
+    const nextStarter = starterByBib.get(bib) ?? starter;
+    const asRow = { sel: nextStarter, input: String(bib) };
+
+    const targetIndex = isFixedElimMode
+      ? rows.slice(0, elimBibCount).findIndex((r) => !r.sel && !String(r.input ?? "").trim())
+      : (() => {
+          const i = rows.findIndex((r) => !r.sel && !String(r.input ?? "").trim());
+          return i >= 0 ? i : rows.length;
+        })();
+
+    if (isFixedElimMode && (targetIndex < 0 || targetIndex >= elimBibCount)) return;
+
+    setError(null);
+
+    setRows((prev) => {
+      if (isFixedElimMode) {
+        const next = prev.slice(0, elimBibCount);
+        while (next.length < elimBibCount) next.push({ sel: null, input: "" });
+        next[targetIndex] = asRow;
+        return next;
+      }
+
+      const next = prev.length ? prev.slice() : [{ sel: null, input: "" }];
+      while (next.length <= targetIndex) next.push({ sel: null, input: "" });
+      next[targetIndex] = asRow;
+
+      const last = next[next.length - 1];
+      const lastIsEmpty = !last?.sel && !String(last?.input ?? "").trim();
+      if (!lastIsEmpty) next.push({ sel: null, input: "" });
+
+      return next;
+    });
+
+    if (isFixedElimMode) {
+      if (targetIndex <= 1) clearAutoPrefillBib(targetIndex as 0 | 1);
+      if (targetIndex + 1 < elimBibCount) focusIndex(targetIndex + 1);
+      return;
+    }
+
+    focusIndex(targetIndex + 1);
+  }
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
@@ -898,6 +945,7 @@ export default function EliminationScoring({
         pointsByBib={pointsByBib}
         formatAthleteLabel={athleteLabel}
         onDeleteStarter={onDeleteStarter}
+        onStarterClick={handleStarterClick}
       />
 
       <Dialog

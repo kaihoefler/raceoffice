@@ -695,8 +695,58 @@ export default function PointsScoring({
     return Array.from(new Set(bibs));
   }
 
-  function getMissingStarterBibs(bibs: number[]): number[] {
+    function getMissingStarterBibs(bibs: number[]): number[] {
     return bibs.filter((bib) => !starterByBib.has(bib));
+  }
+
+  function handleStarterClick(starter: Athlete) {
+    const bib = starter.bib;
+    if (bib == null) return;
+
+    const selectedBibs = new Set<number>([sel3P?.bib, sel2P?.bib, sel1P?.bib].filter((b): b is number => b != null));
+    if (selectedBibs.has(bib)) return;
+
+        const next = starterByBib.get(bib) ?? starter;
+
+
+    if (mode === "finish") {
+      if (!sel3P) {
+        markManualOverride(auto3PBibRef);
+        setSel3P(next);
+        setIn3P(String(bib));
+        queueFocus(ref2P);
+        return;
+      }
+
+      if (!sel2P) {
+        markManualOverride(auto2PBibRef);
+        setSel2P(next);
+        setIn2P(String(bib));
+        queueFocus(ref1P);
+        return;
+      }
+
+      if (!sel1P) {
+        markManualOverride(auto1PBibRef);
+        setSel1P(next);
+        setIn1P(String(bib));
+      }
+      return;
+    }
+
+    if (!sel2P) {
+      markManualOverride(auto2PBibRef);
+      setSel2P(next);
+      setIn2P(String(bib));
+      queueFocus(ref1P);
+      return;
+    }
+
+    if (!sel1P) {
+      markManualOverride(auto1PBibRef);
+      setSel1P(next);
+      setIn1P(String(bib));
+    }
   }
 
 
@@ -913,7 +963,7 @@ export default function PointsScoring({
         </Box>
       </Box>
 
-            <ScoringStarterList
+                  <ScoringStarterList
         starters={starters}
         missingInLiveBibs={missingInLiveBibs}
         selectedIds={selectedIds}
@@ -921,6 +971,7 @@ export default function PointsScoring({
         pointsByBib={pointsByBib}
         formatAthleteLabel={athleteLabel}
         onDeleteStarter={onDeleteStarter}
+        onStarterClick={handleStarterClick}
       />
 
 

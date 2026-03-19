@@ -5,7 +5,7 @@
 // Zweck:
 // - Verwaltung der Starter eines einzelnen Rennens
 // - manuelles Hinzufügen, Editieren und Löschen von Startern
-// - Import von Starterlisten (Overwrite oder Merge)
+// - Import von Starterlisten (Replace oder Merge)
 // - Navigation zum zugehörigen Scoring-Screen
 //
 // Wichtige Domänenidee:
@@ -256,14 +256,14 @@ export default function RaceStartersPage() {
     // Import-Typalias nur für bessere Lesbarkeit der Handler-Signatur.
     type ImportPreviewRow = StarterImportRow;
 
-    // Verarbeitet den CSV-/Listen-Import aus RaceStartersImport.
-    // - overwrite: ersetzt die komplette Starterliste
+        // Verarbeitet den CSV-/Listen-Import aus RaceStartersImport.
+    // - replace: ersetzt die komplette Starterliste
     // - merge: fügt neue Starter hinzu bzw. merged bestehende und rematerialisiert Ergebnisse
-    function handleImport(mode: "overwrite" | "merge", rows: ImportPreviewRow[]) {
+    function handleImport(mode: "replace" | "merge", rows: ImportPreviewRow[]) {
 
         if (!race) return;
 
-        if (mode === "overwrite") {
+        if (mode === "replace") {
             const next = rowsToAthletes(rows, race.ageGroupId);
             updateRaceStarters(next);
             return;

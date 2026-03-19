@@ -601,6 +601,16 @@ export default function FinishLineScoring({
     commitAddBib(bib, finishRank);
   }
 
+  function handleStarterClick(starter: Athlete) {
+    const bib = starter.bib;
+    if (bib == null) return;
+
+    setError(null);
+    setSelBib(starterByBib.get(bib) ?? starter);
+    setBibInput(String(bib));
+    requestAddBibFromText(String(bib), rankInput);
+  }
+
     /** Dialog: Starter anlegen (async) */
   async function handleDialogCreateAndAdd() {
     // Wenn das Feature nicht aktiv ist, gibt es nichts zu tun.
@@ -1054,6 +1064,7 @@ export default function FinishLineScoring({
         pointsByBib={pointsByBib}
         formatAthleteLabel={athleteLabel}
         onDeleteStarter={onDeleteStarter}
+        onStarterClick={handleStarterClick}
       />
 
       {/* Dialog: clear all finish entries */}

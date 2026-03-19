@@ -45,6 +45,8 @@ type Props = {
   formatAthleteLabel?: (a: Athlete) => string;
   /** Optional delete action, shown for starters missing in the live feed. */
   onDeleteStarter?: (starter: Athlete) => void;
+  /** Optional click action: allows parent scoring UIs to select/add a starter by click. */
+  onStarterClick?: (starter: Athlete) => void;
   title?: string;
   maxHeight?: number;
 };
@@ -61,6 +63,7 @@ export default function ScoringStarterList({
   pointsByBib,
   formatAthleteLabel,
   onDeleteStarter,
+  onStarterClick,
   title = "Starters",
   maxHeight = 420,
 }: Props) {
@@ -198,6 +201,7 @@ export default function ScoringStarterList({
             return (
               <ListItem
                 key={a.id}
+                onClick={() => onStarterClick?.(a)}
                 sx={{
                   px: 1,
                   borderRadius: 1,
@@ -207,6 +211,7 @@ export default function ScoringStarterList({
                   display: "flex",
                   alignItems: "center",
                   gap: 1,
+                  cursor: onStarterClick ? "pointer" : "default",
                 }}
               >
                 <ListItemText
@@ -258,7 +263,10 @@ export default function ScoringStarterList({
                       <IconButton
                         size="small"
                         color="error"
-                        onClick={() => onDeleteStarter(a)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteStarter(a);
+                        }}
                         aria-label={`Delete starter ${bib ?? ""}`.trim()}
                       >
                         <DeleteIcon fontSize="small" />
@@ -296,6 +304,7 @@ export default function ScoringStarterList({
               <Box
                 key={a.id}
                 title={labelOf(a)}
+                onClick={() => onStarterClick?.(a)}
                 sx={{
                   p: 0.5,
                   borderRadius: 1,
@@ -311,6 +320,7 @@ export default function ScoringStarterList({
                   justifyContent: "center",
                   gap: 0.15,
                   userSelect: "none",
+                  cursor: onStarterClick ? "pointer" : "default",
                 }}
               >
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, minHeight: 18 }}>
@@ -332,7 +342,10 @@ export default function ScoringStarterList({
                         <IconButton
                           size="small"
                           color="error"
-                          onClick={() => onDeleteStarter(a)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteStarter(a);
+                          }}
                           aria-label={`Delete starter ${bib ?? ""}`.trim()}
                           sx={{ p: 0.15 }}
                         >

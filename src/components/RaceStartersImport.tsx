@@ -125,7 +125,7 @@ type ImportPreviewRow = {
   nation: string | null;
 };
 
-type ImportMode = "overwrite" | "merge";
+type ImportMode = "replace" | "merge";
 
 type Props = {
   raceName: string;
@@ -164,8 +164,8 @@ export default function RaceStartersImport(props: Props ) {
     if (previewAnalysis.importable.length === 0) return;
 
     const msg =
-      mode === "overwrite"
-        ? `Overwrite: Alle aktuellen Starter werden gelöscht und durch den Import überschrieben.\n\nImportiere ${previewAnalysis.importable.length} Zeile(n)?`
+            mode === "replace"
+        ? `Replace: Alle aktuellen Starter werden gelöscht und durch den Import ersetzt.\n\nImportiere ${previewAnalysis.importable.length} Zeile(n)?`
         : `Merge: Vorhandene Starter werden aktualisiert (Match über Bib, sonst Name+IOC) und neue hinzugefügt.\n\nVerarbeite ${previewAnalysis.importable.length} Zeile(n)?`;
 
     const ok = window.confirm(msg);
@@ -383,9 +383,9 @@ export default function RaceStartersImport(props: Props ) {
                 size="small"
                 variant="contained"
                 disabled={previewAnalysis.importable.length === 0}
-                onClick={() => void handleImport("overwrite")}
+                                onClick={() => void handleImport("replace")}
               >
-                Overwrite
+                Replace
               </Button>
 
               <Button
