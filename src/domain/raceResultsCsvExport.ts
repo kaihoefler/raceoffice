@@ -3,7 +3,7 @@ import type { RaceResult } from "../types/race";
 import { recomputeRaceResults, sortRaceResultsForStandings } from "./raceResultsActions";
 
 export const RACE_RESULTS_CSV_HEADER =
-  "bib;rank;finish_time;points;eliminated;elimination_lap;laps_completed;dns;dsq;rank_at_finish;remark";
+  "bib;rank;finish_time;points;dnf;dnfLap;laps_completed;dns;dsq;rank_at_finish;remark";
 
 function csvEscape(value: unknown): string {
   const s = value == null ? "" : String(value);
@@ -44,8 +44,8 @@ export function buildRaceResultsCsv(results: RaceResult[]): string {
       r.dns ? "" : r.rank > 0 ? r.rank : "",
       r.finishTime ?? "",
       r.points ?? 0,
-      toBoolString(r.eliminated),
-      r.eliminationLap ?? 0,
+      String(r.dnf ?? false),
+      r.dnfLap ?? 0,
       r.lapsCompleted ?? 0,
       toBoolString(r.dns),
       toBoolString(r.dsq),

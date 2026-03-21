@@ -652,7 +652,7 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
                   RaceResult fields
                 </Typography>
                 <Typography variant="body2" sx={{ mb: 1 }}>
-                  {"{{result.bib}}, {{result.rank}}, {{result.points}}, {{result.finishRank}}, {{result.finishTime}}, {{result.eliminated}}, {{result.eliminationLap}}, {{result.dns}}, {{result.dsq}}, {{result.lapsCompleted}}, {{dynamicResult}}"}
+                  {"{{result.bib}}, {{result.rank}}, {{result.points}}, {{result.finishRank}}, {{result.finishTime}}, {{result.dnf}}, {{result.dnfLap}}, {{result.dns}}, {{result.dsq}}, {{result.lapsCompleted}}, {{dynamicResult}}"}
                 </Typography>
 
                 <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 700 }}>

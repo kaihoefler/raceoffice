@@ -25,8 +25,8 @@ export type RaceResult = {
   bib: number;
   rank: number; // current rank in the race, 0 if not yet ranked
   points: number; // current points in the race
-  eliminated: boolean;
-  eliminationLap: number; // 0 if not eliminated
+  dnf: false | "dnf" | "elimination";
+  dnfLap: number; // 0 if not DNF
   dns: boolean;
   dsq: boolean;
   lapsCompleted: number; // 0 or number of laps completed when the race is finished

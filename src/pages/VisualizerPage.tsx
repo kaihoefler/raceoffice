@@ -45,7 +45,7 @@ const flagByNation = Object.fromEntries(
   }),
 ) as Record<string, string>;
 
-type StatusKind = "DSQ" | "DNS" | "ELIM" | null;
+type StatusKind = "DSQ" | "DNS" | "DNF" | "ELIM" | null;
 
 // Interner Zeilentyp für die Tabellenansicht:
 // - "result": normale Ergebniszeile
@@ -73,7 +73,8 @@ type VisualizerRow = ResultRow | SkippedRowsIndicatorRow;
 function getStatus(r: RaceResult): { kind: StatusKind; label: string | null } {
   if (r.dsq) return { kind: "DSQ", label: "DSQ" };
   if (r.dns) return { kind: "DNS", label: "DNS" };
-  if (r.eliminated) return { kind: "ELIM", label: `Elim (${r.eliminationLap ?? 0})` };
+  if (r.dnf === "elimination") return { kind: "ELIM", label: "Elim" };
+  if (r.dnf === "dnf") return { kind: "DNF", label: "DNF" };
   return { kind: null, label: null };
 }
 
@@ -82,7 +83,7 @@ function getStatus(r: RaceResult): { kind: StatusKind; label: string | null } {
 function hasDisplayResult(r: RaceResult): boolean {
   const hasPoints = typeof r.points === "number" && r.points !== 0;
   const hasFinish = (r.finishRank ?? 0) > 0;
-  return Boolean(r.dsq || r.eliminated || hasFinish || hasPoints);
+  return Boolean(r.dsq || r.dnf !== false || hasFinish || hasPoints);
 }
 
 // Standard-Namensdarstellung für die Fallback-/Standardansicht.
@@ -103,13 +104,13 @@ function templateValueToString(value: unknown): string {
 // Reproduziert das Verhalten der bisherigen Standard-Result-Spalte.
 // - DSQ immer als hervorgehobener Status
 // - ELIM nur bei Elimination-Rennen als hervorgehobener Status
+// - DNF wie ELIM als hervorgehobener Status
 // - DNS als Chip
 // - bei Punkte-Rennen: Punkte
 // - sonst: Zielzeit
 function renderDynamicResultNode(
   result: RaceResult,
   isPointsRace: boolean,
-  isEliminationRace: boolean,
   statusColorValue: string,
 ): ReactNode {
   const status = getStatus(result);
@@ -122,9 +123,7 @@ function renderDynamicResultNode(
     );
   }
 
-  if (status.kind === "ELIM") {
-    if (!isEliminationRace) return "";
-
+  if (status.kind === "ELIM" || status.kind === "DNF") {
     return (
       <Box component="span" sx={{ color: statusColorValue, fontWeight: 800 }}>
         {status.label}
@@ -198,7 +197,6 @@ function resolveColumnNode(
   result: RaceResult,
   athlete: Athlete | null,
   isPointsRace: boolean,
-  isEliminationRace: boolean,
   statusColorValue: string,
 ): ReactNode {
   const template = String(column.columnContent ?? "");
@@ -214,7 +212,7 @@ function resolveColumnNode(
     }
 
     if (match[1] === "dynamicResult") {
-      parts.push(renderDynamicResultNode(result, isPointsRace, isEliminationRace, statusColorValue));
+      parts.push(renderDynamicResultNode(result, isPointsRace, statusColorValue));
     } else {
       parts.push(
         renderPlaceholderNode(match[2] as "result" | "athlete", match[3], result, athlete, `${match[2]}-${match[3]}-${match.index}`),
@@ -353,7 +351,7 @@ export default function VisualizerPage() {
   // Wenn Columns definiert sind, wird die Standardansicht ersetzt.
   const useDynamicColumns = dynamicColumns.length > 0;
   const isPointsRace = Boolean(activeRace?.racemode?.isPointsRace);
-  const isEliminationRace = Boolean(activeRace?.racemode?.isEliminationRace);
+
   const pagingEnabledByConfig = Boolean(visualization?.usePaging);
   const pagingLines = Math.max(1, Math.floor(Number(visualization?.pagingLines ?? 10) || 10));
   const pagingTime = Math.max(0, Math.floor(Number(visualization?.pagingTime ?? 0) || 0));
@@ -426,6 +424,7 @@ export default function VisualizerPage() {
         return theme.palette.text.secondary;
       case "DSQ":
         return theme.palette.error.dark;
+      case "DNF":
       case "ELIM":
         return theme.palette.error.main;
       default:
@@ -598,7 +597,7 @@ export default function VisualizerPage() {
                         align={col.columnAlign}
                         sx={{ whiteSpace: "nowrap", width: col.columnWidth || undefined }}
                       >
-                        {resolveColumnNode(col, r.result, r.athlete, isPointsRace, isEliminationRace, c)}
+                        {resolveColumnNode(col, r.result, r.athlete, isPointsRace, c)}
                       </TableCell>
                     ))
                   ) : (
@@ -612,7 +611,7 @@ export default function VisualizerPage() {
                       <TableCell sx={{ whiteSpace: "nowrap" }}>{r.name}</TableCell>
 
                       <TableCell align="right">
-                        {renderDynamicResultNode(r.result, isPointsRace, isEliminationRace, c)}
+                        {renderDynamicResultNode(r.result, isPointsRace, c)}
                       </TableCell>
                     </>
                   )}

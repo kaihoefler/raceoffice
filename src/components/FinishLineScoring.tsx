@@ -241,18 +241,19 @@ export default function FinishLineScoring({
   }, [finishers, starterByBib]);
 
   const statusByBib = useMemo(() => {
-    const m = new Map<number, { eliminated?: boolean; dns?: boolean; dsq?: boolean }>();
+    const m = new Map<number, { dnf?: false | "dnf" | "elimination"; dns?: boolean; dsq?: boolean }>();
 
     for (const r of raceResults) {
       const bib = Number((r as any)?.bib);
       if (!Number.isFinite(bib) || bib <= 0) continue;
 
-      const eliminated = Boolean((r as any)?.eliminated);
+      const dnfRaw = (r as any)?.dnf;
+      const dnf = dnfRaw === "dnf" || dnfRaw === "elimination" ? dnfRaw : false;
       const dns = Boolean((r as any)?.dns);
       const dsq = Boolean((r as any)?.dsq);
 
-      if (!eliminated && !dns && !dsq) continue;
-      m.set(bib, { eliminated, dns, dsq });
+      if (dnf === false && !dns && !dsq) continue;
+      m.set(bib, { dnf, dns, dsq });
     }
 
     return m;
@@ -334,8 +335,8 @@ export default function FinishLineScoring({
         bib,
         rank: 0,
         points: 0,
-        eliminated: false,
-        eliminationLap: 0,
+        dnf: false,
+        dnfLap: 0,
         dns: false,
         dsq: false,
         lapsCompleted,
@@ -492,8 +493,8 @@ export default function FinishLineScoring({
       bib,
       rank: 0,
       points: 0,
-      eliminated: false,
-      eliminationLap: 0,
+      dnf: false,
+      dnfLap: 0,
       dns: false,
       dsq: false,
       lapsCompleted: 0,

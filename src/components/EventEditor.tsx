@@ -42,6 +42,7 @@ import type { FullEvent } from "../types/event";
 
 import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
 import { useEventList } from "../providers/EventListProvider";
+import { normalizeRaceActivitiesForRead, normalizeRaceResultsForRead } from "../domain/eventActions";
 
 /**
  * Draft, der an EventListProvider.saveEvent(...) übergeben wird.
@@ -106,10 +107,10 @@ function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
     ageGroups: Array.isArray(obj.ageGroups) ? obj.ageGroups : [],
     races: races.map((r: any) => ({
       ...r,
-      // Defensive: Nested arrays normalisieren
-      raceResults: Array.isArray(r?.raceResults) ? r.raceResults : [],
+            // Defensive: Nested arrays normalisieren
+            raceResults: normalizeRaceResultsForRead(r?.raceResults),
       raceStarters: Array.isArray(r?.raceStarters) ? r.raceStarters : [],
-      raceActivities: Array.isArray(r?.raceActivities) ? r.raceActivities : [],
+      raceActivities: normalizeRaceActivitiesForRead(r?.raceActivities),
     })),
     athletes: Array.isArray(obj.athletes) ? obj.athletes : [],
   };

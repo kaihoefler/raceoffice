@@ -12,7 +12,7 @@
 // - We normalize defensively via normalizeFullEvent(...) on every update/read.
 // - Writes: useRealtimeDoc.update(...) accepts an updater(prev) => next.
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 
 import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
 
@@ -110,6 +110,31 @@ export function useEventsActions(eventId: string | null | undefined): UseEventsA
   // Always expose a normalized FullEvent to consumers.
   // Normalization makes the UI robust against missing arrays/fields.
   const fullEvent = useMemo(() => normalizeFullEvent(raw, resolvedEventId), [raw, resolvedEventId]);
+
+  // Legacy detection: old docs may still contain:
+  // - raceActivities with `type: "elimination"`
+  // - raceResults with `eliminated` / `eliminationLap`
+  const hasLegacyFields = useMemo(() => {
+    const races = Array.isArray((raw as any)?.races) ? ((raw as any).races as any[]) : [];
+
+    return races.some((r) => {
+      const acts = Array.isArray(r?.raceActivities) ? (r.raceActivities as any[]) : [];
+      const hasLegacyActivity = acts.some((a) => a?.type === "elimination");
+
+      const results = Array.isArray(r?.raceResults) ? (r.raceResults as any[]) : [];
+      const hasLegacyResults = results.some((rr) => "eliminated" in (rr ?? {}) || "eliminationLap" in (rr ?? {}));
+
+      return hasLegacyActivity || hasLegacyResults;
+    });
+  }, [raw]);
+
+  // Persist legacy migration automatically on load.
+  useEffect(() => {
+    if (!resolvedEventId) return;
+    if (!hasLegacyFields) return;
+
+    update((prev) => normalizeFullEvent(prev, resolvedEventId) as Partial<FullEvent>);
+  }, [resolvedEventId, hasLegacyFields, update]);
 
   // Low-level helper: update a single race by id.
   // This keeps all array merging logic in one place.

@@ -7,7 +7,7 @@
 //   - "All": zeigt alle Einträge außer DNS
 //   - "With Result": zeigt nur Einträge mit verwertbarem Result (Punkte/Finish/ELIM/DSQ), ebenfalls ohne DNS
 // - Sortierung: rank aufsteigend (rank > 0 zuerst), danach ungerankte (rank = 0) nach bib
-// - Statusdarstellung (DSQ/DNS/ELIM) ersetzt Points+Finish durch ein Chip-Label
+// - Statusdarstellung (DSQ/DNS/DNF/ELIM) ersetzt Points+Finish durch ein Chip-Label
 // - Optional scrollbarer Container via maxHeight
 
 import { useMemo, useState } from "react";
@@ -49,7 +49,7 @@ type Props = {
  * Status-Typen, die in der Tabelle gesondert dargestellt werden.
  * Hinweis: DNS wird zwar erkannt, aber DNS-Zeilen werden in beiden Modi ausgefiltert (siehe rows-Memo).
  */
-type StatusKind = "DSQ" | "DNS" | "ELIM" | null;
+type StatusKind = "DSQ" | "DNS" | "DNF" | "ELIM" | null;
 
 /**
  * Ermittelt den Status eines RaceResult:
@@ -57,9 +57,10 @@ type StatusKind = "DSQ" | "DNS" | "ELIM" | null;
  * - sonst => null
  */
 function getStatus(r: RaceResult): { kind: StatusKind; label: string | null } {
-  if (r.dsq) return { kind: "DSQ", label: "DSQ" };
+    if (r.dsq) return { kind: "DSQ", label: "DSQ" };
   if (r.dns) return { kind: "DNS", label: "DNS" };
-  if (r.eliminated) return { kind: "ELIM", label: `Elim (${r.eliminationLap ?? 0})` };
+  if (r.dnf === "elimination") return { kind: "ELIM", label: `Elim (${r.dnfLap ?? 0})` };
+  if (r.dnf === "dnf") return { kind: "DNF", label: `DNF (${r.dnfLap ?? 0})` };
   return { kind: null, label: null };
 }
 
@@ -74,7 +75,7 @@ type DisplayMode = "all" | "withResult";
  * Definition für "With Result":
  * Ein Fahrer gilt als "hat Result", wenn mindestens eines gilt:
  * - DSQ
- * - eliminated
+ * - DNF / Elimination
  * - finishRank > 0
  * - points != 0
  *
@@ -83,7 +84,7 @@ type DisplayMode = "all" | "withResult";
 function hasDisplayResult(r: RaceResult): boolean {
   const hasPoints = typeof r.points === "number" && r.points !== 0;
   const hasFinish = (r.finishRank ?? 0) > 0;
-  return Boolean(r.dsq || r.eliminated || hasFinish || hasPoints);
+  return Boolean(r.dsq || r.dnf !== false || hasFinish || hasPoints);
 }
 
 export default function Scoreboard({
@@ -155,6 +156,7 @@ export default function Scoreboard({
         return theme.palette.text.secondary;
       case "DSQ":
         return theme.palette.error.dark;
+            case "DNF":
       case "ELIM":
         return theme.palette.error.main;
       default:

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Athlete } from "../types/athlete";
 import type { Race, RaceResult } from "../types/race";
-import type { RaceActivity, RaceActivityDns, RaceActivityElimination, RaceActivityPointsSprint } from "../types/raceactivities";
+import type { RaceActivity, RaceActivityDNF, RaceActivityDns, RaceActivityPointsSprint } from "../types/raceactivities";
 
 import { removeStarterFromRace, replaceRaceStartersInRace, upsertRaceStartersInRace } from "./raceActions";
 
@@ -22,8 +22,8 @@ function raceResult(overrides: Partial<RaceResult> & Pick<RaceResult, "bib">): R
     bib: overrides.bib,
     rank: overrides.rank ?? 0,
     points: overrides.points ?? 0,
-    eliminated: overrides.eliminated ?? false,
-    eliminationLap: overrides.eliminationLap ?? 0,
+    dnf: overrides.dnf ?? false,
+    dnfLap: overrides.dnfLap ?? 0,
     dns: overrides.dns ?? false,
     dsq: overrides.dsq ?? false,
     lapsCompleted: overrides.lapsCompleted ?? 0,
@@ -46,13 +46,14 @@ function pointsSprint(id: string, results: Array<{ bib: number; points: number }
   };
 }
 
-function elimination(id: string, lap: number, bibs: number[]): RaceActivityElimination {
+function elimination(id: string, lap: number, bibs: number[]): RaceActivityDNF {
   return {
     id,
     createdAt: `${id}-createdAt`,
-    type: "elimination",
+    type: "DNF",
     data: {
       lap,
+      dnfType: "elimination",
       isDeleted: false,
       results: bibs.map((bib) => ({ bib })),
       history: [],
@@ -102,8 +103,8 @@ function raceFixture(): Race {
     raceActivities: activities,
     raceResults: [
       raceResult({ bib: 101, points: 3, finishRank: 1, rank: 1 }),
-      raceResult({ bib: 102, points: 2, eliminated: true, eliminationLap: 8, finishRank: 2, rank: 2 }),
-      raceResult({ bib: 103, eliminated: true, eliminationLap: 7, finishRank: 3, rank: 3 }),
+      raceResult({ bib: 102, points: 2, dnf: "elimination", dnfLap: 8, finishRank: 2, rank: 2 }),
+      raceResult({ bib: 103, dnf: "elimination", dnfLap: 7, finishRank: 3, rank: 3 }),
       raceResult({ bib: 104, dns: true, finishRank: 4, rank: 4 }),
       raceResult({ bib: 999, points: 9, finishRank: 99, rank: 5 }),
     ],
@@ -122,10 +123,10 @@ describe("raceActions", () => {
         elimination("elim-1", 7, [103]),
         dns("dns-1", 104),
       ]);
-      expect(next.raceResults.map((r) => ({ bib: r.bib, rank: r.rank, points: r.points, eliminated: r.eliminated, dns: r.dns }))).toEqual([
-        { bib: 101, rank: 1, points: 3, eliminated: false, dns: false },
-        { bib: 103, rank: 2, points: 0, eliminated: true, dns: false },
-        { bib: 104, rank: 3, points: 0, eliminated: false, dns: true },
+      expect(next.raceResults.map((r) => ({ bib: r.bib, rank: r.rank, points: r.points, dnf: r.dnf, dns: r.dns }))).toEqual([
+        { bib: 101, rank: 1, points: 3, dnf: false, dns: false },
+        { bib: 103, rank: 2, points: 0, dnf: "elimination", dns: false },
+        { bib: 104, rank: 3, points: 0, dnf: false, dns: true },
       ]);
     });
   });
@@ -140,8 +141,8 @@ describe("raceActions", () => {
         bib: 105,
         rank: 2,
         points: 0,
-        eliminated: false,
-        eliminationLap: 0,
+        dnf: false,
+        dnfLap: 0,
         dns: false,
         dsq: false,
         lapsCompleted: 0,

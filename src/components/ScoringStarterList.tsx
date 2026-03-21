@@ -21,12 +21,12 @@ import ViewListIcon from "@mui/icons-material/ViewList";
 import type { Athlete } from "../types/athlete";
 
 export type StarterStatus = {
-  eliminated?: boolean;
+  dnf?: false | "dnf" | "elimination";
   dns?: boolean;
   dsq?: boolean;
 };
 
-type StatusKind = "DSQ" | "DNS" | "ELIM" | null;
+type StatusKind = "DSQ" | "DNS" | "DNF" | "ELIM" | null;
 
 type Props = {
   starters: Athlete[];
@@ -79,6 +79,7 @@ export default function ScoringStarterList({
         return theme.palette.text.secondary;
       case "DSQ":
         return theme.palette.error.dark;
+      case "DNF":
       case "ELIM":
         return theme.palette.error.main;
       default:
@@ -98,13 +99,13 @@ export default function ScoringStarterList({
     if (!statusByBib) return m;
 
     for (const [bib, s] of statusByBib.entries()) {
-      const parts = [s?.eliminated ? "ELIM" : null, s?.dns ? "DNS" : null, s?.dsq ? "DSQ" : null].filter(
-        Boolean,
-      ) as string[];
+      const dnfLabel = s?.dnf === "elimination" ? "ELIM" : s?.dnf === "dnf" ? "DNF" : null;
+      const parts = [dnfLabel, s?.dns ? "DNS" : null, s?.dsq ? "DSQ" : null].filter(Boolean) as string[];
       if (!parts.length) continue;
 
       // Choose a primary kind for coloring (matches Scoreboard.tsx intent).
-      const kind: StatusKind = s?.dsq ? "DSQ" : s?.dns ? "DNS" : s?.eliminated ? "ELIM" : null;
+      const kind: StatusKind =
+        s?.dsq ? "DSQ" : s?.dns ? "DNS" : s?.dnf === "elimination" ? "ELIM" : s?.dnf === "dnf" ? "DNF" : null;
 
       m.set(bib, { kind, label: parts.join(" ") });
     }
@@ -113,9 +114,10 @@ export default function ScoringStarterList({
   }, [statusByBib]);
 
   const orderedStarters = useMemo(() => {
-    // Desired grouping (first -> last): normal, ELIM, DSQ, DNS
+    // Desired grouping (first -> last): normal, DNF/ELIM, DSQ, DNS
     const priority: Record<Exclude<StatusKind, null> | "NONE", number> = {
       NONE: 0,
+      DNF: 1,
       ELIM: 1,
       DSQ: 2,
       DNS: 3,
@@ -127,7 +129,8 @@ export default function ScoringStarterList({
       if (!s) return null;
       if (s.dsq) return "DSQ";
       if (s.dns) return "DNS";
-      if (s.eliminated) return "ELIM";
+      if (s.dnf === "elimination") return "ELIM";
+      if (s.dnf === "dnf") return "DNF";
       return null;
     }
 

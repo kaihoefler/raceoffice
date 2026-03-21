@@ -51,12 +51,12 @@ export type ScoringViewModel = {
    * Last eligible bibs in live ranking (worst positions).
    * - lastBib: last/worst
    * - secondLastBib: second last
-   * Both are filtered to NOT be eliminated/DNS/DSQ in current raceResults.
+   * Both are filtered to NOT be DNF/DNS/DSQ in current raceResults.
    */
   liveLastEligibleBibs: { lastBib: number | null; secondLastBib: number | null };
 
 
-  /** Bibs that still have 0 lapsComplete in the live feed (and are not eliminated/DNS/DSQ in current raceResults). */
+  /** Bibs that still have 0 lapsComplete in the live feed (and are not DNF/DNS/DSQ in current raceResults). */
   liveZeroLapBibs: number[];
 
 
@@ -186,14 +186,14 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
     };
 
     // ---- Last eligible bib by position (used for EliminationScoring prefill) ----
-    // "Eligible" means: not eliminated, not DNS, not DSQ in current raceResults.
+    // "Eligible" means: not DNF, not DNS, not DSQ in current raceResults.
     const ineligible = new Set<number>();
     const raceResults = Array.isArray((race as any)?.raceResults) ? ((race as any).raceResults as any[]) : [];
 
     for (const r of raceResults) {
       const bib = bibToInt((r as any)?.bib);
       if (bib == null) continue;
-      if ((r as any)?.eliminated || (r as any)?.dns || (r as any)?.dsq) ineligible.add(bib);
+      if ((r as any)?.dnf !== false || (r as any)?.dns || (r as any)?.dsq) ineligible.add(bib);
     }
 
             const lastEligible: number[] = [];

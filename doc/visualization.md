@@ -7,7 +7,7 @@ Die Option `showSkippedRowsIndicator` steuert, ob in der Tabelle eine zusätzlic
 Darstellbares Resultat bedeutet in `VisualizerPage` aktuell z. B.:
 
 - `dsq === true`
-- `eliminated === true`
+- `dnf !== false` (also `"dnf"` oder `"elimination"`)
 - `finishRank > 0`
 - `points !== 0`
 
@@ -47,7 +47,7 @@ Sortierte Reihenfolge (vereinfacht):
 2. Rank 2 (sichtbar)
 3. Rank 3 (kein Resultat) → ausgeblendet
 4. Rank 4 (kein Resultat) → ausgeblendet
-5. Rank 5 (eliminiert) → sichtbar
+5. Rank 5 (DNF/Elim) → sichtbar
 
 Mit `showSkippedRowsIndicator = true` wird angezeigt:
 

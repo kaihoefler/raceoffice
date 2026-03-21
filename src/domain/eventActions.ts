@@ -1,5 +1,6 @@
 import type { FullEvent } from "../types/event";
-import type { Race } from "../types/race";
+import type { Race, RaceResult } from "../types/race";
+import type { RaceActivity } from "../types/raceactivities";
 
 /**
  * A lightweight “draft” shape for creating/updating races.
@@ -17,6 +18,64 @@ export type RaceDraftLike = {
   stage_value: string;
   distance_value: string;
 };
+
+/**
+ * Legacy migration on read:
+ * - converts old raceResult fields `eliminated`/`eliminationLap`
+ *   to `dnf`/`dnfLap`
+ */
+export function normalizeRaceResultsForRead(rawResults: unknown): RaceResult[] {
+  const list = Array.isArray(rawResults) ? rawResults : [];
+
+  return list.map((r: any) => {
+    const rawDnf = r?.dnf;
+
+    const dnf: RaceResult["dnf"] =
+      rawDnf === "dnf" || rawDnf === "elimination"
+        ? rawDnf
+        : r?.eliminated
+          ? "elimination"
+          : false;
+
+    const dnfLapRaw = Number(r?.dnfLap ?? r?.eliminationLap ?? 0);
+    const dnfLap = Number.isFinite(dnfLapRaw) ? Math.max(0, Math.floor(dnfLapRaw)) : 0;
+
+    return {
+      ...r,
+      dnf,
+      dnfLap,
+    } as RaceResult;
+  });
+}
+
+/**
+ * Legacy migration on read:
+ * - converts old `type: "elimination"` activities to
+ *   `type: "DNF"` + `data.dnfType: "elimination"`
+ */
+export function normalizeRaceActivitiesForRead(rawActivities: unknown): RaceActivity[] {
+  const list = Array.isArray(rawActivities) ? rawActivities : [];
+
+  return list.map((a: any) => {
+    if (a?.type !== "elimination") return a as RaceActivity;
+
+    const data = a?.data ?? {};
+    const history = Array.isArray(data.history) ? data.history : [];
+
+    return {
+      ...a,
+      type: "DNF",
+      data: {
+        ...data,
+        dnfType: "elimination",
+        history: history.map((h: any) => ({
+          ...h,
+          dnfType: "elimination",
+        })),
+      },
+    } as RaceActivity;
+  });
+}
 
 /**
  * Defensive normalization of an event document coming from realtime storage.
@@ -45,9 +104,9 @@ export function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
       stage,
       stage_value: typeof r?.stage_value === "string" ? r.stage_value : "",
       distance_value: typeof r?.distance_value === "string" ? r.distance_value : "",
-      raceResults: Array.isArray(r?.raceResults) ? r.raceResults : [],
+      raceResults: normalizeRaceResultsForRead(r?.raceResults),
       raceStarters: Array.isArray(r?.raceStarters) ? r.raceStarters : [],
-      raceActivities: Array.isArray(r?.raceActivities) ? r.raceActivities : [],
+      raceActivities: normalizeRaceActivitiesForRead(r?.raceActivities),
     };
   };
 

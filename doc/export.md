@@ -32,7 +32,7 @@ junior_ladies_points_final_result.csv
 The first row is always the header:
 
 ```
-bib;rank;finish_time;points;eliminated;elimination_lap;laps_completed;dns;dsq;rank_at_finish;remark
+bib;rank;finish_time;points;dnf;dnfLap;laps_completed;dns;dsq;rank_at_finish;remark
 ```
 
 ## Column mapping
@@ -45,8 +45,8 @@ Each subsequent row represents one `RaceResult`.
 | `rank`           | `RaceResult.rank`, **but empty for DNS** (`dns === true`). If not DNS and `rank > 0` it is exported, otherwise empty. |
 | `finish_time`    | `RaceResult.finishTime` (empty string if not present) |
 | `points`         | `RaceResult.points` (defaults to `0`) |
-| `eliminated`     | `RaceResult.eliminated` exported as `"true"` / `"false"` |
-| `elimination_lap`| `RaceResult.eliminationLap` (defaults to `0`) |
+| `dnf`            | `RaceResult.dnf` exported as string (`"false"`, `"dnf"`, `"elimination"`) |
+| `dnfLap`         | `RaceResult.dnfLap` (defaults to `0`) |
 | `laps_completed` | `RaceResult.lapsCompleted` (defaults to `0`) |
 | `dns`            | `RaceResult.dns` exported as `"true"` / `"false"` |
 | `dsq`            | `RaceResult.dsq` exported as `"true"` / `"false"` |
@@ -61,10 +61,10 @@ Rows are exported in **standings order**, using the same sorting logic as in `sr
 - Then it orders rows via `sortRaceResultsForStandings(...)` (same criteria as rank computation):
   1. Status bucket (best to worst):
      - normal
-     - eliminated
+     - DNF (both `dnf` and `elimination`)
      - DSQ
      - DNS
-  2. `eliminationLap` (descending)
+  2. `dnfLap` (descending)
   3. `points` (descending)
   4. `finishRank` (ascending; `finishRank = 0` is treated as “no finish” and sorted last)
   5. Tie-breaker: `bib` ascending
@@ -81,7 +81,7 @@ Values are quoted using standard CSV quoting rules **only when needed**:
 Header:
 
 ```
-bib;rank;finish_time;points;eliminated;elimination_lap;laps_completed;dns;dsq;rank_at_finish;remark
+bib;rank;finish_time;points;dnf;dnfLap;laps_completed;dns;dsq;rank_at_finish;remark
 ```
 
 Example rows:
@@ -90,7 +90,9 @@ Example rows:
 12;1;0:15,032;5;false;0;0;false;false;1;
 34;;;
 56;;"";0;false;0;0;true;false;;DNS
-78;3;;0;false;0;0;false;true;;DSQ
+78;3;;0;elimination;15;0;false;false;;
+79;4;;0;dnf;14;0;false;false;;
+80;5;;0;false;0;0;false;true;;DSQ
 ```
 
 (Example values are illustrative.)

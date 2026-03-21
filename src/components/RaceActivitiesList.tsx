@@ -28,9 +28,9 @@ import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 import type { Race } from "../types/race";
 import type {
   RaceActivity,
+  RaceActivityDNF,
   RaceActivityDisqualfication,
   RaceActivityDns,
-  RaceActivityElimination,
   RaceActivityPointsSprint,
 } from "../types/raceactivities";
 
@@ -55,8 +55,12 @@ function isPointsSprint(a: RaceActivity): a is RaceActivityPointsSprint {
   return a.type === "pointsSprint";
 }
 
-function isElimination(a: RaceActivity): a is RaceActivityElimination {
-  return a.type === "elimination";
+function isElimination(a: RaceActivity): a is RaceActivityDNF {
+  return a.type === "DNF" && a.data?.dnfType === "elimination";
+}
+
+function isDnf(a: RaceActivity): a is RaceActivityDNF {
+  return a.type === "DNF" && a.data?.dnfType === "dnf";
 }
 
 function isDns(a: RaceActivity): a is RaceActivityDns {
@@ -126,7 +130,7 @@ function formatHistoryLine(a: RaceActivity, h: any): string {
 
   const detailsStr = isPointsSprint(a)
     ? formatPointsResults(h?.results ?? [])
-    : isElimination(a)
+    : isElimination(a) || isDnf(a)
       ? formatEliminationResults(h?.results ?? [])
       : isDns(a) || isDsq(a)
         ? String(h?.bib ?? "")
@@ -169,7 +173,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
       return;
     }
 
-    if (isElimination(a)) {
+    if (isElimination(a) || isDnf(a)) {
       setDraftResults(formatEliminationResults((a.data as any)?.results ?? []));
       return;
     }
@@ -216,7 +220,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
       return;
     }
 
-    if (isElimination(a)) {
+    if (isElimination(a) || isDnf(a)) {
       const nextResults = parseEliminationResults(draftResults);
       if (nextResults === null) {
         setError("Invalid results format. Use: bib, bib");
@@ -226,12 +230,13 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
       const prevSnapshot = {
         changedAt: new Date().toISOString(),
         lap: (a.data as any).lap,
+        dnfType: (a.data as any).dnfType,
         isDeleted: (a.data as any).isDeleted,
         results: (a.data as any).results,
       };
       const prevHistory = Array.isArray((a.data as any).history) ? (a.data as any).history : [];
 
-      const updated: RaceActivityElimination = {
+      const updated: RaceActivityDNF = {
         ...a,
         data: {
           ...(a.data as any),
@@ -275,16 +280,17 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
       return;
     }
 
-    if (isElimination(a)) {
+    if (isElimination(a) || isDnf(a)) {
       const prevSnapshot = {
         changedAt: new Date().toISOString(),
         lap: (a.data as any).lap,
+        dnfType: (a.data as any).dnfType,
         isDeleted: (a.data as any).isDeleted,
         results: (a.data as any).results,
       };
       const prevHistory = Array.isArray((a.data as any).history) ? (a.data as any).history : [];
 
-      const updated: RaceActivityElimination = {
+      const updated: RaceActivityDNF = {
         ...a,
         data: {
           ...(a.data as any),
@@ -444,21 +450,25 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
               ? "Points"
               : isElimination(a)
                 ? "Elimination"
-                : isDns(a)
-                  ? "DNS"
-                  : isDsq(a)
-                    ? "DSQ"
-                    : "Activity";
+                : isDnf(a)
+                  ? "DNF"
+                  : isDns(a)
+                    ? "DNS"
+                    : isDsq(a)
+                      ? "DSQ"
+                      : "Activity";
 
             const content = isPointsSprint(a)
               ? formatPointsResults(a.data?.results ?? [])
               : isElimination(a)
                 ? formatEliminationResults((a.data as any)?.results ?? [])
-                : isDns(a)
-                  ? `DNS: ${(a.data as any)?.bib ?? ""}`
-                  : isDsq(a)
-                    ? `DSQ: ${(a.data as any)?.bib ?? ""}`
-                    : "";
+                : isDnf(a)
+                  ? formatEliminationResults(((a as any)?.data as any)?.results ?? [])
+                  : isDns(a)
+                    ? `DNS: ${(a.data as any)?.bib ?? ""}`
+                    : isDsq(a)
+                      ? `DSQ: ${(a.data as any)?.bib ?? ""}`
+                      : "";
 
             const history = historyOf(a);
             const historyTitle = history.length ? (
@@ -613,7 +623,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
                         label={
                           isPointsSprint(a)
                             ? "Results (pointsP:bib, ...)"
-                            : isElimination(a)
+                            : isElimination(a) || isDnf(a)
                               ? "Results (bib, ...)"
                               : "Results"
                         }

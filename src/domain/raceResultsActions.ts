@@ -8,7 +8,7 @@
  * 1) Manual input fields maintained in dedicated UIs
  *    (e.g. finishRank, finishTime, lapsCompleted)
  * 2) Derived fields calculated from the activity stream (`raceActivities`)
- *    (e.g. points, eliminated/eliminationLap, dsq, dns)
+ *    (e.g. points, dnf/dnfLap, dsq, dns)
  *
  * Expected update pipeline for callers:
  * 1) `applyActivitiesToRaceResults(...)`
@@ -24,7 +24,6 @@ import type {
   RaceActivity,
   RaceActivityDisqualfication,
   RaceActivityDns,
-  RaceActivityElimination,
   RaceActivityPointsSprint,
 } from "../types/raceactivities";
 import type { RaceResult } from "../types/race";
@@ -55,8 +54,8 @@ export function makeDefaultRaceResult(bib: number): RaceResult {
     bib,
     rank: 0,
     points: 0,
-    eliminated: false,
-    eliminationLap: 0,
+    dnf: false,
+    dnfLap: 0,
     dns: false,
     dsq: false,
     lapsCompleted: 0,
@@ -70,8 +69,8 @@ function isPointsSprintActivity(a: RaceActivity | any): a is RaceActivityPointsS
   return a?.type === "pointsSprint";
 }
 
-function isEliminationActivity(a: RaceActivity | any): a is RaceActivityElimination {
-  return a?.type === "elimination";
+function isDnfActivity(a: RaceActivity | any): boolean {
+  return a?.type === "DNF";
 }
 
 function isDsqActivity(a: RaceActivity | any): a is RaceActivityDisqualfication {
@@ -92,7 +91,7 @@ function isDnsActivity(a: RaceActivity | any): a is RaceActivityDns {
  *
  * Derived fields:
  * - `points`: summed from pointsSprint activity entries
- * - `eliminated` + `eliminationLap`: from elimination activities
+ * - `dnf` + `dnfLap`: from DNF activities
  *   (if multiple entries exist for one bib, the highest lap wins)
  * - `dsq` / `dns`: set by DSQ/DNS activities
  *
@@ -126,7 +125,7 @@ export function applyActivitiesToRaceResults(args: {
   }
 
   for (const a of activities) {
-    if (isPointsSprintActivity(a) || isEliminationActivity(a)) {
+    if (isPointsSprintActivity(a) || isDnfActivity(a)) {
       const res = Array.isArray(a.data?.results) ? a.data.results : [];
       for (const r of res) {
         const bib = bibToInt((r as any)?.bib);
@@ -167,7 +166,7 @@ export function applyActivitiesToRaceResults(args: {
 
   // Accumulators for a single derivation pass over the activity stream.
   const pointsByBib = new Map<number, number>();
-  const elimLapByBib = new Map<number, number>();
+  const dnfByBib = new Map<number, { dnf: "dnf" | "elimination"; lap: number }>();
   const dsqBibs = new Set<number>();
   const dnsBibs = new Set<number>();
 
@@ -184,15 +183,22 @@ export function applyActivitiesToRaceResults(args: {
       continue;
     }
 
-    if (isEliminationActivity(a)) {
+    if (a?.type === "DNF") {
       if (a.data?.isDeleted) continue;
+
+      const dnfType = a.data?.dnfType === "dnf" || a.data?.dnfType === "elimination" ? a.data.dnfType : null;
+      if (!dnfType) continue;
+
       const lap = bibToInt((a as any)?.data?.lap) ?? 0;
       const res = Array.isArray(a.data?.results) ? a.data.results : [];
       for (const r of res) {
         const bib = bibToInt((r as any)?.bib);
         if (bib == null) continue;
-        const prev = elimLapByBib.get(bib) ?? 0;
-        elimLapByBib.set(bib, Math.max(prev, lap));
+
+        const prev = dnfByBib.get(bib);
+        if (!prev || lap > prev.lap || (lap === prev.lap && dnfType === "elimination" && prev.dnf !== "elimination")) {
+          dnfByBib.set(bib, { dnf: dnfType, lap });
+        }
       }
       continue;
     }
@@ -223,10 +229,10 @@ export function applyActivitiesToRaceResults(args: {
     else if (t === "DNS") dnsBibs.add(bib);
   }
 
-  // Business rule: any bib marked as eliminated loses all points.
-  // Apply this after the full activity pass so elimination always wins.
-  for (const [bib, lap] of elimLapByBib) {
-    if (lap > 0) pointsByBib.set(bib, 0);
+  // Business rule: any bib marked as DNF loses all points.
+  // Apply this after the full activity pass so DNF always wins.
+  for (const [bib, status] of dnfByBib) {
+    if (status.lap > 0) pointsByBib.set(bib, 0);
   }
 
   // Build output in stable order: keep prior ordering, then append newly introduced bibs.
@@ -236,14 +242,16 @@ export function applyActivitiesToRaceResults(args: {
     const bib = bibToInt(base.bib) ?? base.bib;
 
     const points = pointsByBib.get(bib) ?? 0;
-    const elimLap = elimLapByBib.get(bib) ?? 0;
+    const dnfStatus = dnfByBib.get(bib);
+    const dnf = dnfStatus?.dnf ?? false;
+    const dnfLap = dnfStatus?.lap ?? 0;
 
     return {
       ...base,
       bib,
       points,
-      eliminated: elimLap > 0,
-      eliminationLap: elimLap,
+      dnf,
+      dnfLap,
       dsq: dsqBibs.has(bib),
       dns: dnsBibs.has(bib),
     };
@@ -278,7 +286,7 @@ export function applyActivitiesToRaceResults(args: {
 
 type SortKey = {
   bucket: number;
-  eliminationLap: number;
+  dnfLap: number;
   points: number;
   finishRankKey: number; // finishRank=0 => Infinity (treated as "no finish" -> last)
 };
@@ -302,15 +310,15 @@ function toFiniteNumber(n: unknown, fallback = 0): number {
 
 /**
  * Status priority (ascending = better):
- * 0: not eliminated, not DSQ, not DNS
- * 1: eliminated
+ * 0: not DNF, not DSQ, not DNS
+ * 1: DNF (dnf/elimination)
  * 2: DSQ
  * 3: DNS
  */
 function statusBucket(r: RaceResult): number {
   if (r.dsq) return 2;
   if (r.dns) return 3;
-  return r.eliminated ? 1 : 0;
+  return r.dnf !== false ? 1 : 0;
 }
 
 /**
@@ -321,7 +329,7 @@ function sortKey(r: RaceResult): SortKey {
 
   return {
     bucket: statusBucket(r),
-    eliminationLap: toFiniteInt(r.eliminationLap, 0),
+    dnfLap: toFiniteInt(r.dnfLap, 0),
     points: toFiniteNumber(r.points, 0),
     finishRankKey: finishRank > 0 ? finishRank : Number.POSITIVE_INFINITY,
   };
@@ -331,8 +339,8 @@ function sortKey(r: RaceResult): SortKey {
  * Comparator used for standings sorting.
  *
  * Sort priority (best to worst):
- * 1) status bucket (active, eliminated, DSQ, DNS)
- * 2) elimination lap (higher is better)
+ * 1) status bucket (active, DNF, DSQ, DNS)
+ * 2) DNF lap (higher is better)
  * 3) points (higher is better)
  * 4) finishRank (lower is better; 0 behaves like "no finish" and is pushed back)
  * 5) bib (stable deterministic tie-breaker only)
@@ -344,8 +352,8 @@ function compareRaceResultsForStandings(ra: RaceResult, rb: RaceResult): number 
   // 1) status bucket (asc)
   if (a.bucket !== b.bucket) return a.bucket - b.bucket;
 
-  // 2) eliminationLap (desc)
-  if (a.eliminationLap !== b.eliminationLap) return b.eliminationLap - a.eliminationLap;
+  // 2) dnfLap (desc)
+  if (a.dnfLap !== b.dnfLap) return b.dnfLap - a.dnfLap;
 
   // 3) points (desc)
   if (a.points !== b.points) return b.points - a.points;
@@ -364,7 +372,7 @@ function compareRaceResultsForStandings(ra: RaceResult, rb: RaceResult): number 
 function keysEqual(a: SortKey, b: SortKey): boolean {
   return (
     a.bucket === b.bucket &&
-    a.eliminationLap === b.eliminationLap &&
+    a.dnfLap === b.dnfLap &&
     a.points === b.points &&
     a.finishRankKey === b.finishRankKey
   );
@@ -386,7 +394,7 @@ export function sortRaceResultsForStandings(input: RaceResult[]): RaceResult[] {
  * Ranking behavior:
  * - Uses the same comparator as standings sort
  * - Supports ties (e.g. 1, 1, 3)
- * - Special rule: eliminated riders in the same elimination lap share the same rank,
+ * - Special rule: DNF riders in the same DNF lap share the same rank,
  *   regardless of points or finishRank
  * - Keeps original array order in the return value to minimize document churn
  */
@@ -408,16 +416,16 @@ export function recomputeRaceResults(input: RaceResult[]): RaceResult[] {
 
     const key = sortKey(r);
 
-    // Special tie rule: riders eliminated in the same lap share rank,
+    // Special tie rule: riders with DNF in the same lap share rank,
     // independent from points/finishRank.
-    const sameEliminationLapTie =
+    const sameDnfLapTie =
       prevKey !== null &&
       prevKey.bucket === 1 &&
       key.bucket === 1 &&
-      prevKey.eliminationLap > 0 &&
-      prevKey.eliminationLap === key.eliminationLap;
+      prevKey.dnfLap > 0 &&
+      prevKey.dnfLap === key.dnfLap;
 
-    const isTie = prevKey !== null && (keysEqual(prevKey, key) || sameEliminationLapTie);
+    const isTie = prevKey !== null && (keysEqual(prevKey, key) || sameDnfLapTie);
 
     const rank = isTie ? prevRank : i + 1;
 

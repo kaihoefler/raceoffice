@@ -440,19 +440,20 @@ export default function PointsScoring({
   }, [sel1P, sel2P, sel3P]);
 
   const statusByBib = useMemo(() => {
-    const m = new Map<number, { eliminated?: boolean; dns?: boolean; dsq?: boolean }>();
+    const m = new Map<number, { dnf?: false | "dnf" | "elimination"; dns?: boolean; dsq?: boolean }>();
     const list = Array.isArray((race as any)?.raceResults) ? ((race as any).raceResults as any[]) : [];
 
     for (const r of list) {
       const bib = Number((r as any)?.bib);
       if (!Number.isFinite(bib) || bib <= 0) continue;
 
-      const eliminated = Boolean((r as any)?.eliminated);
+            const dnfRaw = (r as any)?.dnf;
+      const dnf = dnfRaw === "dnf" || dnfRaw === "elimination" ? dnfRaw : false;
       const dns = Boolean((r as any)?.dns);
       const dsq = Boolean((r as any)?.dsq);
 
-      if (!eliminated && !dns && !dsq) continue;
-      m.set(bib, { eliminated, dns, dsq });
+      if (dnf === false && !dns && !dsq) continue;
+      m.set(bib, { dnf, dns, dsq });
     }
 
     return m;

@@ -22,6 +22,7 @@ import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
 
 import { useEventList } from "../providers/EventListProvider";
 import { useVisualizationList } from "../providers/VisualizationListProvider";
+import { normalizeRaceActivitiesForRead, normalizeRaceResultsForRead } from "../domain/eventActions";
 
 import type { Event, FullEvent } from "../types/event";
 import type { FullVisualization, Visualization, VisualizationColumnAlign } from "../types/visualization";
@@ -44,9 +45,9 @@ function normalizeFullEvent(raw: unknown, eventId: string, listEntry: Event | nu
     ageGroups: Array.isArray(obj.ageGroups) ? obj.ageGroups : [],
     races: races.map((r: any) => ({
       ...r,
-      raceResults: Array.isArray(r?.raceResults) ? r.raceResults : [],
+      raceResults: normalizeRaceResultsForRead(r?.raceResults),
       raceStarters: Array.isArray(r?.raceStarters) ? r.raceStarters : [],
-      raceActivities: Array.isArray(r?.raceActivities) ? r.raceActivities : [],
+      raceActivities: normalizeRaceActivitiesForRead(r?.raceActivities),
     })),
     athletes: Array.isArray(obj.athletes) ? obj.athletes : [],
   };

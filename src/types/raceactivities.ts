@@ -29,23 +29,6 @@ export type RaceActivityPointsSprint = GenericRaceActivity<
 
 
 
-// eliminations
-export type RaceActivityElimination = GenericRaceActivity<
-    "elimination",
-    {
-        lap: number;
-        isDeleted: boolean;
-        results: { bib: number; }[];
-        history: {
-            changedAt: string;
-            lap: number;
-            isDeleted: boolean;
-            results: { bib: number }[];
-        }[];
-    }
->;
-
-
 // disqualification
 export type RaceActivityDisqualfication = GenericRaceActivity<
     "DSQ",
@@ -73,6 +56,26 @@ export type RaceActivityDns = GenericRaceActivity<
     }
 >;
 
+
+// Did not finish
+// contains the lap as the ranking depends on the sequence of 
+// a) going out of the race or b) beeing taken out of the race
+export type RaceActivityDNF = GenericRaceActivity<
+    "DNF",
+    {
+        lap: number;
+        isDeleted: boolean;
+        dnfType: "dnf" | "elimination";
+        results: { bib: number; }[];
+        history: {
+            changedAt: string;
+            lap: number;
+            dnfType: "dnf" | "elimination";
+            isDeleted: boolean;
+            results: { bib: number }[];
+        }[];
+    }
+>;
 
 // sanctions
 export type DisqualificationType = "DSQ-TF" | "DSQ-SF" | "DSQ-DF";
@@ -175,10 +178,9 @@ export type RaceActivity =
     // | RaceActivityDisqualificationRemoved
     // | RaceActivityDNFAdded
     // | RaceActivityDNFChanged
-    // | RaceActivityDNFRemoved
-    // | RaceActivityDNFReorder
+        // | RaceActivityDNFRemoved
+    | RaceActivityDNF
     | RaceActivityPointsSprint
-    | RaceActivityElimination
     | RaceActivityDisqualfication
     | RaceActivityDns
 //    | RaceActivityLapCountChanged

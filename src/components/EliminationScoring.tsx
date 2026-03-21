@@ -2,7 +2,7 @@
 //
 // UI for recording elimination-related race activities:
 // - Elim: elimination activity per lap with multiple bibs
-// - DNS/DSQ: one activity per bib (optionally appended atomically for non-optimistic backend)
+// - DNF/DNS/DSQ: one activity per bib (optionally appended atomically for non-optimistic backend)
 //
 // Optional live-sync helpers (controlled by the page):
 // - sync lap number from live feed
@@ -35,17 +35,17 @@ import type { Athlete } from "../types/athlete";
 import type { Race } from "../types/race";
 import type {
   RaceActivity,
+  RaceActivityDNF,
   RaceActivityDisqualfication,
   RaceActivityDns,
-  RaceActivityElimination,
 } from "../types/raceactivities";
 
 /**
  * Which "activity type" is currently being recorded.
- * - elim1/elim2 => RaceActivityElimination (single activity; 1 or 2 bibs)
- * - DNS/DSQ => multiple activities (one per bib)
+ * - elim1/elim2 => RaceActivityDNF with `dnfType: "elimination"` (single activity; 1 or 2 bibs)
+ * - DNF/DNS/DSQ => multiple activities (one per bib)
  */
-export type EliminationMode = "elim1" | "elim2" | "DNS" | "DSQ";
+export type EliminationMode = "elim1" | "elim2" | "DNF" | "DNS" | "DSQ";
 
 type Props = {
   /** Active race (comes from the page) */
@@ -99,14 +99,30 @@ function bibToInt(input: string): number | null {
   return i > 0 ? i : null;
 }
 
-/** Build a RaceActivityElimination for the given lap and bib list. */
-function toEliminationActivity(lap: number, bibs: number[]): RaceActivityElimination {
+/** Build a RaceActivityDNF (`dnfType: "elimination"`) for the given lap and bib list. */
+function toEliminationActivity(lap: number, bibs: number[]): RaceActivityDNF {
   return {
     id: newId(),
     createdAt: new Date().toISOString(),
-    type: "elimination",
+    type: "DNF",
     data: {
       lap,
+      dnfType: "elimination",
+      isDeleted: false,
+      results: bibs.map((bib) => ({ bib })),
+      history: [],
+    },
+  };
+}
+
+function toDnfActivity(lap: number, bibs: number[]): RaceActivityDNF {
+  return {
+    id: newId(),
+    createdAt: new Date().toISOString(),
+    type: "DNF",
+    data: {
+      lap,
+      dnfType: "dnf",
       isDeleted: false,
       results: bibs.map((bib) => ({ bib })),
       history: [],
@@ -183,11 +199,12 @@ export default function EliminationScoring({
   // "Elim" input modes are fixed-size (either 1 bib or 2 bibs).
   const isElim1 = mode === "elim1";
   const isElim2 = mode === "elim2";
+  const isDnf = mode === "DNF";
   const isFixedElimMode = isElim1 || isElim2;
   const elimBibCount = isElim2 ? 2 : 1;
 
-  // DNS/DSQ support an auto-growing row list.
-  const allowAutoGrow = mode === "DNS" || mode === "DSQ";
+  // DNF/DNS/DSQ support an auto-growing row list.
+  const allowAutoGrow = mode === "DNF" || mode === "DNS" || mode === "DSQ";
 
   // Bib input rows:
   // - `sel`: selected Athlete from autocomplete (or placeholder)
@@ -195,9 +212,9 @@ export default function EliminationScoring({
   const [rows, setRows] = useState<Array<{ sel: Athlete | null; input: string }>>([{ sel: null, input: "" }]);
   const [error, setError] = useState<string | null>(null);
 
-  // Beim Wechsel auf DNS/DSQ Eingaben immer leeren.
+  // Beim Wechsel auf DNF/DNS/DSQ Eingaben immer leeren.
   useEffect(() => {
-    if (mode !== "DNS" && mode !== "DSQ") return;
+    if (mode !== "DNF" && mode !== "DNS" && mode !== "DSQ") return;
 
     setRows([{ sel: null, input: "" }]);
     setError(null);
@@ -206,7 +223,7 @@ export default function EliminationScoring({
 
   // Normalize row count when switching modes:
   // - elim1/elim2 => exactly 1 or 2 rows
-  // - DNS/DSQ => keep current rows but ensure a trailing empty row exists
+  // - DNF/DNS/DSQ => keep current rows but ensure a trailing empty row exists
   useEffect(() => {
     setRows((prev) => {
       if (isFixedElimMode) {
@@ -412,19 +429,20 @@ export default function EliminationScoring({
   }, [parsedBibs, starterByBib]);
 
   const statusByBib = useMemo(() => {
-    const m = new Map<number, { eliminated?: boolean; dns?: boolean; dsq?: boolean }>();
+    const m = new Map<number, { dnf?: false | "dnf" | "elimination"; dns?: boolean; dsq?: boolean }>();
     const list = Array.isArray((race as any)?.raceResults) ? ((race as any).raceResults as any[]) : [];
 
     for (const r of list) {
       const bib = bibToInt(String((r as any)?.bib ?? ""));
       if (bib == null) continue;
 
-      const eliminated = Boolean((r as any)?.eliminated);
+      const dnfRaw = (r as any)?.dnf;
+      const dnf = dnfRaw === "dnf" || dnfRaw === "elimination" ? dnfRaw : false;
       const dns = Boolean((r as any)?.dns);
       const dsq = Boolean((r as any)?.dsq);
 
-      if (!eliminated && !dns && !dsq) continue;
-      m.set(bib, { eliminated, dns, dsq });
+      if (dnf === false && !dns && !dsq) continue;
+      m.set(bib, { dnf, dns, dsq });
     }
 
     return m;
@@ -533,7 +551,7 @@ export default function EliminationScoring({
     if (isFixedElimMode) {
       setRows(Array.from({ length: elimBibCount }, () => ({ sel: null, input: "" })));
     } else {
-      // DNS/DSQ: keep one empty row at the end.
+      // DNF/DNS/DSQ: keep one empty row at the end.
       setRows([{ sel: null, input: "" }]);
     }
 
@@ -577,7 +595,8 @@ export default function EliminationScoring({
    * The actual save operation (no validation, no missing-starter dialog).
    *
    * NOTE (non-optimistic backend):
-   * - For DNS/DSQ we may need to append multiple activities.
+   * - DNF is stored as one activity per lap with multiple bibs.
+   * - DNS/DSQ may append multiple activities (one per bib).
    * - If `onAddRaceActivities` is provided, we use it to patch all activities atomically.
    */
   function commitSave() {
@@ -604,6 +623,15 @@ export default function EliminationScoring({
       return;
     }
 
+    if (mode === "DNF") {
+      const lapNum = Math.max(1, Math.floor(Number(lap)));
+      onAddRaceActivity(toDnfActivity(lapNum, bibs));
+
+      setError(null);
+      resetRows();
+      return;
+    }
+
     if (mode === "DNS") {
       const acts = bibs.map((bib) => toDnsActivity(bib));
       if (onAddRaceActivities) onAddRaceActivities(acts);
@@ -624,7 +652,7 @@ export default function EliminationScoring({
   }
 
   function saveIfPossible() {
-    // Prevent saving via "Enter" when an elim-mode is only partially filled.
+    // Prevent saving via "Enter" when a fixed elim mode is only partially filled.
     if (!canSave) return;
 
     const bibs = parsedBibs;
@@ -731,7 +759,7 @@ export default function EliminationScoring({
             value={lap}
             onChange={(e) => setLap(Number((e.target as HTMLInputElement).value))}
             type="number"
-            disabled={!isFixedElimMode}
+            disabled={!(isFixedElimMode || isDnf)}
             slotProps={{ htmlInput: { min: 1, step: 1 } }}
             sx={{
               width: 110,
@@ -770,6 +798,9 @@ export default function EliminationScoring({
             </ToggleButton>
             <ToggleButton value="elim2" aria-label="2 Elim">
               2 Elim
+            </ToggleButton>
+            <ToggleButton value="DNF" aria-label="DNF">
+              DNF
             </ToggleButton>
             <ToggleButton value="DNS" aria-label="DNS">
               DNS

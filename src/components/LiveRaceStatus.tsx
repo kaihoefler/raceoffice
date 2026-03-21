@@ -181,7 +181,7 @@ function shortenLastName(ln: string): string {
  * - "Nachname, Vorname" (gekürzt)
  * - IOC Code wird entfernt
  */
-type StatusKind = "DSQ" | "DNS" | "ELIM" | null;
+type StatusKind = "DSQ" | "DNS" | "DNF" | "ELIM" | null;
 
 function competitorName(c: RaceStatusCompetitor): string {
 
@@ -361,6 +361,7 @@ export default function LiveRaceStatus({
         return theme.palette.text.secondary;
       case "DSQ":
         return theme.palette.error.dark;
+            case "DNF":
       case "ELIM":
         return theme.palette.error.main;
       default:
@@ -376,15 +377,22 @@ export default function LiveRaceStatus({
       const bib = Number((r as any)?.bib);
       if (!Number.isFinite(bib) || bib <= 0) continue;
 
-      const dsq = Boolean((r as any)?.dsq);
+            const dsq = Boolean((r as any)?.dsq);
       const dns = Boolean((r as any)?.dns);
-      const eliminated = Boolean((r as any)?.eliminated);
+      const dnfRaw = (r as any)?.dnf;
+      const dnf = dnfRaw === "dnf" || dnfRaw === "elimination" ? dnfRaw : false;
 
-      if (!dsq && !dns && !eliminated) continue;
+      if (!dsq && !dns && dnf === false) continue;
 
-      const kind: StatusKind = dsq ? "DSQ" : dns ? "DNS" : eliminated ? "ELIM" : null;
+      const kind: StatusKind = dsq ? "DSQ" : dns ? "DNS" : dnf === "elimination" ? "ELIM" : dnf === "dnf" ? "DNF" : null;
       const label =
-        kind === "ELIM" ? `ELIM (${Number((r as any)?.eliminationLap ?? 0) || 0})` : kind === "DSQ" ? "DSQ" : "DNS";
+        kind === "ELIM"
+          ? `ELIM (${Number((r as any)?.dnfLap ?? 0) || 0})`
+          : kind === "DNF"
+            ? `DNF (${Number((r as any)?.dnfLap ?? 0) || 0})`
+            : kind === "DSQ"
+              ? "DSQ"
+              : "DNS";
 
       m.set(bib, { kind, label });
     }
