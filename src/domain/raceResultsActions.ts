@@ -22,6 +22,7 @@
 import type { Athlete } from "../types/athlete";
 import type {
   RaceActivity,
+  RaceActivityDNF,
   RaceActivityDisqualfication,
   RaceActivityDns,
   RaceActivityPointsSprint,
@@ -69,7 +70,7 @@ function isPointsSprintActivity(a: RaceActivity | any): a is RaceActivityPointsS
   return a?.type === "pointsSprint";
 }
 
-function isDnfActivity(a: RaceActivity | any): boolean {
+function isDnfActivity(a: RaceActivity | any): a is RaceActivityDNF {
   return a?.type === "DNF";
 }
 
@@ -183,7 +184,7 @@ export function applyActivitiesToRaceResults(args: {
       continue;
     }
 
-    if (a?.type === "DNF") {
+    if (isDnfActivity(a)) {
       if (a.data?.isDeleted) continue;
 
       const dnfType = a.data?.dnfType === "dnf" || a.data?.dnfType === "elimination" ? a.data.dnfType : null;
