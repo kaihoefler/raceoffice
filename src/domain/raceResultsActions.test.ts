@@ -33,6 +33,7 @@ import type {
   RaceActivityDNF,
   RaceActivityDisqualfication,
   RaceActivityDns,
+  RaceActivityPointsRemoval,
   RaceActivityPointsSprint,
 } from "../types/raceactivities";
 
@@ -106,6 +107,20 @@ function eliminationActivity(
     data: {
       lap,
       dnfType: "elimination",
+      isDeleted,
+      results: bibs.map((bib) => ({ bib })),
+      history: [],
+    },
+  };
+}
+
+function pointsRemovalActivity(id: string, lap: number, bibs: number[], isDeleted = false): RaceActivityPointsRemoval {
+  return {
+    id,
+    createdAt: `${id}-createdAt`,
+    type: "pointsRemoval",
+    data: {
+      lap,
       isDeleted,
       results: bibs.map((bib) => ({ bib })),
       history: [],
@@ -307,12 +322,44 @@ describe("raceResultsActions", () => {
       ]);
     });
 
+    it("applies pointsRemoval per bib and lap (inclusive cutoff)", () => {
+      const next = applyActivitiesToRaceResults({
+        prevResults: [raceResult({ bib: 11 }), raceResult({ bib: 12 }), raceResult({ bib: 13 })],
+        starters: [athlete(11), athlete(12), athlete(13)],
+        activities: [
+          pointsSprintActivity("ps-1", 3, [
+            { bib: 11, points: 2 },
+            { bib: 12, points: 2 },
+            { bib: 13, points: 1 },
+          ]),
+          pointsSprintActivity("ps-2", 5, [
+            { bib: 11, points: 3 },
+            { bib: 12, points: 1 },
+          ]),
+          pointsSprintActivity("ps-3", 8, [
+            { bib: 11, points: 4 },
+            { bib: 12, points: 2 },
+          ]),
+          pointsRemovalActivity("pr-1", 5, [11]),
+          pointsRemovalActivity("pr-deleted", 8, [12], true),
+        ],
+      });
+
+      // bib 11: Lap 3 + 5 verfallen, nur Lap 8 bleibt -> 4
+      // bib 12: deleted pointsRemoval hat keinen Effekt -> 2+1+2 = 5
+      // bib 13: unverändert -> 1
+      expect(next.find((r) => r.bib === 11)?.points).toBe(4);
+      expect(next.find((r) => r.bib === 12)?.points).toBe(5);
+      expect(next.find((r) => r.bib === 13)?.points).toBe(1);
+    });
+
     it("ignores deleted activity effects and keeps stable ordering of previous rows before new bibs", () => {
       const next = applyActivitiesToRaceResults({
         prevResults: [raceResult({ bib: 5 }), raceResult({ bib: 2 })],
         starters: [athlete(7)],
         activities: [
           pointsSprintActivity("ps-deleted", 3, [{ bib: 5, points: 99 }], true),
+          pointsRemovalActivity("pr-deleted", 4, [5], true),
           eliminationActivity("elim-deleted", 6, [2], true),
           dsqActivity("dsq-deleted", 7, true),
           dnsActivity("dns-deleted", 8, true),

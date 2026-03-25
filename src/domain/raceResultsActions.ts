@@ -25,6 +25,7 @@ import type {
   RaceActivityDNF,
   RaceActivityDisqualfication,
   RaceActivityDns,
+  RaceActivityPointsRemoval,
   RaceActivityPointsSprint,
 } from "../types/raceactivities";
 import type { RaceResult } from "../types/race";
@@ -74,6 +75,10 @@ function isDnfActivity(a: RaceActivity | any): a is RaceActivityDNF {
   return a?.type === "DNF";
 }
 
+function isPointsRemovalActivity(a: RaceActivity | any): a is RaceActivityPointsRemoval {
+  return a?.type === "pointsRemoval";
+}
+
 function isDsqActivity(a: RaceActivity | any): a is RaceActivityDisqualfication {
   return a?.type === "DSQ";
 }
@@ -91,7 +96,8 @@ function isDnsActivity(a: RaceActivity | any): a is RaceActivityDns {
  * - recomputes derived fields from non-deleted activities only
  *
  * Derived fields:
- * - `points`: summed from pointsSprint activity entries
+ * - `points`: summed from pointsSprint activity entries,
+ *   with `pointsRemoval` activities removing all points up to and including the specified lap
  * - `dnf` + `dnfLap`: from DNF activities
  *   (if multiple entries exist for one bib, the highest lap wins)
  * - `dsq` / `dns`: set by DSQ/DNS activities
@@ -126,7 +132,7 @@ export function applyActivitiesToRaceResults(args: {
   }
 
   for (const a of activities) {
-    if (isPointsSprintActivity(a) || isDnfActivity(a)) {
+    if (isPointsSprintActivity(a) || isPointsRemovalActivity(a) || isDnfActivity(a)) {
       const res = Array.isArray(a.data?.results) ? a.data.results : [];
       for (const r of res) {
         const bib = bibToInt((r as any)?.bib);
@@ -166,7 +172,8 @@ export function applyActivitiesToRaceResults(args: {
   }
 
   // Accumulators for a single derivation pass over the activity stream.
-  const pointsByBib = new Map<number, number>();
+  const pointsEntriesByBib = new Map<number, Array<{ lap: number; points: number }>>();
+  const pointsRemovalCutoffByBib = new Map<number, number>();
   const dnfByBib = new Map<number, { dnf: "dnf" | "elimination"; lap: number }>();
   const dsqBibs = new Set<number>();
   const dnsBibs = new Set<number>();
@@ -174,12 +181,31 @@ export function applyActivitiesToRaceResults(args: {
   for (const a of activities) {
     if (isPointsSprintActivity(a)) {
       if (a.data?.isDeleted) continue;
+      const lap = bibToInt((a as any)?.data?.lap) ?? 0;
       const res = Array.isArray(a.data?.results) ? a.data.results : [];
       for (const r of res) {
         const bib = bibToInt((r as any)?.bib);
         const pts = Number((r as any)?.points);
         if (bib == null || !Number.isFinite(pts)) continue;
-        pointsByBib.set(bib, (pointsByBib.get(bib) ?? 0) + pts);
+
+        const prev = pointsEntriesByBib.get(bib) ?? [];
+        prev.push({ lap, points: pts });
+        pointsEntriesByBib.set(bib, prev);
+      }
+      continue;
+    }
+
+    if (isPointsRemovalActivity(a)) {
+      if (a.data?.isDeleted) continue;
+
+      const lap = bibToInt((a as any)?.data?.lap) ?? 0;
+      const res = Array.isArray(a.data?.results) ? a.data.results : [];
+      for (const r of res) {
+        const bib = bibToInt((r as any)?.bib);
+        if (bib == null) continue;
+
+        const prevCutoff = pointsRemovalCutoffByBib.get(bib) ?? 0;
+        if (lap > prevCutoff) pointsRemovalCutoffByBib.set(bib, lap);
       }
       continue;
     }
@@ -228,6 +254,24 @@ export function applyActivitiesToRaceResults(args: {
 
     if (t === "DSQ") dsqBibs.add(bib);
     else if (t === "DNS") dnsBibs.add(bib);
+  }
+
+  // Compute points after all additions/removals:
+  // - pointsSprint adds points
+  // - pointsRemoval removes all points up to and including cutoff lap
+  const pointsByBib = new Map<number, number>();
+  for (const [bib, entries] of pointsEntriesByBib) {
+    const cutoffLap = pointsRemovalCutoffByBib.get(bib) ?? 0;
+    const points = entries
+      .filter((entry) => entry.lap > cutoffLap)
+      .reduce((sum, entry) => sum + entry.points, 0);
+
+    pointsByBib.set(bib, points);
+  }
+
+  // Ensure bibs that only appear in pointsRemoval still resolve to 0 points.
+  for (const bib of pointsRemovalCutoffByBib.keys()) {
+    if (!pointsByBib.has(bib)) pointsByBib.set(bib, 0);
   }
 
   // Business rule: any bib marked as DNF loses all points.

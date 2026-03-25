@@ -6,9 +6,9 @@ import { bibToInt } from "./raceResultsActions";
  * Keeps only activity references to bibs that are still allowed in the race.
  *
  * Rules:
- * - pointsSprint / DNF(elimination): filter `data.results` by bib
+ * - pointsSprint / pointsRemoval / DNF(elimination): filter `data.results` by bib
  * - DNS / DSQ: drop the whole activity if its bib is no longer allowed
- * - empty points / DNF(elimination) activities are removed completely
+ * - empty points / pointsRemoval / DNF(elimination) activities are removed completely
  */
 export function filterActivitiesByAllowedBibs(activities: RaceActivity[], allowedBibs: Iterable<number>): RaceActivity[] {
   const base = Array.isArray(activities) ? activities : [];
@@ -21,7 +21,7 @@ export function filterActivitiesByAllowedBibs(activities: RaceActivity[], allowe
 
   return base
     .map((activity) => {
-      if (activity.type === "pointsSprint") {
+      if (activity.type === "pointsSprint" || activity.type === "pointsRemoval") {
         const nextResults = (Array.isArray(activity.data?.results) ? activity.data.results : []).filter((row) => {
           const bib = bibToInt((row as any)?.bib);
           return bib != null && allowed.has(bib);
@@ -74,7 +74,11 @@ export function removeBibFromActivities(activities: RaceActivity[], bib: number)
 
   const allowed = new Set<number>();
   for (const activity of Array.isArray(activities) ? activities : []) {
-    if (activity.type === "pointsSprint" || (activity.type === "DNF" && activity.data?.dnfType === "elimination")) {
+    if (
+      activity.type === "pointsSprint" ||
+      activity.type === "pointsRemoval" ||
+      (activity.type === "DNF" && activity.data?.dnfType === "elimination")
+    ) {
       for (const row of Array.isArray(activity.data?.results) ? activity.data.results : []) {
         const rowBib = bibToInt((row as any)?.bib);
         if (rowBib != null && rowBib !== toRemove) allowed.add(rowBib);

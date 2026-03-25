@@ -1,4 +1,16 @@
 // src/components/RaceActivitiesList.tsx
+//
+// Zweck:
+// - zeigt alle RaceActivities eines Rennens in einer kompakten, editierbaren Liste
+// - unterstützt Soft-Delete (isDeleted toggeln) inkl. History-Snapshot
+// - unterstützt vollständiges Entfernen aller Activities über eine separate Bestätigung
+//
+// Unterstützte Activity-Typen in dieser UI:
+// - pointsSprint
+// - pointsRemoval
+// - DNF (dnf / elimination)
+// - DNS
+// - DSQ
 import { useMemo, useState } from "react";
 import {
   Box,
@@ -31,6 +43,7 @@ import type {
   RaceActivityDNF,
   RaceActivityDisqualfication,
   RaceActivityDns,
+  RaceActivityPointsRemoval,
   RaceActivityPointsSprint,
 } from "../types/raceactivities";
 
@@ -46,13 +59,19 @@ type Props = {
   onReplaceActivities: (nextActivities: RaceActivity[]) => void;
 };
 
+// Liest eine Lap robust aus data.lap aus (nicht alle Typen haben eine Lap).
 function lapOf(a: RaceActivity): number {
   const lap = (a as any)?.data?.lap;
   return Number.isFinite(Number(lap)) ? Number(lap) : 0;
 }
 
+// Type Guards für eine klarere, typsichere Verzweigungslogik.
 function isPointsSprint(a: RaceActivity): a is RaceActivityPointsSprint {
   return a.type === "pointsSprint";
+}
+
+function isPointsRemoval(a: RaceActivity): a is RaceActivityPointsRemoval {
+  return a.type === "pointsRemoval";
 }
 
 function isElimination(a: RaceActivity): a is RaceActivityDNF {
@@ -71,10 +90,13 @@ function isDsq(a: RaceActivity): a is RaceActivityDisqualfication {
   return a.type === "DSQ";
 }
 
+// Anzeigeformat für Points-Sprints, z. B. "2P:101, 1P:205".
 function formatPointsResults(results: Array<{ bib: number; points: number }>): string {
   return (results ?? []).map((r) => `${r.points}P:${r.bib}`).join(", ");
 }
 
+// Parser für editierbare Points-Eingaben im Format "pointsP:bib, ...".
+// Gibt `null` zurück, wenn das Format ungültig ist.
 function parsePointsResults(input: string): Array<{ bib: number; points: number }> | null {
   const t = input.trim();
   if (!t) return [];
@@ -96,10 +118,12 @@ function parsePointsResults(input: string): Array<{ bib: number; points: number 
   return out;
 }
 
+// Anzeigeformat für bib-Listen, z. B. "101, 205, 333".
 function formatEliminationResults(results: Array<{ bib: number }>): string {
   return (results ?? []).map((r) => String(r.bib)).join(", ");
 }
 
+// Parser für bib-Listen im Edit-Panel.
 function parseEliminationResults(input: string): Array<{ bib: number }> | null {
   const t = input.trim();
   if (!t) return [];
@@ -118,11 +142,13 @@ function parseEliminationResults(input: string): Array<{ bib: number }> | null {
   return out;
 }
 
+// History robust lesen (falls ein Datensatz fehlt/inkonsistent ist).
 function historyOf(a: RaceActivity): any[] {
   const h = (a as any)?.data?.history;
   return Array.isArray(h) ? h : [];
 }
 
+// Formatiert einen einzelnen History-Eintrag für den Tooltip.
 function formatHistoryLine(a: RaceActivity, h: any): string {
   const changedAt = String(h?.changedAt ?? "");
   const lap = Number.isFinite(Number(h?.lap)) ? Number(h.lap) : 0;
@@ -130,11 +156,13 @@ function formatHistoryLine(a: RaceActivity, h: any): string {
 
   const detailsStr = isPointsSprint(a)
     ? formatPointsResults(h?.results ?? [])
-    : isElimination(a) || isDnf(a)
+    : isPointsRemoval(a)
       ? formatEliminationResults(h?.results ?? [])
-      : isDns(a) || isDsq(a)
-        ? String(h?.bib ?? "")
-        : "";
+      : isElimination(a) || isDnf(a)
+        ? formatEliminationResults(h?.results ?? [])
+        : isDns(a) || isDsq(a)
+          ? String(h?.bib ?? "")
+          : "";
 
   const lapStr = lap > 0 ? `Lap ${lap}` : "Lap -";
   const deletedStr = isDeleted ? " • deleted" : "";
@@ -142,6 +170,7 @@ function formatHistoryLine(a: RaceActivity, h: any): string {
 }
 
 export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceActivities }: Props) {
+  // Sichtliste: nach Lap absteigend, innerhalb gleicher Lap nach createdAt absteigend.
   const activities = useMemo(() => {
     const list = Array.isArray((race as any)?.raceActivities) ? ((race as any).raceActivities as RaceActivity[]) : [];
     return [...list].sort((a, b) => {
@@ -161,6 +190,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
   // NEW: remove-all confirmation
   const [removeAllOpen, setRemoveAllOpen] = useState(false);
 
+  // Initialisiert den Edit-Modus mit typabhängigen Default-Werten.
   function startEdit(a: RaceActivity) {
     setEditingId(a.id);
     setError(null);
@@ -170,6 +200,11 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
 
     if (isPointsSprint(a)) {
       setDraftResults(formatPointsResults(a.data?.results ?? []));
+      return;
+    }
+
+    if (isPointsRemoval(a)) {
+      setDraftResults(formatEliminationResults(a.data?.results ?? []));
       return;
     }
 
@@ -186,6 +221,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
     setError(null);
   }
 
+  // Speichert den aktuell bearbeiteten Activity-Datensatz inkl. History-Snapshot.
   function saveEdit(a: RaceActivity) {
     const nextLap = Math.max(0, Math.floor(Number(draftLap)));
 
@@ -205,6 +241,37 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
       const prevHistory = Array.isArray(a.data.history) ? a.data.history : [];
 
       const updated: RaceActivityPointsSprint = {
+        ...a,
+        data: {
+          ...a.data,
+          lap: nextLap,
+          isDeleted: draftDeleted,
+          results: nextResults,
+          history: [prevSnapshot, ...prevHistory],
+        },
+      };
+
+      onUpdateActivity(updated);
+      cancelEdit();
+      return;
+    }
+
+    if (isPointsRemoval(a)) {
+      const nextResults = parseEliminationResults(draftResults);
+      if (nextResults === null) {
+        setError("Invalid results format. Use: bib, bib");
+        return;
+      }
+
+      const prevSnapshot = {
+        changedAt: new Date().toISOString(),
+        lap: a.data.lap,
+        isDeleted: a.data.isDeleted,
+        results: a.data.results,
+      };
+      const prevHistory = Array.isArray(a.data.history) ? a.data.history : [];
+
+      const updated: RaceActivityPointsRemoval = {
         ...a,
         data: {
           ...a.data,
@@ -255,6 +322,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
     setError("Editing not supported for this activity type");
   }
 
+  // Soft-Delete / Undelete einer Activity (isDeleted toggeln + History-Eintrag).
   function toggleDelete(a: RaceActivity) {
     const nextDeleted = !Boolean((a as any)?.data?.isDeleted);
 
@@ -268,6 +336,28 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
       const prevHistory = Array.isArray(a.data.history) ? a.data.history : [];
 
       const updated: RaceActivityPointsSprint = {
+        ...a,
+        data: {
+          ...a.data,
+          isDeleted: nextDeleted,
+          history: [prevSnapshot, ...prevHistory],
+        },
+      };
+
+      onUpdateActivity(updated);
+      return;
+    }
+
+    if (isPointsRemoval(a)) {
+      const prevSnapshot = {
+        changedAt: new Date().toISOString(),
+        lap: a.data.lap,
+        isDeleted: a.data.isDeleted,
+        results: a.data.results,
+      };
+      const prevHistory = Array.isArray(a.data.history) ? a.data.history : [];
+
+      const updated: RaceActivityPointsRemoval = {
         ...a,
         data: {
           ...a.data,
@@ -345,6 +435,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
     }
   }
 
+  // Entfernt alle Activities hart aus dem Rennen (kein isDeleted-Flagging).
   function removeAllActivities() {
     // do NOT mark deleted; actually remove from race
     cancelEdit();
@@ -448,27 +539,31 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
 
             const label = isPointsSprint(a)
               ? "Points"
-              : isElimination(a)
-                ? "Elimination"
-                : isDnf(a)
-                  ? "DNF"
-                  : isDns(a)
-                    ? "DNS"
-                    : isDsq(a)
-                      ? "DSQ"
-                      : "Activity";
+              : isPointsRemoval(a)
+                ? "Pts. Removal"
+                : isElimination(a)
+                  ? "Elimination"
+                  : isDnf(a)
+                    ? "DNF"
+                    : isDns(a)
+                      ? "DNS"
+                      : isDsq(a)
+                        ? "DSQ"
+                        : "Activity";
 
             const content = isPointsSprint(a)
               ? formatPointsResults(a.data?.results ?? [])
-              : isElimination(a)
-                ? formatEliminationResults((a.data as any)?.results ?? [])
-                : isDnf(a)
-                  ? formatEliminationResults(((a as any)?.data as any)?.results ?? [])
-                  : isDns(a)
-                    ? `DNS: ${(a.data as any)?.bib ?? ""}`
-                    : isDsq(a)
-                      ? `DSQ: ${(a.data as any)?.bib ?? ""}`
-                      : "";
+              : isPointsRemoval(a)
+                ? formatEliminationResults(a.data?.results ?? [])
+                : isElimination(a)
+                  ? formatEliminationResults((a.data as any)?.results ?? [])
+                  : isDnf(a)
+                    ? formatEliminationResults(((a as any)?.data as any)?.results ?? [])
+                    : isDns(a)
+                      ? `DNS: ${(a.data as any)?.bib ?? ""}`
+                      : isDsq(a)
+                        ? `DSQ: ${(a.data as any)?.bib ?? ""}`
+                        : "";
 
             const history = historyOf(a);
             const historyTitle = history.length ? (
@@ -623,7 +718,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
                         label={
                           isPointsSprint(a)
                             ? "Results (pointsP:bib, ...)"
-                            : isElimination(a) || isDnf(a)
+                            : isPointsRemoval(a) || isElimination(a) || isDnf(a)
                               ? "Results (bib, ...)"
                               : "Results"
                         }

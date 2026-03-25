@@ -1,3 +1,17 @@
+// src/components/PointsScoring.tsx
+//
+// UI for recording points sprint activities.
+//
+// Supports two workflows:
+// - lap:   2-point + 1-point sprint
+// - finish: 3-point + 2-point + 1-point finish sprint
+//
+// Optional live-sync helpers (controlled by the page):
+// - sync lap from live feed
+// - switch to finish mode when lapsToGo reaches 0
+// - prefill top bibs from live positions
+// - keep manual overrides stable until user clears inputs
+
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
@@ -18,14 +32,18 @@ import {
 import { createFilterOptions } from "@mui/material/useAutocomplete";
 
 import PointsBibField, { type AthleteFilterOptions } from "./PointsBibField";
+import PointsRemovalDialog from "./PointsRemovalDialog";
 import ScoringStarterList from "./ScoringStarterList";
 
 import type { Athlete } from "../types/athlete";
 import type { Race } from "../types/race";
-import type { RaceActivityPointsSprint } from "../types/raceactivities";
+import type { RaceActivity, RaceActivityPointsRemoval, RaceActivityPointsSprint } from "../types/raceactivities";
 
+// Default fallback when no live top bibs are provided by the page.
 const DEFAULT_LIVE_TOP_BIBS = { p1Bib: null, p2Bib: null, p3Bib: null } as const;
 
+// lap    -> regular sprint (2P/1P)
+// finish -> final sprint (3P/2P/1P)
 export type PointsMode = "lap" | "finish";
 
 type Props = {
@@ -33,8 +51,8 @@ type Props = {
   race: Race;
   /** Use e.g. race.id so the component resets when switching races */
   resetKey?: string;
-  /** Add a new RaceActivityPointsSprint to the race (no editing in this component) */
-    onAddRaceActivity: (activity: RaceActivityPointsSprint) => void;
+    /** Add a new race activity to the race (pointsSprint / pointsRemoval). */
+  onAddRaceActivity: (activity: RaceActivity) => void;
   onCreateStarters?: (bibs: number[]) => Promise<void> | void;
   onDeleteStarter?: (starter: Athlete) => void;
   missingInLiveBibs?: Set<number>;
@@ -59,6 +77,9 @@ function athleteLabel(a: Athlete) {
   return `${a.bib ?? ""} - ${(a.lastName ?? "").trim()} ${(a.firstName ?? "").trim()}`.trim();
 }
 
+/**
+ * Small row layout helper used for 3P/2P/1P inputs.
+ */
 function PointsRow({
   label,
   children,
@@ -76,10 +97,12 @@ function PointsRow({
   );
 }
 
+// Generates a client-side activity id.
 function newId() {
   return (globalThis.crypto as any)?.randomUUID?.() ?? `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
+/** Build a pointsSprint activity from current form values. */
 function toPointsSprintActivity(lap: number, results: Array<{ bib: number; points: number }>): RaceActivityPointsSprint {
   return {
     id: newId(),
@@ -94,10 +117,25 @@ function toPointsSprintActivity(lap: number, results: Array<{ bib: number; point
   };
 }
 
+/** Build a pointsRemoval activity for selected bibs. */
+function toPointsRemovalActivity(lap: number, bibs: number[]): RaceActivityPointsRemoval {
+  return {
+    id: newId(),
+    createdAt: new Date().toISOString(),
+    type: "pointsRemoval",
+    data: {
+      lap,
+      isDeleted: false,
+      results: bibs.map((bib) => ({ bib })),
+      history: [],
+    },
+  };
+}
+
 export default function PointsScoring({
   race,
   resetKey,
-    onAddRaceActivity,
+  onAddRaceActivity,
   onCreateStarters,
   onDeleteStarter,
   missingInLiveBibs,
@@ -148,7 +186,7 @@ export default function PointsScoring({
   const ref3P = useRef<HTMLInputElement>(null);
   const ref2P = useRef<HTMLInputElement>(null);
   const ref1P = useRef<HTMLInputElement>(null);
-    const saveButtonRef = useRef<HTMLButtonElement>(null);
+  const saveButtonRef = useRef<HTMLButtonElement>(null);
   const focusSaveAfterSyncSaveRef = useRef(false);
 
   // Once the user manually edits any points field while sync is enabled, we stop
@@ -222,6 +260,7 @@ export default function PointsScoring({
   // State: confirmation dialog for creating missing starters
   // ---------------------------------------------------------------------------
   const [missingDialogOpen, setMissingDialogOpen] = useState(false);
+  const [pointsRemovalOpen, setPointsRemovalOpen] = useState(false);
   const [missingDialogBibs, setMissingDialogBibs] = useState<number[]>([]);
   const [missingDialogBusy, setMissingDialogBusy] = useState(false);
 
@@ -341,7 +380,7 @@ export default function PointsScoring({
     }
   }, [syncEnabled, liveLapsToGo, mode]);
 
-      // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // Live sync: prefill bibs from live positions
   // ---------------------------------------------------------------------------
   const liveP1 = liveTopBibs?.p1Bib ?? null;
@@ -386,7 +425,7 @@ export default function PointsScoring({
       // Lap sprint mode maps live places 1..2 to 2/1 points.
       apply(liveP1, sel2P, in2P, setSel2P, setIn2P, auto2PBibRef);
       apply(liveP2, sel1P, in1P, setSel1P, setIn1P, auto1PBibRef);
-        }
+    }
   }, [
     syncEnabled,
     mode,
@@ -447,7 +486,7 @@ export default function PointsScoring({
       const bib = Number((r as any)?.bib);
       if (!Number.isFinite(bib) || bib <= 0) continue;
 
-            const dnfRaw = (r as any)?.dnf;
+      const dnfRaw = (r as any)?.dnf;
       const dnf = dnfRaw === "dnf" || dnfRaw === "elimination" ? dnfRaw : false;
       const dns = Boolean((r as any)?.dns);
       const dsq = Boolean((r as any)?.dsq);
@@ -558,6 +597,11 @@ export default function PointsScoring({
     return sel2P?.bib != null && sel1P?.bib != null;
   }, [mode, sel1P, sel2P, sel3P]);
 
+  /**
+ * Persists a new pointsSprint activity based on current mode.
+ * - lap mode:    2P + 1P
+ * - finish mode: 3P + 2P + 1P
+ */
   function commitSave() {
     const lapNum = Math.max(1, Math.floor(Number(lap)));
 
@@ -649,10 +693,18 @@ export default function PointsScoring({
     setPendingSaveBibs(null);
   }
 
-      function clearNow() {
+    function clearNow() {
     enterRequestedRef.current = false;
     requestSyncPrefill();
     resetInputs(mode === "finish" ? "3P" : "2P");
+  }
+
+  async function handleSavePointsRemoval(payload: { lap: number; bibs: number[] }) {
+    const lapNum = Math.max(1, Math.floor(Number(payload.lap) || 1));
+    const bibs = Array.from(new Set(payload.bibs.filter((bib) => Number.isFinite(bib) && bib > 0))).sort((a, b) => a - b);
+    if (!bibs.length) return;
+
+    onAddRaceActivity(toPointsRemovalActivity(lapNum, bibs));
   }
 
   function maybeSaveIfComplete() {
@@ -696,10 +748,14 @@ export default function PointsScoring({
     return Array.from(new Set(bibs));
   }
 
-    function getMissingStarterBibs(bibs: number[]): number[] {
+  function getMissingStarterBibs(bibs: number[]): number[] {
     return bibs.filter((bib) => !starterByBib.has(bib));
   }
 
+  /**
+   * Quick-pick from starter list (bottom panel):
+   * fills the next free points slot and moves focus forward.
+   */
   function handleStarterClick(starter: Athlete) {
     const bib = starter.bib;
     if (bib == null) return;
@@ -707,7 +763,7 @@ export default function PointsScoring({
     const selectedBibs = new Set<number>([sel3P?.bib, sel2P?.bib, sel1P?.bib].filter((b): b is number => b != null));
     if (selectedBibs.has(bib)) return;
 
-        const next = starterByBib.get(bib) ?? starter;
+    const next = starterByBib.get(bib) ?? starter;
 
 
     if (mode === "finish") {
@@ -761,8 +817,8 @@ export default function PointsScoring({
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, minWidth: 0 }}>
           <Typography variant="subtitle2">Points</Typography>
         </Box>
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, mb: 1 }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, mb: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
             <TextField
               size="small"
               label="Lap"
@@ -794,7 +850,6 @@ export default function PointsScoring({
               }}
             />
 
-
             <ToggleButtonGroup
               size="small"
               exclusive
@@ -812,13 +867,31 @@ export default function PointsScoring({
               </ToggleButton>
             </ToggleButtonGroup>
           </Box>
+
+                    <Button
+            size="small"
+            variant="outlined"
+            color="warning"
+            onClick={() => setPointsRemovalOpen(true)}
+            disabled={pointsByBib.size === 0}
+            sx={{
+              ml: "auto",
+              minWidth: 0,
+              px: 1,
+              py: 0.25,
+              fontSize: "0.72rem",
+              lineHeight: 1.1,
+            }}
+          >
+            Loose Pts.
+          </Button>
         </Box>
 
 
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
           {mode === "finish" ? (
             <PointsRow label="3 P">
-                            <PointsBibField
+              <PointsBibField
                 value={sel3P}
                 inputValue={in3P}
                 inputRef={ref3P}
@@ -827,7 +900,7 @@ export default function PointsScoring({
                 filterOptions={filterOptions}
                 formatOption={athleteLabel}
                 resolveByBib={resolveOrPlaceholder}
-                                onInputValueChange={(v, reason) => {
+                onInputValueChange={(v, reason) => {
                   setIn3P(v);
                   if (reason !== "input") return;
 
@@ -869,7 +942,7 @@ export default function PointsScoring({
               filterOptions={filterOptions}
               formatOption={athleteLabel}
               resolveByBib={resolveOrPlaceholder}
-                            onInputValueChange={(v, reason) => {
+              onInputValueChange={(v, reason) => {
                 setIn2P(v);
                 if (reason !== "input") return;
 
@@ -898,7 +971,7 @@ export default function PointsScoring({
           </PointsRow>
 
           <PointsRow label="1 P">
-                        <PointsBibField
+            <PointsBibField
               value={sel1P}
               inputValue={in1P}
               inputRef={ref1P}
@@ -907,7 +980,7 @@ export default function PointsScoring({
               filterOptions={filterOptions}
               formatOption={athleteLabel}
               resolveByBib={resolveOrPlaceholder}
-                            onInputValueChange={(v, reason) => {
+              onInputValueChange={(v, reason) => {
                 setIn1P(v);
                 if (reason !== "input") return;
 
@@ -964,7 +1037,7 @@ export default function PointsScoring({
         </Box>
       </Box>
 
-                  <ScoringStarterList
+      <ScoringStarterList
         starters={starters}
         missingInLiveBibs={missingInLiveBibs}
         selectedIds={selectedIds}
@@ -977,6 +1050,16 @@ export default function PointsScoring({
 
 
 
+
+            <PointsRemovalDialog
+        open={pointsRemovalOpen}
+        initialLap={lap}
+        starters={starters}
+        pointsByBib={pointsByBib}
+        formatAthleteLabel={athleteLabel}
+        onClose={() => setPointsRemovalOpen(false)}
+        onSave={handleSavePointsRemoval}
+      />
 
       <Dialog
         open={missingDialogOpen}

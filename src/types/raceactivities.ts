@@ -27,6 +27,24 @@ export type RaceActivityPointsSprint = GenericRaceActivity<
     }
 >;
 
+// points removal (an athlete looses his points gathered so far)
+export type RaceActivityPointsRemoval = GenericRaceActivity<
+    "pointsRemoval",
+    {
+        lap: number;
+        isDeleted: boolean;
+        results: { bib: number; }[];
+        history: {
+            changedAt: string;
+            lap: number;
+            isDeleted: boolean;
+            results: { bib: number; }[];
+        }[];
+    }
+>;
+
+
+
 
 
 // disqualification
@@ -183,6 +201,6 @@ export type RaceActivity =
     | RaceActivityPointsSprint
     | RaceActivityDisqualfication
     | RaceActivityDns
-//    | RaceActivityLapCountChanged
+    | RaceActivityPointsRemoval
     ;
 

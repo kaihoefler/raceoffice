@@ -66,8 +66,6 @@ import Scoreboard from "../components/Scoreboard";
 import type { Athlete } from "../types/athlete";
 import type { Race, RaceResult } from "../types/race";
 
-import type { RaceActivityPointsSprint } from "../types/raceactivities";
-
 import type { RaceActivity } from "../types/raceactivities";
 
 
@@ -199,16 +197,7 @@ export default function ScoringPage() {
     }
 
 
-    /**
-     * Fügt eine PointsSprint-Activity hinzu.
-     * Wir hängen die Activity an und materialisieren anschließend raceResults + rank neu.
-     */
-    function handleAddPointsSprintActivity(activity: RaceActivityPointsSprint) {
-        if (!race) return;
-        addRaceActivity(race.id, activity);
-    }
-
-    function handleAddRaceActivity(activity: RaceActivity) {
+        function handleAddRaceActivity(activity: RaceActivity) {
         if (!race) return;
         addRaceActivity(race.id, activity);
     }
@@ -495,7 +484,7 @@ export default function ScoringPage() {
                                     <PointsScoring
                                         race={race}
                                         resetKey={race.id}
-                                        onAddRaceActivity={handleAddPointsSprintActivity}
+                                        onAddRaceActivity={handleAddRaceActivity}
                                         onCreateStarters={handleCreateStartersForBibs}
                                         onDeleteStarter={handleDeleteStarter}
                                         missingInLiveBibs={vm.missingInLiveBibs}

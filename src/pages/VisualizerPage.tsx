@@ -171,17 +171,26 @@ function renderPlaceholderNode(
       return (
         <Box
           key={reactKey}
-          component="img"
-          src={flagUrl}
-          alt={nation}
+          component="span"
           sx={{
-            height: "1.2em",
-            width: "auto",
-            maxWidth: "2em",
-            display: "inline-block",
-            verticalAlign: "middle",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            lineHeight: 1,
           }}
-        />
+        >
+          <Box
+            component="img"
+            src={flagUrl}
+            alt={nation}
+            sx={{
+              height: "0.8em",
+              width: "auto",
+              maxWidth: "1.6em",
+              display: "block",
+            }}
+          />
+        </Box>
       );
     }
   }
