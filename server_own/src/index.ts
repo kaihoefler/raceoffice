@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import { FastifySSEPlugin } from "fastify-sse-v2";
 import Database from "better-sqlite3";
-import { applyPatch  } from "fast-json-patch/index.mjs";
+import { applyPatch } from "fast-json-patch/index.mjs";
 import type { Operation } from "fast-json-patch/index.mjs";
 import cors from "@fastify/cors";
 
@@ -13,7 +13,24 @@ import fastifyStatic from "@fastify/static";
 
 type Doc = {
     rev: number;
-    data: any; // später sauber typisieren
+    data: any; // TODO später sauber typisieren
+};
+
+type WsErrorCode =
+  | "invalid_json"
+  | "invalid_payload"
+  | "rev_mismatch"
+  | "patch_failed"
+  | "patch_apply_failed"
+  | "internal_error";
+
+type WsErrorPayload = {
+  type: "error";
+  docId: string;
+  code: WsErrorCode;
+  message: string;
+  rev?: number | null;
+  retryable?: boolean;
 };
 
 const __filename = fileURLToPath(import.meta.url);
@@ -99,6 +116,31 @@ const sseClients = new Map<string, Set<SSEClient>>(); // docId -> clients
 
 const wsClients = new Map<string, Set<any>>(); // docId -> ws connections
 
+function safeSocketSend(socket: any, payload: unknown) {
+  try {
+    socket.send(typeof payload === "string" ? payload : JSON.stringify(payload));
+  } catch {}
+}
+
+function sendWsError(
+  socket: any,
+  docId: string,
+  code: WsErrorCode,
+  message: string,
+  options?: { rev?: number | null; retryable?: boolean },
+) {
+  const payload: WsErrorPayload = {
+    type: "error",
+    docId,
+    code,
+    message,
+    ...(options?.rev !== undefined ? { rev: options.rev } : {}),
+    ...(options?.retryable !== undefined ? { retryable: options.retryable } : {}),
+  };
+
+  safeSocketSend(socket, payload);
+}
+
 function broadcastPatch(docId: string, rev: number, patch: Operation[]) {
     const payload = JSON.stringify({ docId, rev, patch });
 
@@ -115,9 +157,7 @@ function broadcastPatch(docId: string, rev: number, patch: Operation[]) {
     const wsSet = wsClients.get(docId);
     if (wsSet) {
         for (const ws of wsSet) {
-            try {
-                ws.send(payload);
-            } catch { }
+                        safeSocketSend(ws, payload);
         }
     }
 }
@@ -156,43 +196,73 @@ app.get("/ws/:docId", { websocket: true }, (socket, req) => {
 
     noteSnapshot(socket, docId);
 
-    socket.on("message", (raw: Buffer) => {
+        socket.on("message", (raw: Buffer) => {
         // Erwartet: { baseRev:number, patch: Operation[] }
         let msg: any;
-        try {
+                try {
             msg = JSON.parse(raw.toString("utf8"));
         } catch {
-            socket.send(JSON.stringify({ error: "invalid_json" }));
+            sendWsError(socket, docId, "invalid_json", "Message must be valid JSON");
             return;
         }
 
         const { baseRev, patch } = msg as { baseRev: number; patch: Operation[] };
         if (!Array.isArray(patch) || typeof baseRev !== "number") {
-            socket.send(JSON.stringify({ error: "invalid_payload" }));
+            sendWsError(socket, docId, "invalid_payload", "Payload must contain { baseRev:number, patch: Operation[] }");
             return;
         }
 
-        // Load, check rev, apply patch, persist, broadcast
-        const current = loadDoc(docId);
-        if (current.rev !== baseRev) {
-            socket.send(JSON.stringify({ error: "rev_mismatch", rev: current.rev }));
-            return;
+        try {
+            // Load, check rev, apply patch, persist, broadcast
+            const current = loadDoc(docId);
+                        if (current.rev !== baseRev) {
+                sendWsError(socket, docId, "rev_mismatch", "Client baseRev is stale", {
+                  rev: current.rev,
+                  retryable: true,
+                });
+                noteSnapshot(socket, docId);
+                return;
+            }
+
+            // fast-json-patch applyPatch :contentReference[oaicite:9]{index=9}
+            const cloned = structuredClone(current.data);
+            const result = applyPatch(cloned, patch, /*validate*/ true, /*mutate*/ true);
+                        if (result.newDocument === undefined) {
+                sendWsError(socket, docId, "patch_failed", "Patch did not produce a new document", {
+                  rev: current.rev,
+                  retryable: true,
+                });
+                noteSnapshot(socket, docId);
+                return;
+            }
+
+            const next: Doc = { rev: current.rev + 1, data: result.newDocument };
+            saveDoc(docId, next);
+
+            broadcastPatch(docId, next.rev, patch);
+            safeSocketSend(socket, { ok: true, rev: next.rev });
+            console.log("sent patch", docId, next.rev, patch);
+        } catch (err) {
+                        const causeCode = String((err as any)?.name ?? "unknown_error");
+            const causeMessage = String((err as any)?.message ?? "Patch processing failed");
+
+            app.log.warn({ docId, baseRev, causeCode, causeMessage, err }, "Failed to process patch");
+
+            let currentRev: number | null = null;
+            try {
+                currentRev = loadDoc(docId).rev;
+            } catch {}
+
+            sendWsError(socket, docId, "patch_apply_failed", `${causeCode}: ${causeMessage}`, {
+              rev: currentRev,
+              retryable: true,
+            });
+
+            // Try to re-sync sender after a failed patch.
+            try {
+                noteSnapshot(socket, docId);
+            } catch {}
         }
-
-        // fast-json-patch applyPatch :contentReference[oaicite:9]{index=9}
-        const cloned = structuredClone(current.data);
-        const result = applyPatch(cloned, patch, /*validate*/ true, /*mutate*/ true);
-        if (result.newDocument === undefined) {
-            socket.send(JSON.stringify({ error: "patch_failed" }));
-            return;
-        }
-
-        const next: Doc = { rev: current.rev + 1, data: result.newDocument };
-        saveDoc(docId, next);
-
-        broadcastPatch(docId, next.rev, patch);
-        socket.send(JSON.stringify({ ok: true, rev: next.rev }));
-        console.log("sent patch", docId, next.rev, patch);
     });
 
     socket.on("close", () => {
@@ -219,7 +289,7 @@ app.setNotFoundHandler((req, reply) => {
 
 function noteSnapshot(socket: any, docId: string) {
     const doc = loadDoc(docId);
-    socket.send(JSON.stringify({ type: "snapshot", docId, rev: doc.rev, data: doc.data }));
+    safeSocketSend(socket, { type: "snapshot", docId, rev: doc.rev, data: doc.data });
     console.log("sent snapshot:", docId, doc.rev, doc.data);
 }
 

@@ -90,9 +90,9 @@ export default function ScoringPage() {
         error,
         toggleActiveRace: toggleActiveRaceAction,
         setActiveRace: setActiveRaceAction,
-        removeRaceStarter,
+                removeRaceStarter,
 
-        upsertRaceStarters,
+        insertRaceStarters,
 
         saveRaceWithStarters,
 
@@ -228,7 +228,7 @@ export default function ScoringPage() {
         const missing = vm.getMissingStarterBibsFromLive();
         if (!missing.length) return;
 
-        upsertRaceStarters(race.id, missing, { recomputeResults: true });
+        insertRaceStarters(race.id, missing);
 
 
     }
@@ -247,7 +247,7 @@ export default function ScoringPage() {
         const toAdd = vm.buildStartersForBibs(bibs);
         if (!toAdd.length) return;
 
-        upsertRaceStarters(race.id, toAdd, { recomputeResults: true });
+        insertRaceStarters(race.id, toAdd);
 
 
     }

@@ -60,6 +60,38 @@ export function upsertRaceStartersInRace(race: Race, incoming: Athlete[]): Race 
 }
 
 /**
+ * Inserts starters by bib only (no name-based merge).
+ *
+ * Rules:
+ * - existing bibs are kept as-is
+ * - only incoming starters with a new bib are appended
+ * - starters without valid positive bib are ignored
+ */
+export function insertRaceStartersInRace(race: Race, incoming: Athlete[]): Race {
+  const base = Array.isArray(race.raceStarters) ? race.raceStarters : [];
+  const existingBibs = new Set<number>();
+
+  for (const starter of base) {
+    const bib = bibToInt(starter?.bib);
+    if (bib != null) existingBibs.add(bib);
+  }
+
+  const additions: Athlete[] = [];
+  for (const starter of Array.isArray(incoming) ? incoming : []) {
+    const bib = bibToInt(starter?.bib);
+    if (bib == null) continue;
+    if (existingBibs.has(bib)) continue;
+
+    existingBibs.add(bib);
+    additions.push({ ...starter, bib });
+  }
+
+  if (additions.length === 0) return race;
+
+  return replaceRaceStartersInRace(race, [...base, ...additions]);
+}
+
+/**
  * Removes one starter from a race and keeps raceStarters / raceResults / raceActivities consistent.
  */
 export function removeStarterFromRace(race: Race, athleteId: string): Race {

@@ -8,6 +8,7 @@ RaceOffice consists of:
 ## Table of contents
 
 - [Documentation](#documentation)
+  - [Server protocol details](#server-protocol-details)
 - [Quick start (Windows & macOS)](#quick-start-windows--macos)
   - [1) Prerequisites](#1-prerequisites)
   - [2) Install dependencies](#2-install-dependencies)
@@ -23,6 +24,15 @@ RaceOffice consists of:
 - Architecture details: [`doc/architecture.md`](doc/architecture.md)
 - Build & deploy guide (including WinSW): [`doc/build-and-deploy.md`](doc/build-and-deploy.md)
 - Visualization skipped-row indicator: [`doc/visualization.md`](doc/visualization.md)
+- Server API/protocol and error handling: [`doc/server.md`](doc/server.md)
+
+---
+
+## Server protocol details
+
+For realtime message formats, revision handling, and unified server error responses, see:
+
+- [`doc/server.md`](doc/server.md)
 
 ---
 

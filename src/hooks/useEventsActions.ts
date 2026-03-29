@@ -22,7 +22,12 @@ import type { Race, RaceResult } from "../types/race";
 import type { RaceActivity } from "../types/raceactivities";
 
 import { upsertStarters } from "../domain/startersActions";
-import { removeStarterFromRace, replaceRaceStartersInRace, upsertRaceStartersInRace } from "../domain/raceActions";
+import {
+  insertRaceStartersInRace,
+  removeStarterFromRace,
+  replaceRaceStartersInRace,
+  upsertRaceStartersInRace,
+} from "../domain/raceActions";
 
 import {
   applyActivitiesToRaceResults,
@@ -70,6 +75,8 @@ export type UseEventsActionsResult = {
   replaceRaceStarters: (raceId: string, nextStarters: Athlete[]) => void;
   removeRaceStarter: (raceId: string, athleteId: string) => void;
   upsertRaceStarters: (raceId: string, incoming: Athlete[], options?: { recomputeResults?: boolean }) => void;
+  /** Insert-only helper: append new starters by bib (no name-based merge). */
+  insertRaceStarters: (raceId: string, incoming: Athlete[]) => void;
 
   // ---------------------------------------------------------------------------
   // Scoring helpers
@@ -297,6 +304,15 @@ export function useEventsActions(eventId: string | null | undefined): UseEventsA
     [updateRace],
   );
 
+  // Insert-only helper for scoring flows where a newly entered bib must never
+  // overwrite an existing starter by name matching.
+  const insertRaceStarters = useCallback(
+    (raceId: string, incoming: Athlete[]) => {
+      updateRace(raceId, (r) => insertRaceStartersInRace(r, incoming ?? []));
+    },
+    [updateRace],
+  );
+
   // ---------------------------------------------------------------------------
   // Scoring actions
   // ---------------------------------------------------------------------------
@@ -429,6 +445,7 @@ export function useEventsActions(eventId: string | null | undefined): UseEventsA
     replaceRaceStarters,
     removeRaceStarter,
     upsertRaceStarters,
+    insertRaceStarters,
 
     addRaceActivity,
     addRaceActivities,
