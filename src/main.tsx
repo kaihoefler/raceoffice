@@ -9,10 +9,6 @@ import { router } from "./router";
 import { EventListProvider } from "./providers/EventListProvider";
 import { VisualizationListProvider } from "./providers/VisualizationListProvider";
 import { RaceStatusProvider } from "./providers/RaceStatusProvider";
-import { RaceStatusTimeProvider } from "./providers/RaceStatusTimeProvider";
-import { RaceStatusBibProvider } from "./providers/RaceStatusBibProvider";
-import { RaceStatusMetaProvider } from "./providers/RaceStatusMetaProvider";
-import { RaceStatusCompetitorsProvider } from "./providers/RaceStatusCompetitorsProvider";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -21,16 +17,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <EventListProvider>
         <VisualizationListProvider>
           <RaceStatusProvider>
-          <RaceStatusTimeProvider>
-            <RaceStatusMetaProvider>
-              <RaceStatusCompetitorsProvider>
-                <RaceStatusBibProvider>
-                  <RouterProvider router={router} />
-                </RaceStatusBibProvider>
-              </RaceStatusCompetitorsProvider>
-            </RaceStatusMetaProvider>
-          </RaceStatusTimeProvider>
-        </RaceStatusProvider>
+            <RouterProvider router={router} />
+          </RaceStatusProvider>
         </VisualizationListProvider>
       </EventListProvider>
     </ThemeProvider>

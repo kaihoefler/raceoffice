@@ -1,9 +1,8 @@
 // src/pages/scoring/ScoringViewModel.tsx
 import { useMemo } from "react";
 
-import { useRaceStatusBibs } from "../../providers/RaceStatusBibProvider";
-import { useRaceStatusMeta } from "../../providers/RaceStatusMetaProvider";
-import { useRaceStatusCompetitors } from "../../providers/RaceStatusCompetitorsProvider";
+import { useRaceStatus } from "../../providers/RaceStatusProvider";
+
 
 import type { Athlete } from "../../types/athlete";
 import type { RaceActivity, RaceActivityPointsSprint } from "../../types/raceactivities";
@@ -104,18 +103,15 @@ function isPointsSprintActivity(a: unknown): a is RaceActivityPointsSprint {
 }
 
 /**
- * Optimized: uses BibProvider + MetaProvider + CompetitorsProvider
- *
- * IMPORTANT provider tree:
- * RaceStatusProvider
- *   -> RaceStatusMetaProvider
- *   -> RaceStatusCompetitorsProvider
- *   -> RaceStatusBibProvider
+  * Uses RaceStatusProvider directly.
  */
 export function useScoringViewModel(race: Race | null, syncEnabled: boolean): ScoringViewModel {
-  const { bibSet } = useRaceStatusBibs(); // live bibs (stable)
-  const meta = useRaceStatusMeta(); // lapsComplete/lapsToGo (primitive/stable)
-  const { competitors } = useRaceStatusCompetitors(); // competitors with structural sharing (stable)
+    const { currentRace } = useRaceStatus();
+
+  const competitors = Array.isArray(currentRace?.competitors) ? currentRace.competitors : [];
+  const liveLapCount = currentRace?.lapsComplete ?? null;
+  const liveLapsToGo = currentRace?.lapsToGo ?? null;
+
 
   return useMemo(() => {
     // ---- Starters ----
@@ -126,8 +122,13 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
       if (bib != null) starterBibs.add(bib);
     }
 
-    // ---- Live bibs ----
-    const liveBibs = bibSet;
+        // ---- Live bibs ----
+    const liveBibs = new Set<number>();
+    for (const c of competitors) {
+      const bib = bibToInt((c as any)?.number);
+      if (bib != null) liveBibs.add(bib);
+    }
+
 
     const unknownLiveBibs = new Set<number>();
     for (const bib of liveBibs) {
@@ -171,10 +172,6 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
           return athlete;
         });
     };
-
-    // ---- Meta ----
-    const liveLapCount = meta.lapsComplete ?? null;
-    const liveLapsToGo = meta.lapsToGo ?? null;
 
         // ---- Top bibs by position ----
     const sortedByPos = [...competitors].sort((a: any, b: any) => (a?.position ?? 9999) - (b?.position ?? 9999));
@@ -325,11 +322,10 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
     (race as any)?.raceActivities,
     (race as any)?.raceResults,
 
-    // optimized providers
-    bibSet,
-    meta.lapsComplete,
-    meta.lapsToGo,
     competitors,
+    liveLapCount,
+    liveLapsToGo,
+
 
     // ui state
     syncEnabled,

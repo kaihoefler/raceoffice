@@ -37,8 +37,7 @@ import { createFilterOptions } from "@mui/material/useAutocomplete";
 import PointsBibField, { type AthleteFilterOptions } from "./PointsBibField";
 import ScoringStarterList from "./ScoringStarterList";
 
-import { useRaceStatusMeta } from "../providers/RaceStatusMetaProvider";
-import { useRaceStatusCompetitors } from "../providers/RaceStatusCompetitorsProvider";
+import { useRaceStatus } from "../providers/RaceStatusProvider";
 
 import type { Athlete } from "../types/athlete";
 import type { Race, RaceResult } from "../types/race";
@@ -280,8 +279,8 @@ export default function FinishLineScoring({
   // -------------------------
   // Live race status (Fill from Live)
   // -------------------------
-  const liveMeta = useRaceStatusMeta();
-  const { competitors: liveCompetitors } = useRaceStatusCompetitors();
+  const { currentRace } = useRaceStatus();
+  const liveCompetitors = Array.isArray(currentRace?.competitors) ? currentRace.competitors : [];
 
   const canFillFromLive = true;
   //const canFillFromLive = Number(liveMeta.lapsToGo ?? NaN) === 0;
@@ -301,7 +300,7 @@ export default function FinishLineScoring({
   function handleFillFromLive() {
     if (!canFillFromLive) return;
 
-    const raceLap = liveMeta.lapsComplete;
+    const raceLap = currentRace?.lapsComplete ?? null;
 
     // Für stabile Verarbeitung sortieren wir nach Live-Position.
     const sortedLiveCompetitors = Array.isArray(liveCompetitors)

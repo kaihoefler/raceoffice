@@ -20,7 +20,7 @@
 // Nach Änderungen an Activities oder Results wird immer recomputeRaceResults(...) aufgerufen,
 // um Punkte/Status/Rank konsistent zu halten.
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -33,8 +33,6 @@ import {
     Chip,
     Divider,
     IconButton,
-    Tab,
-    Tabs,
     Tooltip,
     Typography,
 } from "@mui/material";
@@ -43,24 +41,15 @@ import HomeIcon from "@mui/icons-material/Home";
 import GroupsIcon from "@mui/icons-material/Groups";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
 
-
 import { useEventList } from "../providers/EventListProvider";
 import { useEventsActions } from "../hooks/useEventsActions";
 
-
-import { useScoringViewModel } from "./scoring/ScoringViewModel";
-
 import { buildRaceResultsCsv } from "../domain/raceResultsCsvExport";
-
 
 import RaceSelector from "../components/RaceSelector";
 
-
-import PointsScoring from "../components/PointsScoring";
-import FinishLineScoring from "../components/FinishLineScoring";
-import EliminationScoring from "../components/EliminationScoring";
-import LiveRaceStatus from "../components/LiveRaceStatus";
 import RaceActivitiesList from "../components/RaceActivitiesList";
+
 import Scoreboard from "../components/Scoreboard";
 
 import type { Athlete } from "../types/athlete";
@@ -68,10 +57,7 @@ import type { Race, RaceResult } from "../types/race";
 
 import type { RaceActivity } from "../types/raceactivities";
 
-
-
-
-
+import ScoringLiveColumns from "./scoring/ScoringLiveColumns";
 
 
 export default function ScoringPage() {
@@ -90,7 +76,7 @@ export default function ScoringPage() {
         error,
         toggleActiveRace: toggleActiveRaceAction,
         setActiveRace: setActiveRaceAction,
-                removeRaceStarter,
+        removeRaceStarter,
 
         insertRaceStarters,
 
@@ -102,7 +88,7 @@ export default function ScoringPage() {
         addRaceActivity,
         addRaceActivities,
         updateRaceActivity,
-                replaceRaceActivities,
+        replaceRaceActivities,
         setRaceResultsManual,
         recalculateRaceResults,
     } = useEventsActions(activeEventId);
@@ -134,15 +120,7 @@ export default function ScoringPage() {
     // -------------------------------------------------------------------------
     // Local UI state
     // -------------------------------------------------------------------------
-    const [syncEnabled, setSyncEnabled] = useState(false);
-    const [col1Tab, setCol1Tab] = useState<"points" | "finish" | "elimination">("points");
 
-    /**
-     * ViewModel (rein abgeleitet / read-only):
-     * - berechnet Anzeige-Daten für die UI (z.B. missing bibs, live-sync Meta)
-     * - persistiert nichts selbst (Persistenz passiert ausschließlich über update(...))
-     */
-    const vm = useScoringViewModel(race, syncEnabled);
 
 
 
@@ -197,7 +175,7 @@ export default function ScoringPage() {
     }
 
 
-        function handleAddRaceActivity(activity: RaceActivity) {
+    function handleAddRaceActivity(activity: RaceActivity) {
         if (!race) return;
         addRaceActivity(race.id, activity);
     }
@@ -212,47 +190,8 @@ export default function ScoringPage() {
     // -------------------------------------------------------------------------
     // Handlers: starters
     // -------------------------------------------------------------------------
-    /**
- * Erstellt fehlende Starter anhand der Live-Daten (z.B. wenn Bibs im Live-Feed auftauchen,
- * aber noch nicht in raceStarters existieren).
- *
- * Wichtig:
- * - neue Starter werden aggregate-aware ins Race gemergt
- * - dabei wird `raceResults` direkt mit aufgebaut / rematerialisiert,
- *   damit neue Bibs sofort als Result-Zeile im Scoring sichtbar sind
- */
-
-    function handleCreateMissingStartersFromLive() {
-        if (!race) return;
-
-        const missing = vm.getMissingStarterBibsFromLive();
-        if (!missing.length) return;
-
-        insertRaceStarters(race.id, missing);
-
-
-    }
-
-    /**
- * Erstellt Starter für eine Liste von Bibs.
- * - vm.buildStartersForBibs(...) baut Athlete-Objekte
- * - wir deduplizieren gegen existierende raceStarters
- * - anschließend werden `raceResults` neu aufgebaut, damit neue Starter
- *   sofort im Rennen materialisiert sind
- */
-
-    async function handleCreateStartersForBibs(bibs: number[]) {
-        if (!race) return;
-
-        const toAdd = vm.buildStartersForBibs(bibs);
-        if (!toAdd.length) return;
-
-        insertRaceStarters(race.id, toAdd);
-
-
-    }
-
     function handleDeleteStarter(starter: Athlete) {
+
         if (!race) return;
 
         const bibLabel = starter.bib != null ? ` ${starter.bib}` : "";
@@ -297,7 +236,7 @@ export default function ScoringPage() {
         URL.revokeObjectURL(url);
     }
 
-        function handleExportRaceResultsCsv() {
+    function handleExportRaceResultsCsv() {
         if (!race) return;
 
         const csv = buildRaceResultsCsv(race.raceResults ?? []);
@@ -466,103 +405,36 @@ export default function ScoringPage() {
                             alignItems: "start",
                         }}
                     >
-                        {/* Spalte 1: Tabs (Points / Finish / Elimination) */}
-                        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, minHeight: 0 }}>
-                            <Tabs
-                                value={col1Tab}
-                                onChange={(_, v) => setCol1Tab(v)}
-                                variant="fullWidth"
-                                sx={{ borderBottom: "1px solid", borderColor: "divider" }}
-                            >
-                                <Tab value="points" label="Points" />
-                                <Tab value="finish" label="Finish" />
-                                <Tab value="elimination" label="Elimination" />
-                            </Tabs>
-
-                            <Box sx={{ p: 1 }}>
-                                {col1Tab === "points" ? (
-                                    <PointsScoring
-                                        race={race}
-                                        resetKey={race.id}
-                                        onAddRaceActivity={handleAddRaceActivity}
-                                        onCreateStarters={handleCreateStartersForBibs}
-                                        onDeleteStarter={handleDeleteStarter}
-                                        missingInLiveBibs={vm.missingInLiveBibs}
-                                        syncEnabled={vm.syncEnabled}
-                                        liveLapCount={vm.liveLapCount}
-                                        liveLapsToGo={vm.liveLapsToGo}
-                                        liveTopBibs={vm.liveTopBibs}
-                                    />
-
-                                ) : col1Tab === "finish" ? (
-                                    <FinishLineScoring
-                                        race={race}
-                                        resetKey={race.id}
-                                        onChangeRaceResults={handleChangeRaceResults}
-                                        onCreateStarters={handleCreateStartersForBibs}
-                                        onDeleteStarter={handleDeleteStarter}
-                                        missingInLiveBibs={vm.missingInLiveBibs}
-                                    />
-
-                                ) : (
-                                    <EliminationScoring
-                                        race={race}
-                                        resetKey={race.id}
-                                        onAddRaceActivity={handleAddRaceActivity}
-                                        onAddRaceActivities={handleAddRaceActivities}
-                                        onCreateStarters={handleCreateStartersForBibs}
-                                        onDeleteStarter={handleDeleteStarter}
-                                        missingInLiveBibs={vm.missingInLiveBibs}
-                                        syncEnabled={vm.syncEnabled}
-                                        liveLapCount={vm.liveLapCount}
-                                        liveLastEligibleBibs={vm.liveLastEligibleBibs}
-                                        liveZeroLapBibs={vm.liveZeroLapBibs}
-                                    />
-
-                                )}
-                            </Box>
-                        </Box>
-                        {/* Spalte 2: Race activities */}
-                        <RaceActivitiesList race={race} onUpdateActivity={handleUpdateActivity} onReplaceActivities={handleReplaceActivities} />
-
-                        {/* Spalte 3: Standings */}
-                        <Scoreboard
-                            results={race.raceResults}
-                            title="Standings"
-                            onRecalculateResults={handleRecalculateResults}
-                        />
-
-
-                        {/* Spalte 4: Live race status (polled via RaceStatusProvider) */}
-                        <LiveRaceStatus
-                            unknownLiveBibs={vm.unknownLiveBibs}
-                            onCreateStarters={handleCreateMissingStartersFromLive}
-                            syncEnabled={syncEnabled}
-                            onSyncEnabledChange={setSyncEnabled}
-                            raceResults={race.raceResults}
-
-
-                            // Create race from live status
-                            eventId={activeEventId}
+                        <ScoringLiveColumns
+                            race={race}
+                            activeEventId={activeEventId}
                             ageGroups={fullEvent.ageGroups}
+                            onInsertRaceStarters={(incoming) => insertRaceStarters(race.id, incoming)}
+                            onDeleteStarter={handleDeleteStarter}
+                            onAddRaceActivity={handleAddRaceActivity}
+                            onAddRaceActivities={handleAddRaceActivities}
+                            onChangeRaceResults={handleChangeRaceResults}
                             onCreateRaceFromLive={(draft, starters) => {
-                                // 1) create the race (incl. starters + materialized results)
                                 saveRaceWithStarters(draft, starters);
-
-                                // 2) make it the active race in the event
                                 setActiveRaceAction(draft.id);
-
-                                // 3) navigate to the new race scoring page
                                 navigate(`/races/${draft.id}/scoring`);
                             }}
-
-
                         />
 
+                        {/* Spalte 2: Race activities */}
+                        <Box sx={{ order: { xs: 2, md: 2 }, gridColumn: { md: 2 }, minWidth: 0 }}>
+                            <RaceActivitiesList race={race} onUpdateActivity={handleUpdateActivity} onReplaceActivities={handleReplaceActivities} />
+                        </Box>
 
-
-
-                    </Box>
+                        {/* Spalte 3: Standings */}
+                        <Box sx={{ order: { xs: 3, md: 3 }, gridColumn: { md: 3 }, minWidth: 0 }}>
+                            <Scoreboard
+                                results={race.raceResults}
+                                title="Standings"
+                                onRecalculateResults={handleRecalculateResults}
+                            />
+                        </Box>
+                  </Box>
                 </CardContent>
             </Card>
         </Box>

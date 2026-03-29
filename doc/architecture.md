@@ -14,6 +14,17 @@ RaceOffice is split into two parts:
 ### UI
 - Material UI theme configuration lives in `src/theme.ts` (`createTheme(...)`).
 
+### Live status provider model
+- The app now uses a **single** live provider: `RaceStatusProvider`.
+- `RouterProvider` is mounted directly inside `RaceStatusProvider` (`src/main.tsx`).
+- Components/hooks consume live data directly via `useRaceStatus()`.
+- Older split providers (`RaceStatusMetaProvider`, `RaceStatusCompetitorsProvider`, `RaceStatusBibProvider`, `RaceStatusTimeProvider`) were removed to simplify dependency flow.
+
+### Scoring page render isolation
+- `ScoringPage` was split so live subscriptions are localized in `src/pages/scoring/ScoringLiveColumns.tsx`.
+- Non-live columns (activities/standings) stay outside that live-consuming block.
+- Goal: reduce unnecessary full-page re-renders on each live polling cycle.
+
 ### Domain types
 The SPA uses TypeScript types for the domain model:
 
@@ -81,13 +92,13 @@ This pattern avoids loading everything upfront and keeps the list view small and
   - sets `"disconnected"` on close
 
 ### Snapshot + patch protocol
-The hook expects two incoming message shapes:
+The hook expects three incoming message shapes:
 
 - Snapshot:
   ```ts doc/architecture.md
   { type: "snapshot", docId, rev, data }
   ```
-  This sets local `data` and updates `revRef`.
+  This sets local state and synchronizes both `dataRef` + `revRef` immediately.
 
 - Patch broadcast:
   ```ts doc/architecture.md
@@ -95,6 +106,12 @@ The hook expects two incoming message shapes:
   ```
   The hook applies the patch using `fast-json-patch`:
   - `applyPatch(structuredClone(prev), patch, true, true)`
+
+- Unified error:
+  ```ts doc/architecture.md
+  { type: "error", docId, code, message, rev?, retryable? }
+  ```
+  - `rev_mismatch` triggers reconnect/resync handling in the client.
 
 ### Updates from client to server (no optimistic updates)
 `update(fn)`:
@@ -118,6 +135,8 @@ This prevents stale WebSocket events from earlier connections (common in develop
 ---
 
 ## 4) Server Implementation (`server_own/src/index.ts`)
+
+> Detailed protocol reference (including unified error payload): see `doc/server.md`.
 
 ### Tech stack
 From `server_own/package.json` and code:
@@ -198,11 +217,11 @@ This is useful for read-only clients or environments where WS is difficult.
 ## 5) Concurrency / Conflicts
 
 Current behavior:
-- Server uses a strict **revision check** (`rev_mismatch`) to prevent applying patches to stale states.
-- Client TODO in `src/realtime/useRealtimeDoc.ts` mentions implementing rev mismatch handling (e.g. re-fetch snapshot / reconnect).
+- Server uses strict revision checks (`baseRev` vs current `rev`).
+- On mismatch or patch errors, server returns a **unified error message** and sends a fresh snapshot to re-sync the sender.
+- Client handles `rev_mismatch` by reconnecting and accepting a fresh snapshot.
 
 Practical next steps (recommended):
-- On receiving `{ error: "rev_mismatch", rev: ... }`, client should:
-  - request a fresh snapshot (or reconnect)
-  - optionally show a conflict state in the UI
-- Add validation of patches / schema per document type (especially for multi-client editing).
+- Add domain-level schema validation for incoming patches per document type.
+- Optionally add retry/backoff strategy for repeated reconnect loops.
+- Add telemetry for error codes (`rev_mismatch`, `patch_apply_failed`, …) to monitor multi-client conflict frequency.
