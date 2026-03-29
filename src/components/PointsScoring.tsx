@@ -12,7 +12,7 @@
 // - prefill top bibs from live positions
 // - keep manual overrides stable until user clears inputs
 
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -756,7 +756,7 @@ export default function PointsScoring({
    * Quick-pick from starter list (bottom panel):
    * fills the next free points slot and moves focus forward.
    */
-  function handleStarterClick(starter: Athlete) {
+    const handleStarterClick = useCallback((starter: Athlete) => {
     const bib = starter.bib;
     if (bib == null) return;
 
@@ -764,7 +764,6 @@ export default function PointsScoring({
     if (selectedBibs.has(bib)) return;
 
     const next = starterByBib.get(bib) ?? starter;
-
 
     if (mode === "finish") {
       if (!sel3P) {
@@ -804,7 +803,8 @@ export default function PointsScoring({
       setSel1P(next);
       setIn1P(String(bib));
     }
-  }
+  }, [mode, sel1P, sel2P, sel3P, starterByBib]);
+
 
 
   // ---------------------------------------------------------------------------

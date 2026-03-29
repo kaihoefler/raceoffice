@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   Box,
@@ -55,7 +55,15 @@ function defaultAthleteLabel(a: Athlete) {
   return `${a.bib ?? ""} - ${(a.lastName ?? "").trim()} ${(a.firstName ?? "").trim()}`.trim();
 }
 
-export default function ScoringStarterList({
+/**
+ * ScoringStarterList
+ *
+ * Performance notes:
+ * - Wrapped with React.memo (see file bottom) so unchanged props do not trigger re-render.
+ * - Uses lightweight content comparators for Set/Map/Starter arrays.
+ * - Callback refs keep event handlers up to date without forcing a render on every new function reference.
+ */
+function ScoringStarterList({
   starters,
   missingInLiveBibs,
   selectedIds,
@@ -70,6 +78,32 @@ export default function ScoringStarterList({
   const theme = useTheme();
 
   const labelOf = formatAthleteLabel ?? defaultAthleteLabel;
+
+  // Keep latest callback props in refs.
+  // This avoids stale closures in click handlers while still allowing memoized renders.
+  const onStarterClickRef = useRef(onStarterClick);
+  const onDeleteStarterRef = useRef(onDeleteStarter);
+
+  useEffect(() => {
+    onStarterClickRef.current = onStarterClick;
+  }, [onStarterClick]);
+
+  useEffect(() => {
+    onDeleteStarterRef.current = onDeleteStarter;
+  }, [onDeleteStarter]);
+
+  // Render booleans are derived from props (safe to use during render).
+  const clickEnabled = Boolean(onStarterClick);
+  const deleteEnabled = Boolean(onDeleteStarter);
+
+  // Stable handlers so row elements don't receive fresh inline callback identities each render.
+  const handleStarterItemClick = useCallback((starter: Athlete) => {
+    onStarterClickRef.current?.(starter);
+  }, []);
+
+  const handleDeleteStarter = useCallback((starter: Athlete) => {
+    onDeleteStarterRef.current?.(starter);
+  }, []);
 
   const [view, setView] = useState<"tiles" | "list">("tiles");
 
@@ -204,7 +238,7 @@ export default function ScoringStarterList({
             return (
               <ListItem
                 key={a.id}
-                onClick={() => onStarterClick?.(a)}
+                onClick={() => handleStarterItemClick(a)}
                 sx={{
                   px: 1,
                   borderRadius: 1,
@@ -214,7 +248,7 @@ export default function ScoringStarterList({
                   display: "flex",
                   alignItems: "center",
                   gap: 1,
-                  cursor: onStarterClick ? "pointer" : "default",
+                  cursor: clickEnabled ? "pointer" : "default",
                 }}
               >
                 <ListItemText
@@ -260,7 +294,7 @@ export default function ScoringStarterList({
                   />
                 ) : null}
 
-                {missing && onDeleteStarter ? (
+                {missing && deleteEnabled ? (
                   <Tooltip title="Delete starter" arrow>
                     <span>
                       <IconButton
@@ -268,7 +302,7 @@ export default function ScoringStarterList({
                         color="error"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onDeleteStarter(a);
+                          handleDeleteStarter(a);
                         }}
                         aria-label={`Delete starter ${bib ?? ""}`.trim()}
                       >
@@ -307,7 +341,7 @@ export default function ScoringStarterList({
               <Box
                 key={a.id}
                 title={labelOf(a)}
-                onClick={() => onStarterClick?.(a)}
+                onClick={() => handleStarterItemClick(a)}
                 sx={{
                   p: 0.5,
                   borderRadius: 1,
@@ -323,7 +357,7 @@ export default function ScoringStarterList({
                   justifyContent: "center",
                   gap: 0.15,
                   userSelect: "none",
-                  cursor: onStarterClick ? "pointer" : "default",
+                  cursor: clickEnabled ? "pointer" : "default",
                 }}
               >
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, minHeight: 18 }}>
@@ -339,7 +373,7 @@ export default function ScoringStarterList({
                     {bib ?? "?"}
                   </Typography>
 
-                  {missing && onDeleteStarter ? (
+                  {missing && deleteEnabled ? (
                     <Tooltip title="Delete starter" arrow>
                       <span>
                         <IconButton
@@ -347,7 +381,7 @@ export default function ScoringStarterList({
                           color="error"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onDeleteStarter(a);
+                            handleDeleteStarter(a);
                           }}
                           aria-label={`Delete starter ${bib ?? ""}`.trim()}
                           sx={{ p: 0.15 }}
@@ -379,3 +413,73 @@ export default function ScoringStarterList({
     </Box>
   );
 }
+
+/** Content equality for Set props used in React.memo comparator. */
+function areSetsEqual<T>(a?: ReadonlySet<T>, b?: ReadonlySet<T>) {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  if (a.size !== b.size) return false;
+  for (const v of a) {
+    if (!b.has(v)) return false;
+  }
+  return true;
+}
+
+/** Content equality for Map props used in React.memo comparator. */
+function areMapsEqual<K, V>(a?: ReadonlyMap<K, V>, b?: ReadonlyMap<K, V>) {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  if (a.size !== b.size) return false;
+  for (const [k, v] of a.entries()) {
+    if (!b.has(k) || b.get(k) !== v) return false;
+  }
+  return true;
+}
+
+/**
+ * Lightweight structural compare for starter rows.
+ * We compare only fields rendered in this component.
+ */
+function areStartersEqual(a: Athlete[], b: Athlete[]) {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.id !== y.id ||
+      x.bib !== y.bib ||
+      x.firstName !== y.firstName ||
+      x.lastName !== y.lastName ||
+      x.ageGroupId !== y.ageGroupId ||
+      x.nation !== y.nation
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Custom memo comparator:
+ * prevents re-render when only unrelated parent state changes.
+ */
+function arePropsEqual(prev: Props, next: Props) {
+  return (
+    areStartersEqual(prev.starters, next.starters) &&
+    areSetsEqual(prev.missingInLiveBibs, next.missingInLiveBibs) &&
+    areSetsEqual(prev.selectedIds, next.selectedIds) &&
+    areMapsEqual(prev.statusByBib, next.statusByBib) &&
+    areMapsEqual(prev.pointsByBib, next.pointsByBib) &&
+    prev.formatAthleteLabel === next.formatAthleteLabel &&
+    Boolean(prev.onDeleteStarter) === Boolean(next.onDeleteStarter) &&
+    Boolean(prev.onStarterClick) === Boolean(next.onStarterClick) &&
+    prev.title === next.title &&
+    prev.maxHeight === next.maxHeight
+  );
+}
+
+// Export memoized component to reduce costly list/tile re-renders during live polling.
+export default memo(ScoringStarterList, arePropsEqual);

@@ -1,5 +1,5 @@
 // src/pages/scoring/ScoringViewModel.tsx
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 
 import { useRaceStatus } from "../../providers/RaceStatusProvider";
 
@@ -102,15 +102,31 @@ function isPointsSprintActivity(a: unknown): a is RaceActivityPointsSprint {
   return (a as any)?.type === "pointsSprint";
 }
 
+function setsHaveSameValues(a: ReadonlySet<number>, b: ReadonlySet<number>) {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const value of a) {
+    if (!b.has(value)) return false;
+  }
+  return true;
+}
+
+
+
 /**
-  * Uses RaceStatusProvider directly.
+ * Uses RaceStatusProvider directly.
  */
 export function useScoringViewModel(race: Race | null, syncEnabled: boolean): ScoringViewModel {
-    const { currentRace } = useRaceStatus();
+  const { currentRace } = useRaceStatus();
 
   const competitors = Array.isArray(currentRace?.competitors) ? currentRace.competitors : [];
   const liveLapCount = currentRace?.lapsComplete ?? null;
   const liveLapsToGo = currentRace?.lapsToGo ?? null;
+
+  const liveBibsRef = useRef<Set<number>>(new Set());
+  const unknownLiveBibsRef = useRef<Set<number>>(new Set());
+  const missingInLiveBibsRef = useRef<Set<number>>(new Set());
+
 
 
   return useMemo(() => {
@@ -130,7 +146,7 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
     }
 
 
-    const unknownLiveBibs = new Set<number>();
+        const unknownLiveBibs = new Set<number>();
     for (const bib of liveBibs) {
       if (!starterBibs.has(bib)) unknownLiveBibs.add(bib);
     }
@@ -142,6 +158,20 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
       }
     }
 
+    const stableLiveBibs = setsHaveSameValues(liveBibsRef.current, liveBibs) ? liveBibsRef.current : liveBibs;
+    if (stableLiveBibs !== liveBibsRef.current) liveBibsRef.current = stableLiveBibs;
+
+    const stableUnknownLiveBibs = setsHaveSameValues(unknownLiveBibsRef.current, unknownLiveBibs)
+      ? unknownLiveBibsRef.current
+      : unknownLiveBibs;
+    if (stableUnknownLiveBibs !== unknownLiveBibsRef.current) unknownLiveBibsRef.current = stableUnknownLiveBibs;
+
+    const stableMissingInLiveBibs = setsHaveSameValues(missingInLiveBibsRef.current, missingInLiveBibs)
+      ? missingInLiveBibsRef.current
+      : missingInLiveBibs;
+    if (stableMissingInLiveBibs !== missingInLiveBibsRef.current) missingInLiveBibsRef.current = stableMissingInLiveBibs;
+
+
     // ---- Competitor lookup (by numeric bib) ----
     const competitorByBib = new Map<number, any>();
     for (const c of competitors) {
@@ -152,7 +182,7 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
     const getMissingStarterBibsFromLive = (): Athlete[] => {
       const ageGroupId = (race as any)?.ageGroupId ?? null;
 
-      return Array.from(unknownLiveBibs)
+                  return Array.from(stableUnknownLiveBibs)
         .sort((a, b) => a - b)
         .map((bib) => {
           const c = competitorByBib.get(bib);
@@ -301,11 +331,11 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
       });
     };
 
-        return {
+            return {
       starterBibs,
-      liveBibs,
-      unknownLiveBibs,
-      missingInLiveBibs,
+      liveBibs: stableLiveBibs,
+      unknownLiveBibs: stableUnknownLiveBibs,
+      missingInLiveBibs: stableMissingInLiveBibs,
       standings,
       syncEnabled,
       liveLapCount,
