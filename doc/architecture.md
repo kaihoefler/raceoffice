@@ -25,21 +25,20 @@ RaceOffice is split into two parts:
 - Non-live columns (activities/standings) stay outside that live-consuming block.
 - Goal: reduce unnecessary full-page re-renders on each live polling cycle.
 
-### Domain types
-The SPA uses TypeScript types for the domain model:
+### Shared domain package (`@raceoffice/domain`)
+Domain types and pure race logic are centralized in the workspace package `packages/domain` and imported in the SPA via `@raceoffice/domain`.
 
-- `src/types/event.ts`
-  - `Event`: lightweight entity (in the *EventList* it contains only `id`, `slug`, `name`)
-  - `FullEvent`: full entity (adds `races`, `athletes`, `ageGroups`)
-  - `EventList`: container document with:
-    - `activeEventId: string | null`
-    - `events: Event[]`
+Examples from the shared package:
+- `Event`, `FullEvent`, `EventList`
+- `AgeGroup`, `Athlete`, `Race`
+- `RaceActivity*` types
+- `RaceResult`
 
-- `src/types/agegroup.ts`
-  - `AgeGroup` includes `id`, `name`, `gender`, `slug`, `eventId`
+Shared pure functions now live there as well, e.g.:
+- race results materialization/ranking (`materializeRaceResults`, `recomputeRaceResults`, ...)
+- race activities filtering/cleanup (`filterActivitiesByAllowedBibs`, `removeBibFromActivities`)
 
-- `src/types/athlete.ts`
-  - `Athlete` includes `id`, `firstName`, `lastName`, `bib`, `ageGroupId`, `nation`
+This keeps client/server domain behavior aligned and avoids duplicated logic in the SPA.
 
 ### Realtime connection state (optional UI/debug)
 `src/realtime/RealtimeConnectionProvider.tsx` tracks connection status per document:
@@ -71,7 +70,7 @@ This makes `eventList` the main entry point for:
 - which event is currently active (`activeEventId`)
 
 ### Lightweight vs full documents
-From `src/types/event.ts`:
+From `@raceoffice/domain`:
 - `EventList.events` holds **lightweight `Event` objects** (`id`, `slug`, `name`)
 - More detailed event data lives in `FullEvent` (adds `races`, `athletes`, `ageGroups`)
 

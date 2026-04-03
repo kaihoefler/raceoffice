@@ -13,11 +13,10 @@ This guide focuses on build, production run, deployment folder creation, and Win
 
 ## Install dependencies
 
-This repository contains **two** npm projects: the root SPA and the backend in `server_own/`.
+This repository uses npm workspaces (root SPA + `server_own/` backend + `packages/domain`).
 
 ```sh doc/build-and-deploy.md
 npm install
-npm --prefix server_own install
 ```
 
 ---
@@ -46,7 +45,7 @@ The Vite dev server proxies `/ws`, `/sse` and `/health` to `http://localhost:878
 
 The backend serves static files from `server_own/public` (configured via `@fastify/static`).
 
-Build everything:
+Build everything (root `build` first builds `@raceoffice/domain`, then SPA):
 
 ```sh doc/build-and-deploy.md
 npm run build:all

@@ -45,11 +45,10 @@ For realtime message formats, revision handling, and unified server error respon
 
 ### 2) Install dependencies
 
-> Repository contains two npm projects (root + `server_own/`).
+> Repository uses npm workspaces (root frontend + `server_own/` backend + `packages/domain`).
 
 ```sh
 npm install
-npm --prefix server_own install
 ```
 
 ### 3) Run in development
@@ -77,7 +76,7 @@ Notes:
 
 ## Run in production mode (local/server)
 
-Build all artifacts:
+Build all artifacts (domain package is built first automatically via root `build`):
 
 ```sh
 npm run build:all
@@ -115,6 +114,7 @@ For deployment folder generation, WinSW service installation, and advanced confi
 
 - `src/` – frontend SPA
 - `server_own/` – backend server
+- `packages/domain/` – shared domain package (types + pure race/results/activity logic)
 - `doc/` – project documentation
 - `examples/` – sample data/assets
 

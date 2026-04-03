@@ -21,7 +21,8 @@ import SaveIcon from "@mui/icons-material/Save";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteIcon from "@mui/icons-material/Delete";
 
-import type { AgeGroup } from "../types/agegroup";
+import type { AgeGroup } from "@raceoffice/domain";
+
 
 type Props = {
     value: AgeGroup[];

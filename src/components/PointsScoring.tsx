@@ -35,9 +35,14 @@ import PointsBibField, { type AthleteFilterOptions } from "./PointsBibField";
 import PointsRemovalDialog from "./PointsRemovalDialog";
 import ScoringStarterList from "./ScoringStarterList";
 
-import type { Athlete } from "../types/athlete";
-import type { Race } from "../types/race";
-import type { RaceActivity, RaceActivityPointsRemoval, RaceActivityPointsSprint } from "../types/raceactivities";
+import type {
+  Athlete,
+  Race,
+  RaceActivity,
+  RaceActivityPointsRemoval,
+  RaceActivityPointsSprint,
+} from "@raceoffice/domain";
+
 
 // Default fallback when no live top bibs are provided by the page.
 const DEFAULT_LIVE_TOP_BIBS = { p1Bib: null, p2Bib: null, p3Bib: null } as const;

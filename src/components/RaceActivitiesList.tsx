@@ -37,15 +37,15 @@ import CloseIcon from "@mui/icons-material/Close";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 
-import type { Race } from "../types/race";
 import type {
+  Race,
   RaceActivity,
   RaceActivityDNF,
   RaceActivityDisqualfication,
   RaceActivityDns,
   RaceActivityPointsRemoval,
   RaceActivityPointsSprint,
-} from "../types/raceactivities";
+} from "@raceoffice/domain";
 
 type Props = {
   race: Race;

@@ -3,13 +3,19 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "packages/*",
+    "server_own"
+  ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:domain && tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest",
     "test:run": "vitest run",
     "preview": "vite preview",
+    "build:domain": "npm --workspace @raceoffice/domain run build",
+    "test:domain": "npm --workspace @raceoffice/domain run test:run",
     "build:server": "npm --prefix server_own run build",
     "build:all": "npm run build && npm run build:server",
     "start:server": "npm --prefix server_own run start",

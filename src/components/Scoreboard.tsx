@@ -29,7 +29,8 @@ import {
 import { alpha, useTheme } from "@mui/material/styles";
 import RefreshIcon from "@mui/icons-material/Refresh";
 
-import type { RaceResult } from "../types/race";
+import type { RaceResult } from "@raceoffice/domain";
+
 
 type Props = {
   /** Liste der Ergebnisse für das Rennen. */

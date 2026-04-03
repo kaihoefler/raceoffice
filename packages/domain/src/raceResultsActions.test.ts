@@ -27,15 +27,15 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { Athlete } from "../types/athlete";
-import type { RaceResult } from "../types/race";
+import type { Athlete } from "./athlete";
+import type { RaceResult } from "./raceResults";
 import type {
   RaceActivityDNF,
   RaceActivityDisqualfication,
   RaceActivityDns,
   RaceActivityPointsRemoval,
   RaceActivityPointsSprint,
-} from "../types/raceactivities";
+} from "./raceactivities";
 
 import {
   applyActivitiesToRaceResults,
@@ -44,7 +44,7 @@ import {
   materializeRaceResults,
   recomputeRaceResults,
   sortRaceResultsForStandings,
-} from "./raceResultsActions";
+} from "./raceResults";
 
 // Kleine Test-Fixture für Starter.
 function athlete(bib: number): Athlete {

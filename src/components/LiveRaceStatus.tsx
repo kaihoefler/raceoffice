@@ -44,9 +44,8 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 
 import { useRaceStatus, type RaceStatusCompetitor } from "../providers/RaceStatusProvider";
 
-import type { AgeGroup } from "../types/agegroup";
-import type { Athlete } from "../types/athlete";
-import type { Race, RaceResult } from "../types/race";
+import type { AgeGroup, Athlete, Race, RaceResult } from "@raceoffice/domain";
+
 
 
 import { buildStartersFromLiveCompetitors, inferRaceDraftFromLiveName } from "../domain/liveRaceActions";

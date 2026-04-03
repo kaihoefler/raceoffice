@@ -18,7 +18,7 @@ import {
   Typography,
 } from "@mui/material";
 
-import type { Athlete } from "../types/athlete";
+import type { Athlete } from "@raceoffice/domain";
 
 type PointsRemovalDialogRow = {
   key: string;

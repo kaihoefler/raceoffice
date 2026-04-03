@@ -9,10 +9,7 @@ import LiveRaceStatus from "../../components/LiveRaceStatus";
 
 import { useScoringViewModel } from "./ScoringViewModel";
 
-import type { AgeGroup } from "../../types/agegroup";
-import type { Athlete } from "../../types/athlete";
-import type { Race, RaceResult } from "../../types/race";
-import type { RaceActivity } from "../../types/raceactivities";
+import type { AgeGroup, Athlete, Race, RaceActivity, RaceResult } from "@raceoffice/domain";
 import type { RaceDraft } from "../../components/RaceEditor";
 
 type Props = {

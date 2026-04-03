@@ -48,8 +48,8 @@ import { useEventList } from "../providers/EventListProvider";
 import RaceStartersImport from "../components/RaceStartersImport";
 import RaceSelector from "../components/RaceSelector";
 
-import type { Race } from "../types/race";
-import type { Athlete } from "../types/athlete";
+import type { Athlete, Race } from "@raceoffice/domain";
+
 
 import { useEventsActions } from "../hooks/useEventsActions";
 

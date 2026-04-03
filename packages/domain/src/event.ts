@@ -1,8 +1,12 @@
-import type { Race } from "./race";
-import type { Athlete } from "./athlete";
 import type { AgeGroup } from "./agegroup";
+import type { Athlete } from "./athlete";
+import type { Race } from "./race";
 
-
+/**
+ * event
+ * -----
+ * Shared event types.
+ */
 export type Event = {
   id: string;
   slug: string;
@@ -10,7 +14,7 @@ export type Event = {
 };
 
 export type FullEvent = Event & {
-  /** Optional: aktuell aktives Race innerhalb dieses Events (oder null). */
+  /** Currently active race inside this event (or null). */
   activeRaceId: string | null;
 
   races: Race[];
@@ -18,14 +22,10 @@ export type FullEvent = Event & {
   ageGroups: AgeGroup[];
 };
 
-
 /**
- * EventList ist jetzt ein Container:
- * - activeEventId: aktuell aktives Event (oder null)
- * - events: die Event-Liste
+ * Event list document shape.
  */
 export type EventList = {
-
   activeEventId: string | null;
   events: Event[];
 };

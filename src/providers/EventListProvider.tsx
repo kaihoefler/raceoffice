@@ -18,7 +18,8 @@
 
 import React, { createContext, useContext, useMemo } from "react";
 import { useRealtimeDoc, type RealtimeStatus } from "../realtime/useRealtimeDoc";
-import type { EventList, Event } from "../types/event";
+import type { Event, EventList } from "@raceoffice/domain";
+
 import type { EventDraft } from "../components/EventEditor";
 
 /**

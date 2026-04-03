@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import type { Athlete } from "../types/athlete";
-import type { Race, RaceResult } from "../types/race";
-import type { RaceActivity, RaceActivityDNF, RaceActivityDns, RaceActivityPointsSprint } from "../types/raceactivities";
+import type {
+  Athlete,
+  Race,
+  RaceResult,
+  RaceActivity,
+  RaceActivityDNF,
+  RaceActivityDns,
+  RaceActivityPointsSprint,
+} from "@raceoffice/domain";
 
 import { removeStarterFromRace, replaceRaceStartersInRace, upsertRaceStartersInRace } from "./raceActions";
 

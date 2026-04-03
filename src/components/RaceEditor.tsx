@@ -17,8 +17,8 @@ import {
   TextField,
 } from "@mui/material";
 
-import type { AgeGroup } from "../types/agegroup";
-import type { Race } from "../types/race";
+import type { AgeGroup, Race } from "@raceoffice/domain";
+
 
 type RaceMode = Race["racemode"];
 type RaceStage = Race["stage"];

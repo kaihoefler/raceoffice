@@ -1,4 +1,4 @@
-import type { Athlete } from "../types/athlete";
+import type { Athlete } from "@raceoffice/domain";
 
 /**
  * Generic row type for importing/merging starters.

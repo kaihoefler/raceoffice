@@ -37,8 +37,8 @@ import {
 } from "@mui/material";
 
 import AgeGroupsEditor from "./AgeGroupsEditor";
-import type { AgeGroup } from "../types/agegroup";
-import type { FullEvent } from "../types/event";
+import type { AgeGroup, FullEvent } from "@raceoffice/domain";
+
 
 import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
 import { useEventList } from "../providers/EventListProvider";

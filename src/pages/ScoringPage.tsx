@@ -52,10 +52,8 @@ import RaceActivitiesList from "../components/RaceActivitiesList";
 
 import Scoreboard from "../components/Scoreboard";
 
-import type { Athlete } from "../types/athlete";
-import type { Race, RaceResult } from "../types/race";
+import type { Athlete, Race, RaceActivity, RaceResult } from "@raceoffice/domain";
 
-import type { RaceActivity } from "../types/raceactivities";
 
 import ScoringLiveColumns from "./scoring/ScoringLiveColumns";
 

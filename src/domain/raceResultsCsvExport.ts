@@ -1,6 +1,8 @@
-import type { RaceResult } from "../types/race";
-
-import { recomputeRaceResults, sortRaceResultsForStandings } from "./raceResultsActions";
+import {
+  recomputeRaceResults,
+  sortRaceResultsForStandings,
+  type RaceResult,
+} from "@raceoffice/domain";
 
 export const RACE_RESULTS_CSV_HEADER =
   "bib;rank;finish_time;points;dnf;dnfLap;laps_completed;dns;dsq;rank_at_finish;remark";
@@ -24,7 +26,7 @@ function toBoolString(v: unknown): "true" | "false" {
 /**
  * Builds a CSV export for RaceResults.
  * - Separator: ';'
- * - Sorted using the same logic as `recomputeRaceResults` (raceResultsActions.ts)
+ * - Sorted using the same logic as `recomputeRaceResults` (@raceoffice/domain)
  * - Includes a header row
  */
 export function buildRaceResultsCsv(results: RaceResult[]): string {

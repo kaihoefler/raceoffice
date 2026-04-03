@@ -1,8 +1,6 @@
-import type { Athlete } from "../types/athlete";
-import type { Race } from "../types/race";
+import type { Athlete, Race } from "@raceoffice/domain";
 
-import { filterActivitiesByAllowedBibs } from "./raceActivitiesActions";
-import { bibToInt, materializeRaceResults } from "./raceResultsActions";
+import { bibToInt, filterActivitiesByAllowedBibs, materializeRaceResults } from "@raceoffice/domain";
 import { removeStarterById, upsertStarters } from "./startersActions";
 
 function collectStarterBibs(starters: Athlete[]): Set<number> {

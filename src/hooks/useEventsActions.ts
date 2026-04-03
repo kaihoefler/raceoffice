@@ -16,10 +16,7 @@ import { useCallback, useEffect, useMemo } from "react";
 
 import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
 
-import type { Athlete } from "../types/athlete";
-import type { FullEvent } from "../types/event";
-import type { Race, RaceResult } from "../types/race";
-import type { RaceActivity } from "../types/raceactivities";
+import type { Athlete, FullEvent, Race, RaceActivity, RaceResult } from "@raceoffice/domain";
 
 import { upsertStarters } from "../domain/startersActions";
 import {
@@ -33,7 +30,7 @@ import {
   applyActivitiesToRaceResults,
   materializeRaceResults,
   recomputeRaceResults,
-} from "../domain/raceResultsActions";
+} from "@raceoffice/domain";
 
 import {
   buildRaceFromDraft,

@@ -1,7 +1,7 @@
 import { Box, FormControl, InputLabel, MenuItem, Select } from "@mui/material";
 import type { SelectChangeEvent } from "@mui/material";
-import type { Race } from "../types/race";
-import type { AgeGroup } from "../types/agegroup";
+import type { AgeGroup, Race } from "@raceoffice/domain";
+
 
 type Props = {
     races: Race[];

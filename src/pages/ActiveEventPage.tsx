@@ -48,7 +48,8 @@ import GroupsIcon from "@mui/icons-material/Groups";
 
 import { useEventList } from "../providers/EventListProvider";
 
-import type { Race } from "../types/race";
+import type { Race } from "@raceoffice/domain";
+
 
 import RaceEditor, { type RaceDraft } from "../components/RaceEditor";
 import { useEventsActions } from "../hooks/useEventsActions";

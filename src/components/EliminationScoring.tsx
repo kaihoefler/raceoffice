@@ -31,14 +31,14 @@ import { createFilterOptions } from "@mui/material/useAutocomplete";
 import PointsBibField, { type AthleteFilterOptions } from "./PointsBibField";
 import ScoringStarterList from "./ScoringStarterList";
 
-import type { Athlete } from "../types/athlete";
-import type { Race } from "../types/race";
 import type {
+  Athlete,
+  Race,
   RaceActivity,
   RaceActivityDNF,
   RaceActivityDisqualfication,
   RaceActivityDns,
-} from "../types/raceactivities";
+} from "@raceoffice/domain";
 
 /**
  * Which "activity type" is currently being recorded.

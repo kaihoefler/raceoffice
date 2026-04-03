@@ -39,7 +39,8 @@ import DownloadIcon from "@mui/icons-material/Download";
 
 
 import EventEditor from "../components/EventEditor";
-import type { Event, FullEvent } from "../types/event";
+import type { Event, FullEvent } from "@raceoffice/domain";
+
 
 import { useEventList } from "../providers/EventListProvider";
 import { useRealtimeDoc } from "../realtime/useRealtimeDoc";

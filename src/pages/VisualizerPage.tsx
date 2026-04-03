@@ -24,8 +24,7 @@ import { alpha, useTheme } from "@mui/material/styles";
 
 import { useOutletContext } from "react-router-dom";
 
-import type { Athlete } from "../types/athlete";
-import type { Race, RaceResult } from "../types/race";
+import type { Athlete, Race, RaceResult } from "@raceoffice/domain";
 import type { VisualizationColumn } from "../types/visualization";
 import type { VisualizationOutletContext } from "../ui/VisualizationLayout";
 
@@ -195,7 +194,10 @@ function renderPlaceholderNode(
     }
   }
 
-  const obj = source === "result" ? (result as Record<string, unknown>) : ((athlete ?? {}) as Record<string, unknown>);
+  const obj =
+    source === "result"
+      ? (result as unknown as Record<string, unknown>)
+      : ((athlete ?? {}) as Record<string, unknown>);
   return templateValueToString(obj[key]);
 }
 

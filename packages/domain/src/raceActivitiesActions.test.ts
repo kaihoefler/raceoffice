@@ -7,7 +7,7 @@ import type {
   RaceActivityDns,
   RaceActivityPointsRemoval,
   RaceActivityPointsSprint,
-} from "../types/raceactivities";
+} from "./raceactivities";
 
 import { filterActivitiesByAllowedBibs, removeBibFromActivities } from "./raceActivitiesActions";
 

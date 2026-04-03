@@ -4,9 +4,8 @@ import { useMemo, useRef } from "react";
 import { useRaceStatus } from "../../providers/RaceStatusProvider";
 
 
-import type { Athlete } from "../../types/athlete";
-import type { RaceActivity, RaceActivityPointsSprint } from "../../types/raceactivities";
-import type { Race } from "../../types/race";
+import type { Athlete, Race, RaceActivity, RaceActivityPointsSprint } from "@raceoffice/domain";
+
 
 export type ScoringStandingRow = {
   bib: number;

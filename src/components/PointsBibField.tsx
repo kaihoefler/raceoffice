@@ -7,7 +7,7 @@ import Autocomplete, {
 
 import type { FilterOptionsState } from "@mui/material/useAutocomplete";
 
-import type { Athlete } from "../types/athlete";
+import type { Athlete } from "@raceoffice/domain";
 
 export type AthleteFilterOptions = (options: Athlete[], state: FilterOptionsState<Athlete>) => Athlete[];
 

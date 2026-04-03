@@ -7,9 +7,7 @@
 // - Convert live competitors to local `Athlete` objects (bib/name/nation), which can then be
 //   stored as `raceStarters`.
 
-import type { AgeGroup } from "../types/agegroup";
-import type { Athlete } from "../types/athlete";
-import type { Race } from "../types/race";
+import type { AgeGroup, Athlete, Race } from "@raceoffice/domain";
 
 // Small ID helper for creating new Athlete ids.
 // Uses crypto.randomUUID if available; otherwise falls back to a timestamp-based id.

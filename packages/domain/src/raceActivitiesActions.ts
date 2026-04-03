@@ -1,6 +1,6 @@
-import type { RaceActivity } from "../types/raceactivities";
+import type { RaceActivity } from "./raceactivities";
 
-import { bibToInt } from "./raceResultsActions";
+import { bibToInt } from "./raceResults";
 
 /**
  * Keeps only activity references to bibs that are still allowed in the race.

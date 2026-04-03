@@ -18,7 +18,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import GridViewIcon from "@mui/icons-material/GridView";
 import ViewListIcon from "@mui/icons-material/ViewList";
 
-import type { Athlete } from "../types/athlete";
+import type { Athlete } from "@raceoffice/domain";
 
 export type StarterStatus = {
   dnf?: false | "dnf" | "elimination";

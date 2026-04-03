@@ -1,6 +1,4 @@
-import type { FullEvent } from "../types/event";
-import type { Race, RaceResult } from "../types/race";
-import type { RaceActivity } from "../types/raceactivities";
+import type { FullEvent, Race, RaceActivity, RaceResult } from "@raceoffice/domain";
 
 /**
  * A lightweight “draft” shape for creating/updating races.

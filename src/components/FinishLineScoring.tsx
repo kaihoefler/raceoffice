@@ -39,8 +39,7 @@ import ScoringStarterList from "./ScoringStarterList";
 
 import { useRaceStatus } from "../providers/RaceStatusProvider";
 
-import type { Athlete } from "../types/athlete";
-import type { Race, RaceResult } from "../types/race";
+import type { Athlete, Race, RaceResult } from "@raceoffice/domain";
 
 type Props = {
   race: Race;

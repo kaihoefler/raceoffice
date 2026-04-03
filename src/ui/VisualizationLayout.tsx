@@ -24,7 +24,7 @@ import { useEventList } from "../providers/EventListProvider";
 import { useVisualizationList } from "../providers/VisualizationListProvider";
 import { normalizeRaceActivitiesForRead, normalizeRaceResultsForRead } from "../domain/eventActions";
 
-import type { Event, FullEvent } from "../types/event";
+import type { Event, FullEvent } from "@raceoffice/domain";
 import type { FullVisualization, Visualization, VisualizationColumnAlign } from "../types/visualization";
 
 export type VisualizationOutletContext = {
