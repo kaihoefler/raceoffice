@@ -1,0 +1,435 @@
+{
+    "Race": {
+        "Name": "Junior Ladies Elimination",
+        "Type": "Elimination",
+        "ID": 64
+    },
+    "PointResults": [],
+    "PointsLapList": [],
+    "Eliminations": [
+        {
+            "Startnumber": 150,
+            "FirstName": "Alice",
+            "LastName": "Dolci (ITA)",
+            "EliminationNr": 9
+        },
+        {
+            "Startnumber": 152,
+            "FirstName": "Dora",
+            "LastName": "Ferretto (ITA)",
+            "EliminationNr": 9
+        },
+        {
+            "Startnumber": 199,
+            "FirstName": "Susanna",
+            "LastName": "Rocchetti (ITA)",
+            "EliminationNr": 8
+        },
+        {
+            "Startnumber": 204,
+            "FirstName": "Jocelyne",
+            "LastName": "Seys (BEL)",
+            "EliminationNr": 8
+        },
+        {
+            "Startnumber": 166,
+            "FirstName": "Svenja",
+            "LastName": "Hecht (GER)",
+            "EliminationNr": 7
+        },
+        {
+            "Startnumber": 172,
+            "FirstName": "Gianna",
+            "LastName": "Kaiser (GER)",
+            "EliminationNr": 7
+        },
+        {
+            "Startnumber": 203,
+            "FirstName": "Vanille",
+            "LastName": "Schiff (FRA)",
+            "EliminationNr": 6
+        },
+        {
+            "Startnumber": 211,
+            "FirstName": "Ninon",
+            "LastName": "Thuillier (FRA)",
+            "EliminationNr": 6
+        },
+        {
+            "Startnumber": 144,
+            "FirstName": "Violette",
+            "LastName": "Braun (FRA)",
+            "EliminationNr": 5
+        },
+        {
+            "Startnumber": 220,
+            "FirstName": "Katerina",
+            "LastName": "Zatloukalová (CZE)",
+            "EliminationNr": 5
+        },
+        {
+            "Startnumber": 169,
+            "FirstName": "Giorgia",
+            "LastName": "Iiannarelli (ITA)",
+            "EliminationNr": 4
+        },
+        {
+            "Startnumber": 175,
+            "FirstName": "Senna",
+            "LastName": "Lamme (NED)",
+            "EliminationNr": 4
+        },
+        {
+            "Startnumber": 173,
+            "FirstName": "Katja",
+            "LastName": "Kaiser (GER)",
+            "EliminationNr": 3
+        },
+        {
+            "Startnumber": 174,
+            "FirstName": "Leonor",
+            "LastName": "Ladeira (POR)",
+            "EliminationNr": 3
+        },
+        {
+            "Startnumber": 192,
+            "FirstName": "Amber",
+            "LastName": "Puttevils (BEL)",
+            "EliminationNr": 2
+        },
+        {
+            "Startnumber": 193,
+            "FirstName": "Giada Mui",
+            "LastName": "Ragone (ITA)",
+            "EliminationNr": 2
+        },
+        {
+            "Startnumber": 149,
+            "FirstName": "Denice",
+            "LastName": "Nieuwenhuis (NED)",
+            "EliminationNr": 1
+        },
+        {
+            "Startnumber": 156,
+            "FirstName": "Giorgia",
+            "LastName": "Fusetto (ITA)",
+            "EliminationNr": 1
+        }
+    ],
+    "FinishOrder": [
+        {
+            "Startnumber": 163,
+            "FirstName": "Lea",
+            "LastName": "Hadzizulfic (GER)",
+            "FinishOrder": 1
+        },
+        {
+            "Startnumber": 159,
+            "FirstName": "Donna",
+            "LastName": "Gemser (NED)",
+            "FinishOrder": 2
+        },
+        {
+            "Startnumber": 145,
+            "FirstName": "Lea",
+            "LastName": "Corradini (ITA)",
+            "FinishOrder": 3
+        },
+        {
+            "Startnumber": 162,
+            "FirstName": "Anna",
+            "LastName": "Guyonvarch (FRA)",
+            "FinishOrder": 4
+        },
+        {
+            "Startnumber": 176,
+            "FirstName": "Elena",
+            "LastName": "Lampitelli (ITA)",
+            "FinishOrder": 5
+        },
+        {
+            "Startnumber": 148,
+            "FirstName": "Marieke",
+            "LastName": "de Vries (NED)",
+            "FinishOrder": 6
+        },
+        {
+            "Startnumber": 139,
+            "FirstName": "Rebecca",
+            "LastName": "Barilani (ITA)",
+            "FinishOrder": 7
+        },
+        {
+            "Startnumber": 138,
+            "FirstName": "Zolvan",
+            "LastName": "Barbar (HUN)",
+            "FinishOrder": 8
+        },
+        {
+            "Startnumber": 202,
+            "FirstName": "Anemarie",
+            "LastName": "Schaefer (GER)",
+            "FinishOrder": 9
+        },
+        {
+            "Startnumber": 185,
+            "FirstName": "Lieke",
+            "LastName": "Moons (BEL)",
+            "FinishOrder": 10
+        },
+        {
+            "Startnumber": 153,
+            "FirstName": "Aneta",
+            "LastName": "Fialová (CZE)",
+            "FinishOrder": 11
+        },
+        {
+            "Startnumber": 142,
+            "FirstName": "Rosalie",
+            "LastName": "Boehm (GER)",
+            "FinishOrder": 12
+        }
+    ],
+    "EliminationResults": [
+        {
+            "Place": 1,
+            "Startnumber": 163,
+            "FirstName": "Lea",
+            "LastName": "Hadzizulfic (GER)",
+            "FinishOrder": 1,
+            "Eliminated": 0
+        },
+        {
+            "Place": 2,
+            "Startnumber": 159,
+            "FirstName": "Donna",
+            "LastName": "Gemser (NED)",
+            "FinishOrder": 2,
+            "Eliminated": 0
+        },
+        {
+            "Place": 3,
+            "Startnumber": 145,
+            "FirstName": "Lea",
+            "LastName": "Corradini (ITA)",
+            "FinishOrder": 3,
+            "Eliminated": 0
+        },
+        {
+            "Place": 4,
+            "Startnumber": 162,
+            "FirstName": "Anna",
+            "LastName": "Guyonvarch (FRA)",
+            "FinishOrder": 4,
+            "Eliminated": 0
+        },
+        {
+            "Place": 5,
+            "Startnumber": 176,
+            "FirstName": "Elena",
+            "LastName": "Lampitelli (ITA)",
+            "FinishOrder": 5,
+            "Eliminated": 0
+        },
+        {
+            "Place": 6,
+            "Startnumber": 148,
+            "FirstName": "Marieke",
+            "LastName": "de Vries (NED)",
+            "FinishOrder": 6,
+            "Eliminated": 0
+        },
+        {
+            "Place": 7,
+            "Startnumber": 139,
+            "FirstName": "Rebecca",
+            "LastName": "Barilani (ITA)",
+            "FinishOrder": 7,
+            "Eliminated": 0
+        },
+        {
+            "Place": 8,
+            "Startnumber": 138,
+            "FirstName": "Zolvan",
+            "LastName": "Barbar (HUN)",
+            "FinishOrder": 8,
+            "Eliminated": 0
+        },
+        {
+            "Place": 9,
+            "Startnumber": 202,
+            "FirstName": "Anemarie",
+            "LastName": "Schaefer (GER)",
+            "FinishOrder": 9,
+            "Eliminated": 0
+        },
+        {
+            "Place": 10,
+            "Startnumber": 185,
+            "FirstName": "Lieke",
+            "LastName": "Moons (BEL)",
+            "FinishOrder": 10,
+            "Eliminated": 0
+        },
+        {
+            "Place": 11,
+            "Startnumber": 153,
+            "FirstName": "Aneta",
+            "LastName": "Fialová (CZE)",
+            "FinishOrder": 11,
+            "Eliminated": 0
+        },
+        {
+            "Place": 12,
+            "Startnumber": 142,
+            "FirstName": "Rosalie",
+            "LastName": "Boehm (GER)",
+            "FinishOrder": 12,
+            "Eliminated": 0
+        },
+        {
+            "Place": 13,
+            "Startnumber": 150,
+            "FirstName": "Alice",
+            "LastName": "Dolci (ITA)",
+            "FinishOrder": 999,
+            "Eliminated": 9
+        },
+        {
+            "Place": 13,
+            "Startnumber": 152,
+            "FirstName": "Dora",
+            "LastName": "Ferretto (ITA)",
+            "FinishOrder": 999,
+            "Eliminated": 9
+        },
+        {
+            "Place": 15,
+            "Startnumber": 199,
+            "FirstName": "Susanna",
+            "LastName": "Rocchetti (ITA)",
+            "FinishOrder": 999,
+            "Eliminated": 8
+        },
+        {
+            "Place": 15,
+            "Startnumber": 204,
+            "FirstName": "Jocelyne",
+            "LastName": "Seys (BEL)",
+            "FinishOrder": 999,
+            "Eliminated": 8
+        },
+        {
+            "Place": 17,
+            "Startnumber": 166,
+            "FirstName": "Svenja",
+            "LastName": "Hecht (GER)",
+            "FinishOrder": 999,
+            "Eliminated": 7
+        },
+        {
+            "Place": 17,
+            "Startnumber": 172,
+            "FirstName": "Gianna",
+            "LastName": "Kaiser (GER)",
+            "FinishOrder": 999,
+            "Eliminated": 7
+        },
+        {
+            "Place": 19,
+            "Startnumber": 203,
+            "FirstName": "Vanille",
+            "LastName": "Schiff (FRA)",
+            "FinishOrder": 999,
+            "Eliminated": 6
+        },
+        {
+            "Place": 19,
+            "Startnumber": 211,
+            "FirstName": "Ninon",
+            "LastName": "Thuillier (FRA)",
+            "FinishOrder": 999,
+            "Eliminated": 6
+        },
+        {
+            "Place": 21,
+            "Startnumber": 144,
+            "FirstName": "Violette",
+            "LastName": "Braun (FRA)",
+            "FinishOrder": 999,
+            "Eliminated": 5
+        },
+        {
+            "Place": 21,
+            "Startnumber": 220,
+            "FirstName": "Katerina",
+            "LastName": "Zatloukalová (CZE)",
+            "FinishOrder": 999,
+            "Eliminated": 5
+        },
+        {
+            "Place": 23,
+            "Startnumber": 169,
+            "FirstName": "Giorgia",
+            "LastName": "Iiannarelli (ITA)",
+            "FinishOrder": 999,
+            "Eliminated": 4
+        },
+        {
+            "Place": 23,
+            "Startnumber": 175,
+            "FirstName": "Senna",
+            "LastName": "Lamme (NED)",
+            "FinishOrder": 999,
+            "Eliminated": 4
+        },
+        {
+            "Place": 25,
+            "Startnumber": 173,
+            "FirstName": "Katja",
+            "LastName": "Kaiser (GER)",
+            "FinishOrder": 999,
+            "Eliminated": 3
+        },
+        {
+            "Place": 25,
+            "Startnumber": 174,
+            "FirstName": "Leonor",
+            "LastName": "Ladeira (POR)",
+            "FinishOrder": 999,
+            "Eliminated": 3
+        },
+        {
+            "Place": 27,
+            "Startnumber": 192,
+            "FirstName": "Amber",
+            "LastName": "Puttevils (BEL)",
+            "FinishOrder": 999,
+            "Eliminated": 2
+        },
+        {
+            "Place": 27,
+            "Startnumber": 193,
+            "FirstName": "Giada Mui",
+            "LastName": "Ragone (ITA)",
+            "FinishOrder": 999,
+            "Eliminated": 2
+        },
+        {
+            "Place": 29,
+            "Startnumber": 149,
+            "FirstName": "Denice",
+            "LastName": "Nieuwenhuis (NED)",
+            "FinishOrder": 999,
+            "Eliminated": 1
+        },
+        {
+            "Place": 29,
+            "Startnumber": 156,
+            "FirstName": "Giorgia",
+            "LastName": "Fusetto (ITA)",
+            "FinishOrder": 999,
+            "Eliminated": 1
+        }
+    ]
+}

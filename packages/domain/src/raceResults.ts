@@ -11,7 +11,7 @@
  * So both client and server can consume exactly the same domain behavior.
  */
 
-import type { Athlete } from "./athlete";
+import type { Athlete } from "./athlete.js";
 import type {
   RaceActivity,
   RaceActivityDNF,
@@ -19,7 +19,7 @@ import type {
   RaceActivityDns,
   RaceActivityPointsRemoval,
   RaceActivityPointsSprint,
-} from "./raceactivities";
+} from "./raceactivities.js";
 
 /**
  * DNF domain state:

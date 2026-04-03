@@ -61,3 +61,19 @@ export function buildRaceResultsCsv(results: RaceResult[]): string {
   // Add UTF-8 BOM for better Excel compatibility.
   return `\uFEFF${lines.join("\r\n")}`;
 }
+
+/**
+ * Builds a legacy "points only" export.
+ *
+ * Format requirements:
+ * - separator: comma
+ * - no header row
+ * - one row per result: "bib,points"
+ */
+export function buildRaceResultsPointsOnlyLegacy(results: RaceResult[]): string {
+  const base = Array.isArray(results) ? results : [];
+  const ranked = recomputeRaceResults(base);
+  const sorted = sortRaceResultsForStandings(ranked);
+
+  return sorted.map((r) => `${r.bib},${r.points ?? 0}`).join("\r\n");
+}

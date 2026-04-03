@@ -23,10 +23,10 @@ export function sumPoints(points: number[]): number {
 }
 
 // Core shared domain types.
-export type { AgeGroup } from "./agegroup";
-export type { Athlete } from "./athlete";
-export type { Event, EventList, FullEvent } from "./event";
-export type { Race } from "./race";
+export type { AgeGroup } from "./agegroup.js";
+export type { Athlete } from "./athlete.js";
+export type { Event, EventList, FullEvent } from "./event.js";
+export type { Race } from "./race.js";
 export type {
   DisqualificationType,
   RaceActivity,
@@ -35,8 +35,8 @@ export type {
   RaceActivityDns,
   RaceActivityPointsRemoval,
   RaceActivityPointsSprint,
-} from "./raceactivities";
-export type { RaceActivityInput, RaceResult, RaceResultDnf } from "./raceResults";
+} from "./raceactivities.js";
+export type { RaceActivityInput, RaceResult, RaceResultDnf } from "./raceResults.js";
 
 // Shared race-results pure functions.
 export {
@@ -46,10 +46,10 @@ export {
   materializeRaceResults,
   recomputeRaceResults,
   sortRaceResultsForStandings,
-} from "./raceResults";
+} from "./raceResults.js";
 
 // Shared race-activities pure functions.
 export {
   filterActivitiesByAllowedBibs,
   removeBibFromActivities,
-} from "./raceActivitiesActions";
+} from "./raceActivitiesActions.js";

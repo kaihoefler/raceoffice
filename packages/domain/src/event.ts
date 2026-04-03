@@ -1,6 +1,6 @@
-import type { AgeGroup } from "./agegroup";
-import type { Athlete } from "./athlete";
-import type { Race } from "./race";
+import type { AgeGroup } from "./agegroup.js";
+import type { Athlete } from "./athlete.js";
+import type { Race } from "./race.js";
 
 /**
  * event

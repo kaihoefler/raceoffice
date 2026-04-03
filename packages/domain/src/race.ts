@@ -1,6 +1,6 @@
-import type { Athlete } from "./athlete";
-import type { RaceActivity } from "./raceactivities";
-import type { RaceResult } from "./raceResults";
+import type { Athlete } from "./athlete.js";
+import type { RaceActivity } from "./raceactivities.js";
+import type { RaceResult } from "./raceResults.js";
 
 /**
  * race
@@ -25,4 +25,4 @@ export type Race = {
   raceActivities: RaceActivity[];
 };
 
-export type { RaceResult } from "./raceResults";
+export type { RaceResult } from "./raceResults.js";

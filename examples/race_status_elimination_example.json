@@ -1,0 +1,121 @@
+{
+    "Race": {
+        "Name": "Junior Ladies Elimination",
+        "Type": "Elimination",
+        "ID": 64
+    },
+    "PointResults": [],
+    "PointsLapList": [],
+    "Eliminations": [
+        {
+            "Startnumber": 150,
+            "FirstName": "Alice",
+            "LastName": "Dolci (ITA)",
+            "EliminationNr": 9
+        },
+        {
+            "Startnumber": 152,
+            "FirstName": "Dora",
+            "LastName": "Ferretto (ITA)",
+            "EliminationNr": 9
+        },
+        {
+            "Startnumber": 199,
+            "FirstName": "Susanna",
+            "LastName": "Rocchetti (ITA)",
+            "EliminationNr": 8
+        },
+        {
+            "Startnumber": 204,
+            "FirstName": "Jocelyne",
+            "LastName": "Seys (BEL)",
+            "EliminationNr": 8
+        },
+        {
+            "Startnumber": 166,
+            "FirstName": "Svenja",
+            "LastName": "Hecht (GER)",
+            "EliminationNr": 7
+        },
+        {
+            "Startnumber": 172,
+            "FirstName": "Gianna",
+            "LastName": "Kaiser (GER)",
+            "EliminationNr": 7
+        },
+        {
+            "Startnumber": 203,
+            "FirstName": "Vanille",
+            "LastName": "Schiff (FRA)",
+            "EliminationNr": 6
+        },
+        {
+            "Startnumber": 211,
+            "FirstName": "Ninon",
+            "LastName": "Thuillier (FRA)",
+            "EliminationNr": 6
+        },
+        {
+            "Startnumber": 144,
+            "FirstName": "Violette",
+            "LastName": "Braun (FRA)",
+            "EliminationNr": 5
+        },
+        {
+            "Startnumber": 220,
+            "FirstName": "Katerina",
+            "LastName": "Zatloukalová (CZE)",
+            "EliminationNr": 5
+        },
+        {
+            "Startnumber": 169,
+            "FirstName": "Giorgia",
+            "LastName": "Iiannarelli (ITA)",
+            "EliminationNr": 4
+        },
+        {
+            "Startnumber": 175,
+            "FirstName": "Senna",
+            "LastName": "Lamme (NED)",
+            "EliminationNr": 4
+        },
+        {
+            "Startnumber": 173,
+            "FirstName": "Katja",
+            "LastName": "Kaiser (GER)",
+            "EliminationNr": 3
+        },
+        {
+            "Startnumber": 174,
+            "FirstName": "Leonor",
+            "LastName": "Ladeira (POR)",
+            "EliminationNr": 3
+        },
+        {
+            "Startnumber": 192,
+            "FirstName": "Amber",
+            "LastName": "Puttevils (BEL)",
+            "EliminationNr": 2
+        },
+        {
+            "Startnumber": 193,
+            "FirstName": "Giada Mui",
+            "LastName": "Ragone (ITA)",
+            "EliminationNr": 2
+        },
+        {
+            "Startnumber": 149,
+            "FirstName": "Denice",
+            "LastName": "Nieuwenhuis (NED)",
+            "EliminationNr": 1
+        },
+        {
+            "Startnumber": 156,
+            "FirstName": "Giorgia",
+            "LastName": "Fusetto (ITA)",
+            "EliminationNr": 1
+        }
+    ],
+    "FinishOrder": [],
+    "EliminationResults": []
+}

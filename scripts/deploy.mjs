@@ -52,6 +52,7 @@ async function main() {
 
   const deployDir = path.join(repoRoot, "deploy");
   const serverSrcDir = path.join(repoRoot, "apps", "server");
+  const domainSrcDir = path.join(repoRoot, "packages", "domain");
   const serverOutDir = path.join(deployDir, "server");
 
   console.log("\n== RaceOffice deploy ==\n");
@@ -70,6 +71,12 @@ async function main() {
   // Needed so deploy/server can run npm ci / npm install locally.
   await copyFileIfExists(path.join(serverSrcDir, "package.json"), path.join(serverOutDir, "package.json"));
   await copyFileIfExists(path.join(serverSrcDir, "package-lock.json"), path.join(serverOutDir, "package-lock.json"));
+
+  // Server depends on @raceoffice/domain via local file reference.
+  // Mirror the package into deploy/packages/domain so npm can resolve
+  // "file:../../packages/domain" from deploy/server/package.json.
+  await copyFileIfExists(path.join(domainSrcDir, "package.json"), path.join(deployDir, "packages", "domain", "package.json"));
+  await copyDir(path.join(domainSrcDir, "dist"), path.join(deployDir, "packages", "domain", "dist"));
 
   // 4) Install production dependencies into deploy/server/node_modules.
   // Prefer npm ci when lockfile exists for deterministic installs.

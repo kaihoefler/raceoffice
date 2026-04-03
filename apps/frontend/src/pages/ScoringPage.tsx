@@ -40,11 +40,17 @@ import {
 import HomeIcon from "@mui/icons-material/Home";
 import GroupsIcon from "@mui/icons-material/Groups";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
+import HistoryIcon from "@mui/icons-material/History";
+
 
 import { useEventList } from "../providers/EventListProvider";
 import { useEventsActions } from "../hooks/useEventsActions";
 
-import { buildRaceResultsCsv } from "../domain/raceResultsCsvExport";
+import {
+    buildRaceResultsCsv,
+    buildRaceResultsPointsOnlyLegacy,
+} from "../domain/raceResultsCsvExport";
+
 
 import RaceSelector from "../components/RaceSelector";
 
@@ -243,10 +249,20 @@ export default function ScoringPage() {
         downloadTextFile(filename, csv, "text/csv;charset=utf-8");
     }
 
+        function handleExportRaceResultsLegacyPointsOnly() {
+        if (!race) return;
+
+        const legacy = buildRaceResultsPointsOnlyLegacy(race.raceResults ?? []);
+        const filename = `${race.slug}_result_points_only.txt`;
+
+        downloadTextFile(filename, legacy, "text/plain;charset=utf-8");
+    }
+
     function handleRecalculateResults() {
         if (!race) return;
         recalculateRaceResults(race.id);
     }
+
 
 
 
@@ -345,7 +361,7 @@ export default function ScoringPage() {
                                 activeRaceId={fullEvent.activeRaceId}
                             />
 
-                            <Tooltip title="Export results as CSV" arrow>
+                                                        <Tooltip title="Export results as CSV" arrow>
                                 <span>
                                     <IconButton
                                         size="small"
@@ -358,8 +374,21 @@ export default function ScoringPage() {
                                 </span>
                             </Tooltip>
 
+                            <Tooltip title="Legacy export (points only)" arrow>
+                                <span>
+                                    <IconButton
+                                        size="small"
+                                        onClick={handleExportRaceResultsLegacyPointsOnly}
+                                        disabled={!race.raceResults?.length}
+                                        aria-label="Legacy export (points only)"
+                                    >
+                                        <HistoryIcon />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
 
                             <Tooltip title="Race starters" arrow>
+
 
                                 <span>
                                     <IconButton

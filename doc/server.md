@@ -40,6 +40,24 @@ On connect:
 - server registers SSE client
 - server sends an initial snapshot event
 
+### `GET /current_race_result`
+Returns a legacy-style JSON snapshot for the **current active race**.
+
+Resolution logic:
+1. read `eventList.activeEventId`
+2. load `Event-{activeEventId}`
+3. read `activeRaceId`
+4. return mapped payload for that race
+
+Response shape:
+- `Race`: `{ Name, Type, ID }`
+  - `Type`: `"Point" | "Elimination" | "PointsElimination"`
+- `PointResults`: ranked rows (`Place`, `Startnumber`, `FirstName`, `LastName`, `FinishOrder`, `Eliminated`, `Points`)
+- `PointsLapList`: per-lap sprint points map
+- `Eliminations`, `FinishOrder`, `EliminationResults`
+
+If there is no active event/race, the endpoint returns `404` with `error: "no_current_race"`.
+
 ---
 
 ## WebSocket Message Formats

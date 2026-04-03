@@ -10,6 +10,13 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
+import {
+  buildCurrentRaceResultPayload,
+  resolveCurrentRaceContext,
+} from "./services/currentRaceResultService.js";
+
+
+
 
 type Doc = {
     rev: number;
@@ -162,8 +169,27 @@ function broadcastPatch(docId: string, rev: number, patch: Operation[]) {
     }
 }
 
+
+
 // --- Health
 app.get("/health", async () => ({ ok: true }));
+
+// --- Current race status export for external systems
+app.get("/current_race_result", async (_req, reply) => {
+    const ctx = resolveCurrentRaceContext(loadDoc);
+
+  if (!ctx) {
+    return reply.code(404).send({
+      error: "no_current_race",
+      message: "No active event/race found.",
+    });
+  }
+
+  return reply.send(buildCurrentRaceResultPayload(ctx.race));
+});
+
+
+
 
 // --- SSE Subscribe: /sse/:docId
 app.get("/sse/:docId", async (req, reply) => {
