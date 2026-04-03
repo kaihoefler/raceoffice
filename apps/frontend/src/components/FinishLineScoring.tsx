@@ -53,6 +53,7 @@ type Props = {
   onCreateStarters?: (bibs: number[]) => Promise<void> | void;
   onDeleteStarter?: (starter: Athlete) => void;
   missingInLiveBibs?: Set<number>;
+  blockedBibs?: ReadonlySet<number>;
 };
 
 /**
@@ -176,6 +177,7 @@ export default function FinishLineScoring({
   onCreateStarters,
   onDeleteStarter,
   missingInLiveBibs,
+  blockedBibs,
 }: Props) {
   /**
    * Starterliste sortieren:
@@ -378,6 +380,9 @@ export default function FinishLineScoring({
   // Fokus-Management für schnelles Tippen.
   const bibRef = useRef<HTMLInputElement>(null);
 
+  const quickEntryBib = selBib?.bib ?? bibToInt(bibInput);
+  const quickEntryBibBlocked = isBibBlocked(quickEntryBib);
+
   // Drag&Drop State (Index des gezogenen Rows).
   const dragFromIndexRef = useRef<number | null>(null);
 
@@ -422,10 +427,14 @@ export default function FinishLineScoring({
     };
   }, []);
 
+  function isBibBlocked(bib: number | null | undefined): boolean {
+    return bib != null && (blockedBibs?.has(bib) ?? false);
+  }
+
   /** Dropdown-Optionen: nur Starter mit Bib und nicht bereits in finishers. */
   const bibOptions = useMemo(() => {
-    return starters.filter((a) => a.bib != null && !finishBibSet.has(a.bib));
-  }, [starters, finishBibSet]);
+    return starters.filter((a) => a.bib != null && !finishBibSet.has(a.bib) && !isBibBlocked(a.bib));
+  }, [starters, finishBibSet, blockedBibs]);
 
   /**
    * Falls Bib nicht in starters existiert, aber wir sie anzeigen/selektieren möchten,
@@ -581,6 +590,11 @@ export default function FinishLineScoring({
       return;
     }
 
+    if (isBibBlocked(bib)) {
+      setError(`Startnummer ${bib} ist nicht mehr wertbar (DNS/DSQ/DNF/ELIM)`);
+      return;
+    }
+
     // Starter fehlt -> Create-Flow (wenn aktiviert)
     if (!starterByBib.has(bib)) {
       if (!onCreateStarters) {
@@ -602,7 +616,7 @@ export default function FinishLineScoring({
 
   function handleStarterClick(starter: Athlete) {
     const bib = starter.bib;
-    if (bib == null) return;
+    if (bib == null || isBibBlocked(bib)) return;
 
     setError(null);
     setSelBib(starterByBib.get(bib) ?? starter);
@@ -885,6 +899,7 @@ export default function FinishLineScoring({
               inputValue={bibInput}
               inputRef={bibRef}
               options={bibOptions}
+              invalid={quickEntryBibBlocked}
               filterOptions={filterOptions}
               formatOption={athleteLabel}
               resolveByBib={resolveOrPlaceholder}
@@ -921,6 +936,11 @@ export default function FinishLineScoring({
                 if (m) {
                   setSelBib(m);
                   setBibInput(m.bib != null ? String(m.bib) : "");
+
+                  if (isBibBlocked(m.bib)) {
+                    setError(`Startnummer ${m.bib} ist nicht mehr wertbar (DNS/DSQ/DNF/ELIM)`);
+                    return;
+                  }
                 }
 
                 requestAddBibFromText(bibInput, rankInput);
@@ -1064,6 +1084,7 @@ export default function FinishLineScoring({
         formatAthleteLabel={athleteLabel}
         onDeleteStarter={onDeleteStarter}
         onStarterClick={handleStarterClick}
+        blockedBibs={blockedBibs}
       />
 
       {/* Dialog: clear all finish entries */}

@@ -84,6 +84,7 @@ export default function ScoringLiveColumns({
               onCreateStarters={handleCreateStartersForBibs}
               onDeleteStarter={onDeleteStarter}
               missingInLiveBibs={vm.missingInLiveBibs}
+              blockedBibs={vm.blockedBibs}
               syncEnabled={vm.syncEnabled}
               liveLapCount={vm.liveLapCount}
               liveLapsToGo={vm.liveLapsToGo}
@@ -97,6 +98,7 @@ export default function ScoringLiveColumns({
               onCreateStarters={handleCreateStartersForBibs}
               onDeleteStarter={onDeleteStarter}
               missingInLiveBibs={vm.missingInLiveBibs}
+              blockedBibs={vm.blockedBibs}
             />
           ) : (
             <EliminationScoring
@@ -107,6 +109,7 @@ export default function ScoringLiveColumns({
               onCreateStarters={handleCreateStartersForBibs}
               onDeleteStarter={onDeleteStarter}
               missingInLiveBibs={vm.missingInLiveBibs}
+              blockedBibs={vm.blockedBibs}
               syncEnabled={vm.syncEnabled}
               liveLapCount={vm.liveLapCount}
               liveLastEligibleBibs={vm.liveLastEligibleBibs}

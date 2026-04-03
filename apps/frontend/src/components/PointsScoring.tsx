@@ -58,9 +58,11 @@ type Props = {
   resetKey?: string;
     /** Add a new race activity to the race (pointsSprint / pointsRemoval). */
   onAddRaceActivity: (activity: RaceActivity) => void;
-  onCreateStarters?: (bibs: number[]) => Promise<void> | void;
+    onCreateStarters?: (bibs: number[]) => Promise<void> | void;
   onDeleteStarter?: (starter: Athlete) => void;
   missingInLiveBibs?: Set<number>;
+  blockedBibs?: ReadonlySet<number>;
+
 
 
   /** If true, PointsScoring can react to live lap changes. */
@@ -141,9 +143,11 @@ export default function PointsScoring({
   race,
   resetKey,
   onAddRaceActivity,
-  onCreateStarters,
+    onCreateStarters,
   onDeleteStarter,
   missingInLiveBibs,
+  blockedBibs,
+
 
   syncEnabled = false,
   liveLapCount = null,
@@ -184,9 +188,14 @@ export default function PointsScoring({
   const [sel2P, setSel2P] = useState<Athlete | null>(null);
   const [sel1P, setSel1P] = useState<Athlete | null>(null);
 
-  const [in3P, setIn3P] = useState("");
+    const [in3P, setIn3P] = useState("");
   const [in2P, setIn2P] = useState("");
   const [in1P, setIn1P] = useState("");
+
+  const bib3P = sel3P?.bib ?? parseBibInput(in3P);
+  const bib2P = sel2P?.bib ?? parseBibInput(in2P);
+  const bib1P = sel1P?.bib ?? parseBibInput(in1P);
+
 
   const ref3P = useRef<HTMLInputElement>(null);
   const ref2P = useRef<HTMLInputElement>(null);
@@ -227,6 +236,11 @@ export default function PointsScoring({
     return Number.isFinite(bib) && bib > 0 ? bib : null;
   }
 
+    function isBibBlocked(bib: number | null | undefined): boolean {
+    return bib != null && (blockedBibs?.has(bib) ?? false);
+  }
+
+
   function isAutoHighlighted(selected: Athlete | null, autoBib: number | null) {
     return syncEnabled && autoBib != null && (selected?.bib ?? null) === autoBib;
   }
@@ -253,8 +267,10 @@ export default function PointsScoring({
   ) {
     markManualOverride(autoRef);
 
-    const resolved = resolveOrPlaceholder(input);
+        const resolved = resolveOrPlaceholder(input);
     if (!resolved) return null;
+    if (isBibBlocked(resolved.bib)) return null;
+
 
     setSelected(resolved);
     setInput(resolved.bib != null ? String(resolved.bib) : "");
@@ -405,6 +421,8 @@ export default function PointsScoring({
       autoRef: { current: number | null },
     ) => {
       if (desiredBib == null) return;
+      if (isBibBlocked(desiredBib)) return;
+
 
       // Resolve even if the bib is not yet part of the starter list. This keeps
       // live-prefill working for unknown live bibs as well.
@@ -519,7 +537,8 @@ export default function PointsScoring({
     return m;
   }, [race]);
 
-  const optionsFor = (exclude: Set<string>) => starters.filter((a) => !exclude.has(a.id));
+    const optionsFor = (exclude: Set<string>) => starters.filter((a) => !exclude.has(a.id) && !isBibBlocked(a.bib));
+
 
   function resetInputs(focus: "2P" | "3P" | "none" = "2P") {
     clearAutoPrefillRefs();
@@ -586,7 +605,8 @@ export default function PointsScoring({
 
   function candidatesFor(excludeIds: Array<string | null | undefined>): Athlete[] {
     const exclude = new Set(excludeIds.filter(Boolean) as string[]);
-    return starters.filter((a) => !exclude.has(a.id));
+        return starters.filter((a) => !exclude.has(a.id) && !isBibBlocked(a.bib));
+
   }
 
 
@@ -595,12 +615,20 @@ export default function PointsScoring({
   // ---------------------------------------------------------------------------
   // Save flow (with confirmation dialog for missing starters)
   // ---------------------------------------------------------------------------
-  const canSave = useMemo(() => {
+    const canSave = useMemo(() => {
     if (mode === "finish") {
-      return sel3P?.bib != null && sel2P?.bib != null && sel1P?.bib != null;
+      return (
+        sel3P?.bib != null &&
+        sel2P?.bib != null &&
+        sel1P?.bib != null &&
+        !isBibBlocked(sel3P.bib) &&
+        !isBibBlocked(sel2P.bib) &&
+        !isBibBlocked(sel1P.bib)
+      );
     }
-    return sel2P?.bib != null && sel1P?.bib != null;
-  }, [mode, sel1P, sel2P, sel3P]);
+    return sel2P?.bib != null && sel1P?.bib != null && !isBibBlocked(sel2P.bib) && !isBibBlocked(sel1P.bib);
+  }, [mode, sel1P, sel2P, sel3P, blockedBibs]);
+
 
   /**
  * Persists a new pointsSprint activity based on current mode.
@@ -762,8 +790,9 @@ export default function PointsScoring({
    * fills the next free points slot and moves focus forward.
    */
     const handleStarterClick = useCallback((starter: Athlete) => {
-    const bib = starter.bib;
-    if (bib == null) return;
+        const bib = starter.bib;
+    if (bib == null || isBibBlocked(bib)) return;
+
 
     const selectedBibs = new Set<number>([sel3P?.bib, sel2P?.bib, sel1P?.bib].filter((b): b is number => b != null));
     if (selectedBibs.has(bib)) return;
@@ -901,6 +930,8 @@ export default function PointsScoring({
                 inputValue={in3P}
                 inputRef={ref3P}
                 highlight={isAutoHighlighted(sel3P, auto3PBibRef.current)}
+                invalid={isBibBlocked(bib3P)}
+
                 options={optionsFor(new Set([sel2P?.id, sel1P?.id].filter(Boolean) as string[]))}
                 filterOptions={filterOptions}
                 formatOption={athleteLabel}
@@ -939,6 +970,8 @@ export default function PointsScoring({
               inputValue={in2P}
               inputRef={ref2P}
               highlight={isAutoHighlighted(sel2P, auto2PBibRef.current)}
+              invalid={isBibBlocked(bib2P)}
+
               options={
                 mode === "finish"
                   ? optionsFor(new Set([sel3P?.id, sel1P?.id].filter(Boolean) as string[]))
@@ -981,6 +1014,8 @@ export default function PointsScoring({
               inputValue={in1P}
               inputRef={ref1P}
               highlight={isAutoHighlighted(sel1P, auto1PBibRef.current)}
+              invalid={isBibBlocked(bib1P)}
+
               options={optionsFor(new Set([sel3P?.id, sel2P?.id].filter(Boolean) as string[]))}
               filterOptions={filterOptions}
               formatOption={athleteLabel}
@@ -1050,8 +1085,10 @@ export default function PointsScoring({
         pointsByBib={pointsByBib}
         formatAthleteLabel={athleteLabel}
         onDeleteStarter={onDeleteStarter}
-        onStarterClick={handleStarterClick}
+                onStarterClick={handleStarterClick}
+        blockedBibs={blockedBibs}
       />
+
 
 
 

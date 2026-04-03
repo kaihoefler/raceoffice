@@ -26,8 +26,12 @@ export type ScoringViewModel = {
   /** bibs in starters list but not seen in live status */
   missingInLiveBibs: Set<number>;
 
+    /** Bibs that are not eligible for new scoring entries (DNS, DSQ, DNF, ELIM). */
+  blockedBibs: ReadonlySet<number>;
+
   /** Current points standings derived from race activities. */
   standings: ScoringStandingRow[];
+
 
   /** Live/PointsScoring synchronization toggle state (controlled by the UI). */
   syncEnabled: boolean;
@@ -110,11 +114,15 @@ function setsHaveSameValues(a: ReadonlySet<number>, b: ReadonlySet<number>) {
   return true;
 }
 
-
+function isBlockedRaceResult(r: any): boolean {
+  const dnf = r?.dnf;
+  return dnf === "dnf" || dnf === "elimination" || Boolean(r?.dns) || Boolean(r?.dsq);
+}
 
 /**
  * Uses RaceStatusProvider directly.
  */
+
 export function useScoringViewModel(race: Race | null, syncEnabled: boolean): ScoringViewModel {
   const { currentRace } = useRaceStatus();
 
@@ -211,22 +219,26 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
       p3Bib: bibToInt(sortedByPos[2]?.number),
     };
 
-    // ---- Last eligible bib by position (used for EliminationScoring prefill) ----
-    // "Eligible" means: not DNF, not DNS, not DSQ in current raceResults.
-    const ineligible = new Set<number>();
+        // ---- Blocked bibs ----
+    // Shared across all scoring tabs: starters with DNS/DSQ/DNF/ELIM are not selectable.
+    const blockedBibs = new Set<number>();
     const raceResults = Array.isArray((race as any)?.raceResults) ? ((race as any).raceResults as any[]) : [];
 
     for (const r of raceResults) {
       const bib = bibToInt((r as any)?.bib);
       if (bib == null) continue;
-      if ((r as any)?.dnf !== false || (r as any)?.dns || (r as any)?.dsq) ineligible.add(bib);
+      if (isBlockedRaceResult(r)) blockedBibs.add(bib);
     }
+
+    // ---- Last eligible bib by position (used for EliminationScoring prefill) ----
+
 
             const lastEligible: number[] = [];
     for (let i = sortedByPos.length - 1; i >= 0; i--) {
       const bib = bibToInt((sortedByPos[i] as any)?.number);
       if (bib == null) continue;
-      if (ineligible.has(bib)) continue;
+            if (blockedBibs.has(bib)) continue;
+
       lastEligible.push(bib);
       if (lastEligible.length >= 2) break;
     }
@@ -242,7 +254,8 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
     for (const c of competitors) {
       const bib = bibToInt((c as any)?.number);
       if (bib == null) continue;
-      if (ineligible.has(bib)) continue;
+            if (blockedBibs.has(bib)) continue;
+
 
       const laps = Number((c as any)?.lapsComplete);
       if (!Number.isFinite(laps)) continue;
@@ -330,8 +343,10 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
       });
     };
 
-            return {
+                        return {
       starterBibs,
+      blockedBibs,
+
       liveBibs: stableLiveBibs,
       unknownLiveBibs: stableUnknownLiveBibs,
       missingInLiveBibs: stableMissingInLiveBibs,

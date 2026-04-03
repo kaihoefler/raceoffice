@@ -34,6 +34,8 @@ type Props = {
   missingInLiveBibs?: ReadonlySet<number>;
   /** Athlete IDs that should be highlighted as "selected". */
   selectedIds?: ReadonlySet<string>;
+  /** Bibs that are not selectable for scoring actions (DNS/DSQ/DNF/ELIM). */
+  blockedBibs?: ReadonlySet<number>;
 
   /** Optional status flags for starters (shown in tile view). */
   statusByBib?: ReadonlyMap<number, StarterStatus>;
@@ -67,6 +69,7 @@ function ScoringStarterList({
   starters,
   missingInLiveBibs,
   selectedIds,
+  blockedBibs,
   statusByBib,
   pointsByBib,
   formatAthleteLabel,
@@ -231,6 +234,7 @@ function ScoringStarterList({
 
             const st = bib != null ? statusMetaByBib.get(bib) ?? null : null;
             const c = st?.kind ? statusColor(st.kind) : undefined;
+            const blocked = bib != null && (blockedBibs?.has(bib) ?? false);
 
             const pts = bib != null ? (pointsByBib?.get(bib) ?? 0) : 0;
             const ptsText = pts ? pointsLabel(pts, "long") : "";
@@ -238,7 +242,10 @@ function ScoringStarterList({
             return (
               <ListItem
                 key={a.id}
-                onClick={() => handleStarterItemClick(a)}
+                onClick={() => {
+                  if (blocked) return;
+                  handleStarterItemClick(a);
+                }}
                 sx={{
                   px: 1,
                   borderRadius: 1,
@@ -248,7 +255,8 @@ function ScoringStarterList({
                   display: "flex",
                   alignItems: "center",
                   gap: 1,
-                  cursor: clickEnabled ? "pointer" : "default",
+                  cursor: blocked ? "not-allowed" : clickEnabled ? "pointer" : "default",
+                  opacity: blocked ? 0.65 : 1,
                 }}
               >
                 <ListItemText
@@ -333,6 +341,7 @@ function ScoringStarterList({
 
             const st = bib != null ? statusMetaByBib.get(bib) ?? null : null;
             const c = st?.kind ? statusColor(st.kind) : null;
+            const blocked = bib != null && (blockedBibs?.has(bib) ?? false);
 
             const pts = bib != null ? (pointsByBib?.get(bib) ?? 0) : 0;
             const ptsText = pts ? pointsLabel(pts, "short") : "";
@@ -341,7 +350,10 @@ function ScoringStarterList({
               <Box
                 key={a.id}
                 title={labelOf(a)}
-                onClick={() => handleStarterItemClick(a)}
+                onClick={() => {
+                  if (blocked) return;
+                  handleStarterItemClick(a);
+                }}
                 sx={{
                   p: 0.5,
                   borderRadius: 1,
@@ -357,7 +369,8 @@ function ScoringStarterList({
                   justifyContent: "center",
                   gap: 0.15,
                   userSelect: "none",
-                  cursor: clickEnabled ? "pointer" : "default",
+                  cursor: blocked ? "not-allowed" : clickEnabled ? "pointer" : "default",
+                  opacity: blocked ? 0.65 : 1,
                 }}
               >
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, minHeight: 18 }}>
@@ -471,6 +484,7 @@ function arePropsEqual(prev: Props, next: Props) {
     areStartersEqual(prev.starters, next.starters) &&
     areSetsEqual(prev.missingInLiveBibs, next.missingInLiveBibs) &&
     areSetsEqual(prev.selectedIds, next.selectedIds) &&
+    areSetsEqual(prev.blockedBibs, next.blockedBibs) &&
     areMapsEqual(prev.statusByBib, next.statusByBib) &&
     areMapsEqual(prev.pointsByBib, next.pointsByBib) &&
     prev.formatAthleteLabel === next.formatAthleteLabel &&

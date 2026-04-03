@@ -54,11 +54,11 @@ jobs:
       - name: Create ZIP from deploy folder
         shell: powershell
         run: |
-          if (Test-Path deploy.zip) { Remove-Item deploy.zip -Force }
-          Compress-Archive -Path deploy\* -DestinationPath deploy.zip
+          if (Test-Path raceoffice.zip) { Remove-Item raceoffice.zip -Force }
+          Compress-Archive -Path deploy\* -DestinationPath raceoffice.zip
 
       - name: Create GitHub Release + upload asset
         uses: softprops/action-gh-release@v2
         with:
-          files: deploy.zip
+          files: raceoffice.zip
           generate_release_notes: true

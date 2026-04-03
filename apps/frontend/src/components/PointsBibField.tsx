@@ -19,6 +19,8 @@ type Props = {
 
   /** If true, render the field with a green "synced" outline. */
   highlight?: boolean;
+  /** If true, render the field in an error style (e.g. blocked bib). */
+  invalid?: boolean;
 
   filterOptions: AthleteFilterOptions;
   formatOption: (a: Athlete) => string;
@@ -46,6 +48,7 @@ export default function PointsBibField({
   options,
   inputRef,
   highlight = false,
+  invalid = false,
   filterOptions,
   formatOption,
   resolveByBib,
@@ -97,21 +100,35 @@ export default function PointsBibField({
             {...rest}
             inputRef={inputRef}
             placeholder={placeholder}
+            error={invalid}
             sx={
-              highlight
+              invalid
                 ? {
                     "& .MuiOutlinedInput-root fieldset": {
-                      borderColor: "success.main",
+                      borderColor: "error.main",
                       borderWidth: 2,
                     },
                     "& .MuiOutlinedInput-root:hover fieldset": {
-                      borderColor: "success.main",
+                      borderColor: "error.main",
                     },
                     "& .MuiOutlinedInput-root.Mui-focused fieldset": {
-                      borderColor: "success.main",
+                      borderColor: "error.main",
                     },
                   }
-                : undefined
+                : highlight
+                  ? {
+                      "& .MuiOutlinedInput-root fieldset": {
+                        borderColor: "success.main",
+                        borderWidth: 2,
+                      },
+                      "& .MuiOutlinedInput-root:hover fieldset": {
+                        borderColor: "success.main",
+                      },
+                      "& .MuiOutlinedInput-root.Mui-focused fieldset": {
+                        borderColor: "success.main",
+                      },
+                    }
+                  : undefined
             }
             slotProps={{
               input: {

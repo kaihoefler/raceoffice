@@ -62,6 +62,7 @@ type Props = {
   onCreateStarters?: (bibs: number[]) => Promise<void> | void;
   onDeleteStarter?: (starter: Athlete) => void;
   missingInLiveBibs?: Set<number>;
+  blockedBibs?: ReadonlySet<number>;
 
   /** If true, EliminationScoring can react to live lap changes + prefill last-place bib. */
   syncEnabled?: boolean;
@@ -164,6 +165,7 @@ export default function EliminationScoring({
   onCreateStarters,
   onDeleteStarter,
   missingInLiveBibs,
+  blockedBibs,
   syncEnabled = false,
   liveLapCount = null,
   liveLastEligibleBibs = { lastBib: null, secondLastBib: null },
@@ -319,11 +321,18 @@ export default function EliminationScoring({
     return out;
   }, [rows]);
 
+  function isBibBlocked(bib: number | null | undefined): boolean {
+    return bib != null && (blockedBibs?.has(bib) ?? false);
+  }
+
+  const hasBlockedSelection = useMemo(() => parsedBibs.some((bib) => isBibBlocked(bib)), [parsedBibs, blockedBibs]);
+
   const canSave = useMemo(() => {
+    if (hasBlockedSelection) return false;
     if (mode === "elim1") return parsedBibs.length === 1;
     if (mode === "elim2") return parsedBibs.length === 2;
     return parsedBibs.length > 0;
-  }, [mode, parsedBibs.length]);
+  }, [mode, parsedBibs.length, hasBlockedSelection]);
 
   // ---------------------------------------------------------------------------
   // Live sync handling (lap + prefill)
@@ -388,6 +397,7 @@ export default function EliminationScoring({
 
       function apply(idx: 0 | 1, bib: number | null) {
         if (bib == null) return;
+        if (isBibBlocked(bib)) return;
 
         const current = next[idx] ?? { sel: null, input: "" };
         const currentBib = current.sel?.bib ?? bibToInt(current.input);
@@ -531,7 +541,7 @@ export default function EliminationScoring({
       if (bib != null) excludedBibs.add(bib);
     }
 
-    return starters.filter((a) => a.bib != null && !excludedBibs.has(a.bib));
+    return starters.filter((a) => a.bib != null && !excludedBibs.has(a.bib) && !isBibBlocked(a.bib));
   }
 
   function candidatesForRow(rowIndex: number): Athlete[] {
@@ -569,7 +579,11 @@ export default function EliminationScoring({
    */
   function insertZeroLapBibs() {
     const list = Array.from(
-      new Set((Array.isArray(liveZeroLapBibs) ? liveZeroLapBibs : []).map((b) => Math.floor(Number(b))).filter((b) => b > 0)),
+      new Set(
+        (Array.isArray(liveZeroLapBibs) ? liveZeroLapBibs : [])
+          .map((b) => Math.floor(Number(b)))
+          .filter((b) => b > 0 && !isBibBlocked(b)),
+      ),
     ).sort((a, b) => a - b);
 
     if (!list.length) return;
@@ -658,6 +672,12 @@ export default function EliminationScoring({
     const bibs = parsedBibs;
     if (!bibs.length) return;
 
+    const blocked = bibs.filter((bib) => isBibBlocked(bib));
+    if (blocked.length > 0) {
+      setError(`Startnummer(n) nicht mehr wertbar (DNS/DSQ/DNF/ELIM): ${blocked.join(", ")}`);
+      return;
+    }
+
     const missing = getMissingStarterBibs(bibs);
     if (missing.length > 0) {
       if (!onCreateStarters) {
@@ -700,7 +720,7 @@ export default function EliminationScoring({
 
   function handleStarterClick(starter: Athlete) {
     const bib = starter.bib;
-    if (bib == null) return;
+    if (bib == null || isBibBlocked(bib)) return;
     if (parsedBibs.includes(bib)) return;
 
     const nextStarter = starterByBib.get(bib) ?? starter;
@@ -814,7 +834,7 @@ export default function EliminationScoring({
 
       {/* Bib inputs (auto-growing). Enter on an empty field saves. */}
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        {rows.map((row, idx) => {
+        {(isFixedElimMode ? rows.slice(0, elimBibCount) : rows).map((row, idx) => {
           const isLast = idx === rows.length - 1;
           const isEmpty = !row.sel && !String(row.input ?? "").trim();
           if (allowAutoGrow && !isLast && isEmpty) return null;
@@ -826,6 +846,9 @@ export default function EliminationScoring({
           const showInsertZeroLapButton =
             idx === 0 && mode === "DNS" && syncEnabled && Number(liveLapCount ?? 0) > 0;
 
+          const rowBib = row.sel?.bib ?? bibToInt(row.input);
+          const rowIsBlocked = isBibBlocked(rowBib);
+
           return (
             <Box key={idx} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Box sx={{ width: 220 }}>
@@ -833,6 +856,7 @@ export default function EliminationScoring({
                 value={row.sel}
                 inputValue={row.input}
                 highlight={isAutoHighlighted(row, idx)}
+                invalid={rowIsBlocked}
                 inputRef={(el) => {
                   inputRefs.current[idx] = el;
                 }}
@@ -911,17 +935,21 @@ export default function EliminationScoring({
                   }
 
                   const m = resolveOrPlaceholder(row.input);
-                  if (m) {
-                    setRows((prev) => {
-                      const copy = prev.slice();
-                      const isLastField = idx === prev.length - 1;
-                      copy[idx] = { sel: m, input: m.bib != null ? String(m.bib) : "" };
-                      if (allowAutoGrow && isLastField) copy.push({ sel: null, input: "" });
-                      return copy;
-                    });
-                  } else {
+                  if (!m) return;
+
+                  const bib = m.bib;
+                  if (isBibBlocked(bib)) {
+                    setError(`Startnummer ${bib} ist nicht mehr wertbar (DNS/DSQ/DNF/ELIM)`);
                     return;
                   }
+
+                  setRows((prev) => {
+                    const copy = prev.slice();
+                    const isLastField = idx === prev.length - 1;
+                    copy[idx] = { sel: m, input: m.bib != null ? String(m.bib) : "" };
+                    if (allowAutoGrow && isLastField) copy.push({ sel: null, input: "" });
+                    return copy;
+                  });
 
                   if (allowAutoGrow) {
                     ensureRow(idx + 1);
@@ -977,6 +1005,7 @@ export default function EliminationScoring({
         formatAthleteLabel={athleteLabel}
         onDeleteStarter={onDeleteStarter}
         onStarterClick={handleStarterClick}
+        blockedBibs={blockedBibs}
       />
 
       <Dialog
