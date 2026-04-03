@@ -1,49 +1,25 @@
 {
-  "name": "raceoffice",
+  "name": "raceoffice-workspace",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "workspaces": [
-    "packages/*",
-    "server_own"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
-    "dev": "vite",
-    "build": "npm run build:domain && tsc -b && vite build",
-    "lint": "eslint .",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "preview": "vite preview",
+    "dev": "npm --workspace @raceoffice/frontend run dev",
+    "build": "npm run build:domain && npm --workspace @raceoffice/frontend run build",
+    "lint": "npm --workspace @raceoffice/frontend run lint",
+    "test": "npm --workspace @raceoffice/frontend run test",
+    "test:run": "npm --workspace @raceoffice/frontend run test:run",
+    "preview": "npm --workspace @raceoffice/frontend run preview",
     "build:domain": "npm --workspace @raceoffice/domain run build",
     "test:domain": "npm --workspace @raceoffice/domain run test:run",
-    "build:server": "npm --prefix server_own run build",
+    "build:server": "npm --workspace @raceoffice/server run build",
+    "dev:server": "npm --workspace @raceoffice/server run dev",
+    "start:server": "npm --workspace @raceoffice/server run start",
     "build:all": "npm run build && npm run build:server",
-    "start:server": "npm --prefix server_own run start",
     "deploy": "node scripts/deploy.mjs"
-  },
-  "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@mui/icons-material": "^7.3.6",
-    "@mui/material": "^7.3.6",
-    "fast-json-patch": "^3.1.1",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "react-router-dom": "^7.11.0"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.39.1",
-    "@types/node": "^24.10.1",
-    "@types/react": "^19.2.5",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
-    "eslint": "^9.39.1",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.4.24",
-    "globals": "^16.5.0",
-    "typescript": "~5.9.3",
-    "typescript-eslint": "^8.46.4",
-    "vite": "^7.2.4",
-    "vitest": "^3.2.4"
   }
 }

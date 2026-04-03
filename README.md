@@ -3,7 +3,7 @@
 RaceOffice consists of:
 
 - **Frontend SPA**: React + TypeScript + Vite
-- **Backend**: Fastify + WebSockets + SQLite (`server_own/`)
+- **Backend**: Fastify + WebSockets + SQLite (`apps/server/`)
 
 ## Table of contents
 
@@ -45,7 +45,7 @@ For realtime message formats, revision handling, and unified server error respon
 
 ### 2) Install dependencies
 
-> Repository uses npm workspaces (root frontend + `server_own/` backend + `packages/domain`).
+> Repository uses npm workspaces (`apps/frontend`, `apps/server`, `packages/domain`).
 
 ```sh
 npm install
@@ -58,7 +58,7 @@ Use two terminals.
 **Terminal A (backend):**
 
 ```sh
-npm --prefix server_own run dev
+npm run dev:server
 ```
 
 **Terminal B (frontend):**
@@ -87,13 +87,13 @@ Start backend (serves API + SPA):
 ### Windows (PowerShell)
 
 ```powershell
-npm --prefix server_own run start -- --host 0.0.0.0 --port 8787 --db "C:\ProgramData\RaceOffice\data\raceoffice.db"
+npm run start:server -- --host 0.0.0.0 --port 8787 --db "C:\ProgramData\RaceOffice\data\raceoffice.db"
 ```
 
 ### macOS (zsh/bash)
 
 ```sh
-npm --prefix server_own run start -- --host 0.0.0.0 --port 8787 --db "./data/raceoffice.db"
+npm run start:server -- --host 0.0.0.0 --port 8787 --db "./data/raceoffice.db"
 ```
 
 Open:
@@ -112,8 +112,8 @@ For deployment folder generation, WinSW service installation, and advanced confi
 
 ## Project structure (short)
 
-- `src/` – frontend SPA
-- `server_own/` – backend server
+- `apps/frontend/` – frontend SPA
+- `apps/server/` – backend server
 - `packages/domain/` – shared domain package (types + pure race/results/activity logic)
 - `doc/` – project documentation
 - `examples/` – sample data/assets

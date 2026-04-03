@@ -13,7 +13,7 @@ This guide focuses on build, production run, deployment folder creation, and Win
 
 ## Install dependencies
 
-This repository uses npm workspaces (root SPA + `server_own/` backend + `packages/domain`).
+This repository uses npm workspaces (`apps/frontend`, `apps/server`, `packages/domain`).
 
 ```sh doc/build-and-deploy.md
 npm install
@@ -28,7 +28,7 @@ Run backend + frontend in separate terminals.
 Backend:
 
 ```sh doc/build-and-deploy.md
-npm --prefix server_own run dev
+npm run dev:server
 ```
 
 Frontend:
@@ -37,13 +37,13 @@ Frontend:
 npm run dev
 ```
 
-The Vite dev server proxies `/ws`, `/sse` and `/health` to `http://localhost:8787` (see `vite.config.ts`).
+The Vite dev server proxies `/ws`, `/sse` and `/health` to `http://localhost:8787` (see `apps/frontend/vite.config.ts`).
 
 ---
 
 ## Production build (server serves the SPA)
 
-The backend serves static files from `server_own/public` (configured via `@fastify/static`).
+The backend serves static files from `apps/server/public` (configured via `@fastify/static`).
 
 Build everything (root `build` first builds `@raceoffice/domain`, then SPA):
 
@@ -54,7 +54,7 @@ npm run build:all
 Run server:
 
 ```sh doc/build-and-deploy.md
-npm --prefix server_own run start -- --host 0.0.0.0 --port 8787 --db "C:\\ProgramData\\RaceOffice\\data\\raceoffice.db"
+npm run start:server -- --host 0.0.0.0 --port 8787 --db "C:\\ProgramData\\RaceOffice\\data\\raceoffice.db"
 ```
 
 Open:
@@ -86,7 +86,7 @@ Optional (recommended for copy-only installs):
 
 ## Server configuration (CLI / ENV)
 
-Backend configuration (`server_own/src/index.ts`) is read in this order:
+Backend configuration (`apps/server/src/index.ts`) is read in this order:
 
 1) CLI args:
 - `--db <path>`: SQLite file path

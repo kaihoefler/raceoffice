@@ -4,7 +4,7 @@ RaceOffice is split into two parts:
 
 - **Frontend SPA** (React + TypeScript + Vite)  
   Uses a **document-based realtime sync** model to read and update application state.
-- **Backend server** (`server_own/`) (Fastify + WebSockets + SQLite)  
+- **Backend server** (`apps/server/`) (Fastify + WebSockets + SQLite)  
   Hosts the realtime document protocol and persists documents.
 
 ---
@@ -12,16 +12,16 @@ RaceOffice is split into two parts:
 ## 1) Frontend (React SPA)
 
 ### UI
-- Material UI theme configuration lives in `src/theme.ts` (`createTheme(...)`).
+- Material UI theme configuration lives in `apps/frontend/src/theme.ts` (`createTheme(...)`).
 
 ### Live status provider model
 - The app now uses a **single** live provider: `RaceStatusProvider`.
-- `RouterProvider` is mounted directly inside `RaceStatusProvider` (`src/main.tsx`).
+- `RouterProvider` is mounted directly inside `RaceStatusProvider` (`apps/frontend/src/main.tsx`).
 - Components/hooks consume live data directly via `useRaceStatus()`.
 - Older split providers (`RaceStatusMetaProvider`, `RaceStatusCompetitorsProvider`, `RaceStatusBibProvider`, `RaceStatusTimeProvider`) were removed to simplify dependency flow.
 
 ### Scoring page render isolation
-- `ScoringPage` was split so live subscriptions are localized in `src/pages/scoring/ScoringLiveColumns.tsx`.
+- `ScoringPage` was split so live subscriptions are localized in `apps/frontend/src/pages/scoring/ScoringLiveColumns.tsx`.
 - Non-live columns (activities/standings) stay outside that live-consuming block.
 - Goal: reduce unnecessary full-page re-renders on each live polling cycle.
 
@@ -41,7 +41,7 @@ Shared pure functions now live there as well, e.g.:
 This keeps client/server domain behavior aligned and avoids duplicated logic in the SPA.
 
 ### Realtime connection state (optional UI/debug)
-`src/realtime/RealtimeConnectionProvider.tsx` tracks connection status per document:
+`apps/frontend/src/realtime/RealtimeConnectionProvider.tsx` tracks connection status per document:
 - It maintains a map `connections: Record<string, ConnInfo>` keyed by `docId`
 - Each entry stores `status`, `error`, and `updatedAt`
 - This enables UI indicators (e.g. showing whether a doc is connected, reconnecting, etc.)
@@ -57,7 +57,7 @@ Examples of doc IDs:
 - any other string (server will create an empty document `{}` by default)
 
 ### Special document: `eventList`
-On the server, `eventList` is bootstrapped with an initial state (see `server_own/src/index.ts`):
+On the server, `eventList` is bootstrapped with an initial state (see `apps/server/src/index.ts`):
 
 ```ts doc/architecture.md
 id === "eventList"
@@ -78,7 +78,7 @@ This pattern avoids loading everything upfront and keeps the list view small and
 
 ---
 
-## 3) Client Realtime Implementation (`src/realtime/useRealtimeDoc.ts`)
+## 3) Client Realtime Implementation (`apps/frontend/src/realtime/useRealtimeDoc.ts`)
 
 `useRealtimeDoc<T>(docId: string | null)` is the main client hook for realtime documents.
 
@@ -133,12 +133,12 @@ This prevents stale WebSocket events from earlier connections (common in develop
 
 ---
 
-## 4) Server Implementation (`server_own/src/index.ts`)
+## 4) Server Implementation (`apps/server/src/index.ts`)
 
 > Detailed protocol reference (including unified error payload): see `doc/server.md`.
 
 ### Tech stack
-From `server_own/package.json` and code:
+From `apps/server/package.json` and code:
 - Fastify 5
 - `@fastify/websocket`
 - SQLite persistence (`better-sqlite3`)

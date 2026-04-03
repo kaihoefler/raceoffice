@@ -51,7 +51,7 @@ async function main() {
   const repoRoot = process.cwd();
 
   const deployDir = path.join(repoRoot, "deploy");
-  const serverSrcDir = path.join(repoRoot, "server_own");
+  const serverSrcDir = path.join(repoRoot, "apps", "server");
   const serverOutDir = path.join(deployDir, "server");
 
   console.log("\n== RaceOffice deploy ==\n");
@@ -155,7 +155,7 @@ async function main() {
       "     RaceOfficeServer.exe install",
       "     RaceOfficeServer.exe start",
       "",
-      "Server args (from server_own/src/index.ts):",
+      "Server args (from apps/server/src/index.ts):",
       "  --host <host>   (default 0.0.0.0)",
       "  --port <port>   (default 8787)",
       "  --db   <path>   (default ./data/raceoffice.db)",

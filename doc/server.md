@@ -1,6 +1,6 @@
 # Server Protocol (Realtime + Persistence)
 
-This document describes how clients should use the backend in `server_own/`.
+This document describes how clients should use the backend in `apps/server/`.
 
 ## Overview
 

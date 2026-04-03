@@ -2,7 +2,7 @@
 
 This document describes the CSV export generated from the race results (`RaceResult`), as implemented in:
 
-- `src/domain/raceResultsCsvExport.ts` (`buildRaceResultsCsv`)
+- `apps/frontend/src/domain/raceResultsCsvExport.ts` (`buildRaceResultsCsv`)
 
 ## File name
 
@@ -55,7 +55,7 @@ Each subsequent row represents one `RaceResult`.
 
 ## Sorting
 
-Rows are exported in **standings order**, using the same sorting logic as in `src/domain/raceResultsActions.ts`:
+Rows are exported in **standings order**, using the same sorting logic as in `@raceoffice/domain` (`recomputeRaceResults` / `sortRaceResultsForStandings`):
 
 - The export first runs `recomputeRaceResults(...)` to ensure `rank` values are consistent.
 - Then it orders rows via `sortRaceResultsForStandings(...)` (same criteria as rank computation):

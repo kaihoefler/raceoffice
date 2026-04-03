@@ -27,8 +27,7 @@ jobs:
       - name: Install root deps
         run: npm ci
 
-      - name: Install server deps
-        run: npm --prefix server_own ci
+      
 
       - name: Download WinSW (v2.12.0) + portable Node.exe
         shell: powershell

@@ -280,7 +280,8 @@ app.setNotFoundHandler((req, reply) => {
   if (!fs.existsSync(indexPath)) {
     return reply.code(404).send({
       error: "client_not_built",
-      hint: "Run `vite build` so server_own/public/index.html exists.",
+            hint: "Run `npm run build` so apps/server/public/index.html exists.",
+
     });
   }
 

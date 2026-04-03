@@ -13,8 +13,8 @@ dist-ssr
 *.local
 tools/
 deploy/
-server_own/dist
-server_own/public
+apps/server/dist
+apps/server/public
 raceoffice.db
 
 # Editor directories and files
