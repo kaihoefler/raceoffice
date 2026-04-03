@@ -22,8 +22,7 @@
     "better-sqlite3": "^12.5.0",
     "fast-json-patch": "^3.1.1",
     "fastify": "^5.6.2",
-    "fastify-sse-v2": "^4.2.1",
-    "raceoffice-workspace": "file:../.."
+    "fastify-sse-v2": "^4.2.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
