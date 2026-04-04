@@ -18,11 +18,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node (build runtime)
+            - name: Setup Node (build runtime)
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # Keep build-time Node in sync with bundled runtime Node (downloaded below)
+          # so native modules (e.g. better-sqlite3) are compiled for the same ABI.
+          node-version: "22.21.1"
           cache: "npm"
+
 
       - name: Install root deps
         run: npm ci

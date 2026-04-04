@@ -83,6 +83,15 @@ async function main() {
   const lockPresent = fsSync.existsSync(path.join(serverOutDir, "package-lock.json"));
   run(lockPresent ? "npm ci --omit=dev" : "npm install --omit=dev", { cwd: serverOutDir });
 
+  // IMPORTANT (release ZIP reliability):
+  // Ensure @raceoffice/domain is materialized as real files inside
+  // deploy/server/node_modules. This avoids issues where a local-file dependency
+  // might end up as a link that is not preserved in ZIP extraction.
+  await copyDir(
+    path.join(deployDir, "packages", "domain"),
+    path.join(serverOutDir, "node_modules", "@raceoffice", "domain")
+  );
+
   // 5) Create standard runtime folders used by service/default config.
   await fs.mkdir(path.join(serverOutDir, "logs"), { recursive: true });
   await fs.mkdir(path.join(serverOutDir, "node"), { recursive: true });
@@ -184,31 +193,45 @@ async function main() {
     [
       "RaceOffice deploy folder created.",
       "",
-      "Deploy content:",
-      "  deploy/server/dist     (server JS)",
-      "  deploy/server/public   (built SPA)",
-      "  deploy/server/node_modules (prod deps)",
+      "Focus: install and run the Windows service from deploy/server.",
+      "In GitHub release builds, portable Node + WinSW are usually already included.",
       "",
-      "Next steps on target machine (Windows Service using WinSW):",
-      "  1) Ensure a Node runtime is available:",
-      "     - either install Node.js system-wide, OR copy a portable node.exe to deploy/server/node/node.exe",
-      "  2) Provide WinSW:",
-      "     - RaceOfficeServer.exe + RaceOfficeServer.xml in deploy/server",
-      "  3) Choose DB location (recommended): C:\\ProgramData\\RaceOffice\\data\\raceoffice.db",
-      "  4) Install service (run elevated):",
-      "     RaceOfficeServer.exe install",
-      "     RaceOfficeServer.exe start",
+      "Quick check (inside deploy/server):",
+      `  node\\node.exe present: ${copiedNode}`,
+      `  RaceOfficeServer.exe present: ${copiedWinSwExe}`,
+      `  RaceOfficeServer.xml present: ${copiedWinSwXml}`,
+      `  node_modules\\@raceoffice\\domain present: ${fsSync.existsSync(path.join(serverOutDir, "node_modules", "@raceoffice", "domain"))}`,
       "",
-      "Server args (from apps/server/src/index.ts):",
+      "First-time installation (run in elevated terminal, cwd = deploy/server):",
+      "  RaceOfficeServer.exe install",
+      "  RaceOfficeServer.exe start",
+      "",
+      "Open application:",
+      "  http://localhost:8787/",
+      "",
+      "Update existing installation (new version rollout):",
+      "  1) RaceOfficeServer.exe stop",
+      "  2) RaceOfficeServer.exe uninstall",
+      "  3) Replace files with new deploy/server content",
+      "  4) RaceOfficeServer.exe install",
+      "  5) RaceOfficeServer.exe start",
+      "",
+      "Change host/port/db parameters:",
+      "  - Edit deploy/server/RaceOfficeServer.xml",
+      "  - Update the <arguments> line",
+      `  - Current default: %BASE%\\dist\\index.js --host 0.0.0.0 --port 8787 --db \"${defaultDbPath}\"`,
+      "  - Apply changes:",
+      "      RaceOfficeServer.exe stop",
+      "      RaceOfficeServer.exe uninstall",
+      "      RaceOfficeServer.exe install",
+      "      RaceOfficeServer.exe start",
+      "",
+      "Server argument reference:",
       "  --host <host>   (default 0.0.0.0)",
       "  --port <port>   (default 8787)",
       "  --db   <path>   (default ./data/raceoffice.db)",
       "",
-      `Copied portable node.exe: ${copiedNode}`,
-      `Copied WinSW exe: ${copiedWinSwExe}`,
-      `Copied WinSW xml: ${copiedWinSwXml}`,
-      "",
-      "Convenience launch files:",
+      "Convenience launch files in deploy/:",
       "  - RaceOffice Local.url  (opens http://localhost:8787/)",
       "  - RaceOffice Local.html (redirects to http://localhost:8787/)",
     ].join("\n"),
