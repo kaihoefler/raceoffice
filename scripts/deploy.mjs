@@ -141,6 +141,43 @@ async function main() {
     );
   }
 
+  // Create quick local entry points for operators.
+  // - .url works as a clickable Windows Internet Shortcut
+  // - .html can be opened in any browser
+  const localUiUrl = "http://localhost:8787/";
+
+  await fs.writeFile(
+    path.join(deployDir, "RaceOffice Local.url"),
+    [
+      "[InternetShortcut]",
+      `URL=${localUiUrl}`,
+      "IconFile=", // let shell/browser choose default icon
+      "IconIndex=0",
+      "",
+    ].join("\n"),
+    "utf8"
+  );
+
+  await fs.writeFile(
+    path.join(deployDir, "RaceOffice Local.html"),
+    [
+      "<!doctype html>",
+      '<html lang="en">',
+      "  <head>",
+      '    <meta charset="utf-8" />',
+      '    <meta http-equiv="refresh" content="0; url=http://localhost:8787/" />',
+      "    <title>Open RaceOffice Local</title>",
+      "  </head>",
+      '  <body style="font-family: system-ui, sans-serif; margin: 2rem;">',
+      "    <h1>Opening RaceOffice…</h1>",
+      '    <p>If you are not redirected automatically, open <a href="http://localhost:8787/">http://localhost:8787/</a>.</p>',
+      "  </body>",
+      "</html>",
+      "",
+    ].join("\n"),
+    "utf8"
+  );
+
   // Write a human-friendly handover file with required target-machine steps.
   await fs.writeFile(
     path.join(deployDir, "DEPLOY-NEXT-STEPS.txt"),
@@ -170,6 +207,10 @@ async function main() {
       `Copied portable node.exe: ${copiedNode}`,
       `Copied WinSW exe: ${copiedWinSwExe}`,
       `Copied WinSW xml: ${copiedWinSwXml}`,
+      "",
+      "Convenience launch files:",
+      "  - RaceOffice Local.url  (opens http://localhost:8787/)",
+      "  - RaceOffice Local.html (redirects to http://localhost:8787/)",
     ].join("\n"),
     "utf8"
   );

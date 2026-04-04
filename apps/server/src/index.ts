@@ -171,11 +171,31 @@ function broadcastPatch(docId: string, rev: number, patch: Operation[]) {
 
 
 
+const publicServiceEndpoints = [
+  {
+    path: "/health",
+    description: "Service health check",
+  },
+  {
+    path: "/current_race_result",
+    description: "Current active race result export",
+  },
+] as const;
+
+function serviceDiscoveryBody() {
+  return {
+    error: "not_found",
+    message: "Unknown endpoint.",
+    availableServices: publicServiceEndpoints,
+  };
+}
+
 // --- Health
 app.get("/health", async () => ({ ok: true }));
 
 // --- Current race status export for external systems
 app.get("/current_race_result", async (_req, reply) => {
+
     const ctx = resolveCurrentRaceContext(loadDoc);
 
   if (!ctx) {
@@ -297,22 +317,42 @@ app.get("/ws/:docId", { websocket: true }, (socket, req) => {
 });
  
 app.setNotFoundHandler((req, reply) => {
-  if (req.method !== "GET") return reply.code(404).send({ error: "not_found" });
+  const discovery = serviceDiscoveryBody();
+
+  if (req.method !== "GET") return reply.code(404).send(discovery);
 
   const accept = String(req.headers.accept ?? "");
-  if (!accept.includes("text/html")) return reply.code(404).send({ error: "not_found" });
+  if (!accept.includes("text/html")) return reply.code(404).send(discovery);
 
   const indexPath = path.join(publicDir, "index.html");
   if (!fs.existsSync(indexPath)) {
-    return reply.code(404).send({
-      error: "client_not_built",
-            hint: "Run `npm run build` so apps/server/public/index.html exists.",
+    const servicesHtml = publicServiceEndpoints
+      .map((s) => `<li><a href="${s.path}">${s.path}</a> — ${s.description}</li>`)
+      .join("");
 
-    });
+    return reply
+      .code(404)
+      .type("text/html; charset=utf-8")
+      .send(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RaceOffice Server - Not Found</title>
+  </head>
+  <body style="font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5;">
+    <h1>Endpoint not found</h1>
+    <p>The requested address does not exist on this server.</p>
+    <p><strong>Available services:</strong></p>
+    <ul>${servicesHtml}</ul>
+    <p style="margin-top: 1rem; color: #666;">Frontend is not built. Run <code>npm run build</code> to serve the SPA.</p>
+  </body>
+</html>`);
   }
 
   return reply.type("text/html").sendFile("index.html");
 });
+
 
 function noteSnapshot(socket: any, docId: string) {
     const doc = loadDoc(docId);
