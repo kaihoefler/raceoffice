@@ -23,6 +23,14 @@ import {
   type LiveTrackingResultsDocument,
 } from "./results.js";
 
+/**
+ * Tuning knobs for projection strictness and output window sizes.
+ *
+ * Practical guidance:
+ * - debounce/minSector/minLap define sporting plausibility filters
+ * - keep* values define memory/UI windows (not persistence limits)
+ * - synthesizeUnknownTransponders helps operations by still showing unknown chips live
+ */
 export type LiveTrackingTimingEngineOptions = {
   debounceMs: number;
   minSectorTimeMs: number;
@@ -47,6 +55,13 @@ export const DEFAULT_LIVE_TRACKING_TIMING_ENGINE_OPTIONS: LiveTrackingTimingEngi
   synthesizeUnknownTransponders: true,
 };
 
+/**
+ * Internal state machine per athlete while consuming ordered passings.
+ *
+ * Note:
+ * This shape is intentionally not exported. It is an implementation detail used
+ * to derive stable public read-model fields in `LiveTrackingResultsDocument`.
+ */
 type InternalAthleteState = {
   athleteId: string;
   transponderId: string | null;
@@ -66,6 +81,12 @@ function toMs(iso: string): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
+/**
+ * Ensures deterministic processing order.
+ *
+ * Stable tie-break by id is important for reproducible projections when two
+ * passings share identical timestamps.
+ */
 function sortPassingsStable(passings: LiveTrackingPassingEvent[]): LiveTrackingPassingEvent[] {
   return [...passings].sort((a, b) => {
     const ta = toMs(a.timestamp) ?? 0;
@@ -159,6 +180,7 @@ export function buildLiveTrackingResultsProjection(args: {
   const unknownTransponders = new Set<string>();
   const acceptedPassings: LiveTrackingPassingEvent[] = [];
 
+  // Core acceptance pipeline: validate -> map transponder -> plausibility checks -> apply.
   for (const passing of sortPassingsStable(args.passings)) {
     const eventMs = toMs(passing.timestamp);
     if (eventMs === null) {
@@ -182,6 +204,7 @@ export function buildLiveTrackingResultsProjection(args: {
     if (!participant) {
       unknownTransponders.add(passing.transponderId);
 
+      // Strict mode: unknown chips are rejected and tracked as invalid events.
       if (!options.synthesizeUnknownTransponders) {
         doc.invalidEvents = appendBounded(
           doc.invalidEvents,
@@ -194,6 +217,7 @@ export function buildLiveTrackingResultsProjection(args: {
         continue;
       }
 
+      // Ops-friendly mode: create synthetic live athlete so unknown chips remain visible.
       const syntheticAthleteId = `unknown:transponder:${passing.transponderId}`;
       if (!athleteById.has(syntheticAthleteId)) {
         athleteById.set(syntheticAthleteId, {
@@ -249,6 +273,7 @@ export function buildLiveTrackingResultsProjection(args: {
     const nextOrder = maxOrder > 0 ? (point.order >= maxOrder ? 1 : point.order + 1) : null;
     athlete.expectedOrder = nextOrder;
 
+    // Lap boundary handling is anchored on start/finish timing point.
     if (startFinish && point.id === startFinish.id) {
       if (athlete.lapStartedAtMs !== null) {
         const lapTimeMs = eventMs - athlete.lapStartedAtMs;
@@ -321,6 +346,7 @@ export function buildLiveTrackingResultsProjection(args: {
     });
   }
 
+  // Final projection assembly: athlete board + qualifying ranking + debug channels.
   doc.athleteLiveStates = athleteStates;
   doc.qualifyingRanking = athleteStates
     .filter((s) => typeof s.bestLapTimeMs === "number")

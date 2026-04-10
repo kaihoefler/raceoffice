@@ -1,3 +1,14 @@
+/**
+ * Worker entrypoint.
+ *
+ * Current operating mode: singleton session documents
+ * (`liveTrackingSession`, `liveTrackingRuntime`, `liveTrackingResults`).
+ *
+ * This process is intentionally thin:
+ * - parse runtime config (server URL)
+ * - start one `SessionLoop`
+ * - forward OS shutdown signals for clean teardown
+ */
 import { SessionLoop } from "./sessionLoop.js";
 
 function readArg(name: string): string | null {
@@ -13,6 +24,8 @@ const serverUrl =
   process.env.RACEOFFICE_SERVER_URL ??
   "http://localhost:8787";
 
+// Session id is currently ignored by domain id helpers (singleton docs),
+// but we keep the argument explicit for future multi-session support.
 const loop = new SessionLoop(serverUrl, "active", { heartbeatMs: 5000 });
 loop.start();
 console.log("[livetracking-worker] started in singleton-session mode");

@@ -1,3 +1,14 @@
+/**
+ * Lightweight revisioned realtime document client used by the worker.
+ *
+ * Protocol assumptions:
+ * - server sends an initial `{ type: "snapshot", rev, data }`
+ * - subsequent changes are JSON-Patch frames `{ rev, patch }`
+ * - worker writes with `{ baseRev, patch }`
+ *
+ * The client stays intentionally small and deterministic so worker logic can treat
+ * document reads/writes as local state transitions.
+ */
 import { applyPatch, compare, type Operation } from "fast-json-patch/index.mjs";
 import WebSocket from "ws";
 
@@ -60,6 +71,12 @@ export class RealtimeDocClient<T extends object> {
     this.reconnectDelayMs = Math.max(100, options?.reconnectDelayMs ?? 1000);
   }
 
+  /**
+   * Opens websocket subscription and keeps local `data` + `rev` in sync.
+   *
+   * On revision mismatch errors we force reconnect to obtain a fresh snapshot,
+   * keeping this client self-healing under transient patch races.
+   */
   connect() {
     if (this.closed) return;
     this.clearReconnectTimer();
@@ -138,6 +155,11 @@ export class RealtimeDocClient<T extends object> {
     };
   }
 
+  /**
+   * Applies a local mutation against current document data and sends only the JSON patch.
+   *
+   * Returns false when writing is not currently possible (no socket/no snapshot/no diff).
+   */
   update(mutator: (prev: T) => T): boolean {
     const socket = this.socket;
     const prev = this.data;
@@ -157,6 +179,9 @@ export class RealtimeDocClient<T extends object> {
     }
   }
 
+  /**
+   * Debounced reconnect to avoid hot-loop reconnect storms when the server is down.
+   */
   private scheduleReconnect() {
     if (this.closed || this.reconnectTimer) return;
     this.reconnectTimer = setTimeout(() => {

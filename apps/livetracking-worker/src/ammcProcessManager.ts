@@ -30,9 +30,14 @@ function resolveWorkspaceRoot(): string {
   return path.resolve(__dirname, "../../..");
 }
 
+/**
+ * Resolves platform-specific default AMMC binary shipped in this repository.
+ *
+ * Override via `LIVETRACKING_AMMC_BIN` when running custom builds.
+ */
 function defaultBinaryPath(): string {
   const root = resolveWorkspaceRoot();
-  const ammcPath = "tools/ammc-v7.4.0/";
+  const ammcPath = "tools/ammc/";
   if (process.platform === "win32") {
     return path.resolve(root, ammcPath + "windows64/ammc-amb.exe");
   }
@@ -42,6 +47,9 @@ function defaultBinaryPath(): string {
   return path.resolve(root, ammcPath + "linux_x86-64/ammc-amb");
 }
 
+/**
+ * Expands AMMC argument template placeholders with timing-point specific values.
+ */
 function buildArgs(point: LiveTrackingTimingPoint, template: string[]): string[] {
   return template.map((token) =>
     token
@@ -52,6 +60,10 @@ function buildArgs(point: LiveTrackingTimingPoint, template: string[]): string[]
   );
 }
 
+/**
+ * AMMC sometimes writes informational lines to stderr.
+ * We classify only obvious error-like lines as hard process errors.
+ */
 function isLikelyErrorLogLine(line: string): boolean {
   const normalized = line.toLowerCase();
   return normalized.includes("error") || normalized.includes("failed") || normalized.includes("fatal") || normalized.includes("panic");
@@ -87,6 +99,11 @@ export class AmmcProcessManager {
     this.onWarning = options.onWarning;
   }
 
+  /**
+   * Reconciles managed processes against the currently enabled timing points.
+   * - extra running processes are stopped
+   * - missing processes are started (subject to restart backoff)
+   */
   sync(points: LiveTrackingTimingPoint[]) {
     const targetIds = new Set(points.map((p) => p.id));
 
@@ -120,6 +137,12 @@ export class AmmcProcessManager {
     }
   }
 
+  /**
+   * Ensures one AMMC process exists for a timing point.
+   *
+   * Restart protection:
+   * - after crashes/exits, starts are delayed by `restartDelayMs` to avoid rapid respawn loops.
+   */
   private ensure(point: LiveTrackingTimingPoint) {
     if (this.processes.has(point.id)) return;
 

@@ -1,3 +1,17 @@
+/**
+ * Session loop for the LiveTracking worker.
+ *
+ * Responsibilities (single orchestration point):
+ * - keep live subscriptions to session/runtime/results/setup/participants documents
+ * - execute session command queue transitions (prepare/start/stop/shutdown/reset)
+ * - manage AMMC process lifecycle + websocket connections per timing point
+ * - persist runtime telemetry (decoder status, raw payloads, normalized passings)
+ * - continuously project sporting results from runtime passings + setup + participant pool
+ *
+ * Important design rule:
+ * This class intentionally keeps business rules delegated to domain helpers.
+ * It orchestrates *when* things happen, while domain modules define *what is valid*.
+ */
 import os from "node:os";
 import {
   completeLiveTrackingCommand,
@@ -223,12 +237,25 @@ export class SessionLoop {
     }, 250);
   }
 
+  /**
+   * Runtime updates are very frequent (heartbeats + decoder events).
+   *
+   * To reduce patch noise, we ignore pure `updatedAt` differences and only publish
+   * when meaningful runtime fields changed.
+   */
   private hasRuntimeContentChanged(previous: LiveTrackingRuntimeDocument, next: LiveTrackingRuntimeDocument): boolean {
     const previousComparable = JSON.stringify({ ...previous, updatedAt: null });
     const nextComparable = JSON.stringify({ ...next, updatedAt: null });
     return previousComparable !== nextComparable;
   }
 
+  /**
+   * Atomic runtime write helper.
+   *
+   * Why this exists:
+   * - several runtime fields must often change together (decoder status + raw payload + passings)
+   * - one atomic mutation avoids revision races caused by multiple back-to-back updates
+   */
   private commitRuntimeUpdate(buildNext: (doc: LiveTrackingRuntimeDocument) => LiveTrackingRuntimeDocument) {
     this.runtimeClient.update((doc) => {
       const next = buildNext(doc);
@@ -407,6 +434,14 @@ export class SessionLoop {
     this.resultsClient.update(() => projected);
   }
 
+  /**
+   * Reconciles AMMC processes and websocket connections against current setup/session state.
+   *
+   * Reconciliation model:
+   * - source of truth = enabled timing points in the active setup
+   * - if session is not running: tear everything down
+   * - if running: ensure process exists first, then websocket connect (with startup delay)
+   */
   private syncAmmConnections() {
     const session = this.sessionClient.data;
     const setup = this.ensureSetupClient();
@@ -537,6 +572,15 @@ export class SessionLoop {
     });
   }
 
+  /**
+   * Handles one AMMC websocket frame.
+   *
+   * Pipeline:
+   * 1) parse JSON payload (store raw even on parse failures)
+   * 2) explode array/object payloads into event candidates
+   * 3) normalize candidates into canonical runtime passing events
+   * 4) persist decoder heartbeat + raw payload + passings + warnings in one atomic runtime update
+   */
   private handleAmmMessage(point: LiveTrackingTimingPoint, raw: WebSocket.RawData) {
     const receivedAt = nowIso();
     const rawText = typeof raw === "string" ? raw : raw.toString("utf8");
@@ -720,6 +764,12 @@ export class SessionLoop {
     });
   }
 
+  /**
+   * Executes one command-queue tick.
+   *
+   * Domain transition helpers from `@raceoffice/domain` enforce legal state flow.
+   * This method only maps command intents to concrete transition sequences.
+   */
   private tickCommands() {
     const session = this.sessionClient.data;
     if (!session || !isLiveTrackingSessionDocument(session)) return;

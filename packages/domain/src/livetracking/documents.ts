@@ -34,6 +34,12 @@ import {
   type LiveTrackingResultsDocument,
 } from "./results.js";
 
+/**
+ * Union of all known LiveTracking document payloads.
+ *
+ * This is useful for bootstrap/read-path code that handles document ids first
+ * and concrete payload types second.
+ */
 export type LiveTrackingDocument =
   | LiveTrackingParticipantPoolDocument
   | LiveTrackingSetupDocument
@@ -46,6 +52,7 @@ export type LiveTrackingDocument =
  * Returns null for non-LiveTracking doc ids.
  */
 export function createInitialLiveTrackingDocument(docId: string): LiveTrackingDocument | null {
+  // Resolve by id convention first; unknown ids are intentionally ignored here.
   const parsed = parseLiveTrackingDocId(docId);
   if (!parsed) return null;
 
@@ -60,6 +67,7 @@ export function createInitialLiveTrackingDocument(docId: string): LiveTrackingDo
   }
 
   if (parsed.kind === "session") {
+    // Session starts in idle/training with empty setup references.
     return createLiveTrackingSessionDocument({
       setupId: "",
       eventId: "",
@@ -73,6 +81,9 @@ export function createInitialLiveTrackingDocument(docId: string): LiveTrackingDo
   return null;
 }
 
+/**
+ * Runtime type guard for dynamic document payloads.
+ */
 export function isLiveTrackingDocument(value: unknown): value is LiveTrackingDocument {
   return (
     isLiveTrackingParticipantPoolDocument(value) ||

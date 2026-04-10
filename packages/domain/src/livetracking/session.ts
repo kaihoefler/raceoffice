@@ -83,6 +83,13 @@ export type LiveTrackingSessionDocument = {
   lastError: string | null;
 };
 
+/**
+ * Canonical session state graph.
+ *
+ * Architectural rule:
+ * - callers must never mutate `state` arbitrarily
+ * - every state change must pass through this transition table
+ */
 const LIVE_TRACKING_ALLOWED_STATE_TRANSITIONS: Record<LiveTrackingSessionState, LiveTrackingSessionState[]> = {
   idle: ["preparing"],
   preparing: ["ready", "error"],
@@ -92,6 +99,12 @@ const LIVE_TRACKING_ALLOWED_STATE_TRANSITIONS: Record<LiveTrackingSessionState, 
   error: ["idle", "preparing", "ready"],
 };
 
+/**
+ * Desired steady-state per command intent.
+ *
+ * `desiredState` is used as operator intent; worker execution may still need
+ * transient states (`preparing` / `stopping`) before reaching it.
+ */
 const LIVE_TRACKING_COMMAND_TARGET_STATE: Record<LiveTrackingCommandIntent, LiveTrackingCommandTargetState> = {
   prepare: "ready",
   start: "running",
@@ -100,6 +113,12 @@ const LIVE_TRACKING_COMMAND_TARGET_STATE: Record<LiveTrackingCommandIntent, Live
   reset: "idle",
 };
 
+/**
+ * Command issuance guardrail table.
+ *
+ * This prevents enqueueing commands that are semantically impossible from the
+ * current state and keeps command history auditable (valid commands only).
+ */
 const LIVE_TRACKING_ALLOWED_COMMAND_STATES: Record<LiveTrackingCommandIntent, LiveTrackingSessionState[]> = {
   prepare: ["idle", "ready", "error"],
   start: ["ready"],
@@ -121,6 +140,11 @@ function defaultParticipantSource(eventId: string): LiveTrackingParticipantSourc
   };
 }
 
+/**
+ * Immutable queue item updater used by start/complete/fail/reject helpers.
+ *
+ * Returns original array when nothing changed to preserve cheap identity checks.
+ */
 function updateCommandInQueue(
   queue: LiveTrackingCommand[],
   commandId: string,
@@ -140,6 +164,14 @@ function updateCommandInQueue(
   return changed ? next : queue;
 }
 
+/**
+ * Creates a canonical session document with safe defaults.
+ *
+ * Domain choice:
+ * - default state is fully inactive (`idle` + empty queue)
+ * - participant source defaults to event participant pool, because that source
+ *   is currently supported end-to-end in worker projection logic.
+ */
 export function createLiveTrackingSessionDocument(args: {
   setupId: string;
   eventId: string;
@@ -211,6 +243,13 @@ export function createLiveTrackingCommand(args: {
  * Enqueues a command and updates desiredState to the command target.
  *
  * Returns the unmodified session when command issuance is not allowed.
+ */
+/**
+ * Adds a command to FIFO queue and updates desired state to that command target.
+ *
+ * Important:
+ * - this does not execute the command
+ * - execution/acknowledgement is worker responsibility
  */
 export function enqueueLiveTrackingCommand(
   session: LiveTrackingSessionDocument,

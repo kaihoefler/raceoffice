@@ -1,3 +1,14 @@
+/**
+ * AMM payload normalization layer.
+ *
+ * Goal:
+ * - convert decoder/vendor specific websocket payloads into the canonical
+ *   `LiveTrackingRuntimePassingEvent` shape consumed by runtime + timing engine.
+ *
+ * Strategy:
+ * - strict about required fields for sporting correctness (timestamp + transponder)
+ * - tolerant about optional/variant fields to keep ingestion robust across firmware variants
+ */
 import type { LiveTrackingRuntimePassingEvent, LiveTrackingTimingPoint } from "@raceoffice/domain";
 
 /**
@@ -65,7 +76,9 @@ export function normalizeAmmPayloadToPassing(args: {
   const timestamp = normalizeTimestamp(payload.rtc_time);
   if (!timestamp) return null;
 
-  const transponderId = normalizeTransponder(payload.tran_code ?? payload.transponder  );
+  // Real-world AMM payloads may use either `transponder` or `tran_code`.
+  // We accept both and normalize to one canonical transponder id string.
+  const transponderId = normalizeTransponder(payload.tran_code ?? payload.transponder);
   if (!transponderId) return null;
 
   const msg = typeof payload.msg === "string" ? payload.msg.trim().toLowerCase() : "";
