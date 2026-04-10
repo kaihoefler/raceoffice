@@ -14,8 +14,10 @@ export default function AppLayout() {
   // Mark "Active Event" as active also while working inside race sub-pages (starters/scoring)
   const isActiveEvent = location.pathname === "/" || isStartersPage || isScoringPage;
   const isEvents = location.pathname.startsWith("/events");
-  const isVisualizations = location.pathname.startsWith("/visualizations");
+    const isVisualizations = location.pathname.startsWith("/visualizations");
+  const isLiveTracking = location.pathname.startsWith("/live-tracking");
   const isAbout = location.pathname.startsWith("/about");
+
 
 
 
@@ -52,7 +54,7 @@ export default function AppLayout() {
             <Button color="inherit" component={Link} to="/events" variant={isEvents ? "outlined" : "text"}>
               Events
             </Button>
-            <Button
+                        <Button
               color="inherit"
               component={Link}
               to="/visualizations"
@@ -60,8 +62,11 @@ export default function AppLayout() {
             >
               Visualizations
             </Button>
-
+            <Button color="inherit" component={Link} to="/live-tracking" variant={isLiveTracking ? "outlined" : "text"}>
+              Live Tracking
+            </Button>
           </Box>
+
 
 
           {/* spacer */}

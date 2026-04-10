@@ -10,17 +10,22 @@ import VisualizationsPage from "./pages/VisualizationsPage";
 import RaceStartersPage from "./pages/RaceStartersPage";  
 import ScoringPage from "./pages/ScoringPage";
 import VisualizerPage from "./pages/VisualizerPage";
+import LiveTrackingControlPage from "./pages/LiveTrackingControlPage";
 
 
 export const router = createBrowserRouter([
+
 
     {
     element: <AppLayout />,
     children: [
       { path: "/", element: <ActiveEventPage /> },
       { path: "/events", element: <EventsPage /> },
-      { path: "/visualizations", element: <VisualizationsPage /> },
+            { path: "/visualizations", element: <VisualizationsPage /> },
+            { path: "/live-tracking", element: <LiveTrackingControlPage /> },
+
       { path: "/about", element: <AboutPage /> },
+
 
       // race sub-pages
       { path: "/races/:raceId/starters", element: <RaceStartersPage /> },

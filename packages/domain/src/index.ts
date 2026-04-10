@@ -53,3 +53,6 @@ export {
   filterActivitiesByAllowedBibs,
   removeBibFromActivities,
 } from "./raceActivitiesActions.js";
+
+// LiveTracking domain model (phase 0 baseline).
+export * from "./livetracking/index.js";
