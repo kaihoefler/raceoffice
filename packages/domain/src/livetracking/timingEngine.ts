@@ -46,8 +46,8 @@ export type LiveTrackingTimingEngineOptions = {
 export const DEFAULT_LIVE_TRACKING_TIMING_ENGINE_OPTIONS: LiveTrackingTimingEngineOptions = {
   debounceMs: 1_000,
   minSectorTimeMs: 500,
-  minLapTimeMs: 10_000,
-  activityWindowMs: 20_000,
+  minLapTimeMs: 8_000,
+  activityWindowMs: 60_000,
   keepRecentPassings: 300,
   keepRecentLapTimes: 10,
   keepCompletedLaps: 30,

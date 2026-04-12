@@ -11,6 +11,8 @@ import RaceStartersPage from "./pages/RaceStartersPage";
 import ScoringPage from "./pages/ScoringPage";
 import VisualizerPage from "./pages/VisualizerPage";
 import LiveTrackingControlPage from "./pages/LiveTrackingControlPage";
+import LiveTrackingParticipantsPage from "./pages/LiveTrackingParticipantsPage";
+
 
 
 export const router = createBrowserRouter([
@@ -23,6 +25,8 @@ export const router = createBrowserRouter([
       { path: "/events", element: <EventsPage /> },
             { path: "/visualizations", element: <VisualizationsPage /> },
             { path: "/live-tracking", element: <LiveTrackingControlPage /> },
+            { path: "/live-tracking/participants", element: <LiveTrackingParticipantsPage /> },
+
 
       { path: "/about", element: <AboutPage /> },
 

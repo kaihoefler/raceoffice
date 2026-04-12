@@ -56,7 +56,18 @@ export function createInitialLiveTrackingDocument(docId: string): LiveTrackingDo
   const parsed = parseLiveTrackingDocId(docId);
   if (!parsed) return null;
 
-  if (parsed.kind === "participants") return createLiveTrackingParticipantPoolDocument(parsed.eventId);
+    if (parsed.kind === "participants") {
+    // Backward compatibility choice:
+    // - When only doc-id suffix is known, we use it as pool identity.
+    // - We also mirror it into `eventId` so legacy event-scoped flows keep working.
+    return createLiveTrackingParticipantPoolDocument({
+      poolId: parsed.poolRef,
+      eventId: parsed.poolRef,
+      setupId: null,
+      name: "",
+    });
+  }
+
 
   if (parsed.kind === "setup") {
     return createLiveTrackingSetupDocument({

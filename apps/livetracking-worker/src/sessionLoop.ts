@@ -229,13 +229,28 @@ export class SessionLoop {
     }, 0);
   }
 
-  private scheduleUpdateResultsProjection() {
+    private scheduleUpdateResultsProjection() {
     if (this.resultsTimer) clearTimeout(this.resultsTimer);
     this.resultsTimer = setTimeout(() => {
       this.resultsTimer = null;
       this.updateResultsProjection();
     }, 250);
   }
+
+  /**
+   * Keeps runtime decoder list aligned to currently configured enabled timing points.
+   *
+   * Without this reconciliation, stale decoder entries from older setup revisions can
+   * remain visible in runtime debug output even after points were removed.
+   */
+  private pruneRuntimeDecoders(enabledTimingPointIds: Set<string>) {
+    this.commitRuntimeUpdate((doc) => ({
+      ...doc,
+      decoders: (doc.decoders ?? []).filter((decoder) => enabledTimingPointIds.has(decoder.timingPointId)),
+      updatedAt: nowIso(),
+    }));
+  }
+
 
   /**
    * Runtime updates are very frequent (heartbeats + decoder events).
@@ -263,23 +278,25 @@ export class SessionLoop {
     });
   }
 
-  private isHeartbeatEnabled(): boolean {
-    const session = this.sessionClient.data;
+    private isHeartbeatEnabled(sessionOverride?: LiveTrackingSessionDocument | null): boolean {
+    const session = sessionOverride ?? this.sessionClient.data;
     return !!session && isLiveTrackingSessionDocument(session) && (session.state === "ready" || session.state === "running");
   }
 
-  private syncHeartbeatLifecycle() {
-    const workerStatus = this.mapWorkerStatus();
+
+    private syncHeartbeatLifecycle(sessionOverride?: LiveTrackingSessionDocument | null) {
+    const workerStatus = this.mapWorkerStatus(sessionOverride);
     this.logWorkerStatusTransition(workerStatus);
 
-    if (this.isHeartbeatEnabled()) {
+    if (this.isHeartbeatEnabled(sessionOverride)) {
       if (!this.heartbeatTimer) {
         const heartbeatMs = Math.max(5_000, this.options?.heartbeatMs ?? 5_000);
         this.heartbeatTimer = setInterval(() => this.writeHeartbeat(), heartbeatMs);
       }
-      this.writeHeartbeat();
+      this.writeHeartbeat(sessionOverride);
       return;
     }
+
 
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
@@ -297,10 +314,11 @@ export class SessionLoop {
     }));
   }
 
-  private writeHeartbeat() {
-    if (!this.isHeartbeatEnabled()) return;
+    private writeHeartbeat(sessionOverride?: LiveTrackingSessionDocument | null) {
+    if (!this.isHeartbeatEnabled(sessionOverride)) return;
 
-    const workerStatus = this.mapWorkerStatus();
+    const workerStatus = this.mapWorkerStatus(sessionOverride);
+
     this.logWorkerStatusTransition(workerStatus);
 
     this.commitRuntimeUpdate((doc) => {
@@ -333,9 +351,10 @@ export class SessionLoop {
     console.log(`[livetracking-worker] worker status changed: ${from} -> ${nextStatus}`);
   }
 
-  private mapWorkerStatus(): LiveTrackingRuntimeDocument["workerStatus"] {
-    const session = this.sessionClient.data;
+    private mapWorkerStatus(sessionOverride?: LiveTrackingSessionDocument | null): LiveTrackingRuntimeDocument["workerStatus"] {
+    const session = sessionOverride ?? this.sessionClient.data;
     if (!session || !isLiveTrackingSessionDocument(session)) return "starting";
+
 
     if (session.state === "running") return "running";
     if (session.state === "stopping") return "stopping";
@@ -442,12 +461,22 @@ export class SessionLoop {
    * - if session is not running: tear everything down
    * - if running: ensure process exists first, then websocket connect (with startup delay)
    */
-  private syncAmmConnections() {
+    private syncAmmConnections() {
     const session = this.sessionClient.data;
     const setup = this.ensureSetupClient();
 
+    if (setup) {
+      const configuredEnabledIds = new Set(
+        normalizeTimingPoints(setup.track.timingPoints)
+          .filter((p) => p.enabled)
+          .map((p) => p.id),
+      );
+      this.pruneRuntimeDecoders(configuredEnabledIds);
+    }
+
     const shouldCollect = !!session && isLiveTrackingSessionDocument(session) && session.state === "running";
     if (!shouldCollect || !setup) {
+
       for (const [timingPointId] of this.pendingAmmConnectTimers) {
         this.clearPendingAmmConnect(timingPointId);
       }
@@ -961,11 +990,15 @@ export class SessionLoop {
     this.commitIfChanged(session, nextSession);
   }
 
-  private commitIfChanged(previous: LiveTrackingSessionDocument, next: LiveTrackingSessionDocument) {
+    private commitIfChanged(previous: LiveTrackingSessionDocument, next: LiveTrackingSessionDocument) {
     if (previous === next) return;
     this.sessionClient.update(() => next);
-    this.syncHeartbeatLifecycle();
+
+    // Use the target session snapshot immediately to avoid one-tick lag in workerStatus
+    // (e.g. ready -> idle after shutdown).
+    this.syncHeartbeatLifecycle(next);
     this.scheduleSyncAmmConnections();
     this.scheduleUpdateResultsProjection();
   }
+
 }

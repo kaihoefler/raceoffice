@@ -12,12 +12,33 @@
 
 export type LiveTrackingTimingPointRole = "start_finish" | "split";
 
+/**
+ * Decoder execution mode per timing point.
+ * - `amb`: connect to a physical decoder/converter endpoint
+ * - `sim`: run AMM simulator process for deterministic test passings
+ */
+export type LiveTrackingDecoderType = "amb" | "sim";
+
 export type LiveTrackingTimingPoint = {
+
   id: string;
   name: string;
-  decoderId: string;
+    decoderId: string;
   decoderIp: string;
   websocketPortAMM: number;
+
+  /** Process mode for this timing point (`amb` live device vs `sim` local simulator). */
+  decoderType?: LiveTrackingDecoderType;
+
+  /** Simulator-only transponder ids (used when `decoderType === "sim"`). */
+  simTranCodes?: string[];
+
+  /** Simulator-only passing delay argument (string to support fixed/range formats). */
+  simPassingDelay?: string;
+
+  /** Simulator-only startup delay in seconds (for controlled ordering between points). */
+  simStartupDelaySecs?: number;
+
 
   /** Logical order around the track (1..N). */
   order: number;
@@ -49,10 +70,31 @@ export type LiveTrackingSetupDocument = {
   /** Optional owning event (for event-based setup addressing). */
   eventId: string | null;
 
+  /**
+   * Setup-scoped participant pool references.
+   *
+   * Domain rule:
+   * - contains unique, non-empty pool ids
+   * - order is preserved as configured by operations
+   */
+    participantPoolIds?: string[];
+
+
+  /**
+   * Active pool id used by setup-based participant sourcing.
+   *
+   * Domain rule:
+   * - null means "not selected yet"
+   * - when set, it should reference one id from `participantPoolIds`
+   */
+    activeParticipantPoolId?: string | null;
+
+
   name: string;
   track: LiveTrackingTrack;
   updatedAt: string | null;
 };
+
 
 export type LiveTrackingSetupValidationIssue = {
   code:
@@ -89,16 +131,34 @@ function sortTimingPointsByOrder(points: LiveTrackingTimingPoint[]): LiveTrackin
   return list;
 }
 
+function normalizeParticipantPoolIds(poolIds: unknown): string[] {
+  const unique = new Set<string>();
+  for (const raw of Array.isArray(poolIds) ? poolIds : []) {
+    const id = String(raw ?? "").trim();
+    if (!id) continue;
+    unique.add(id);
+  }
+  return [...unique];
+}
+
 export function createLiveTrackingSetupDocument(args?: {
   setupId?: string;
   eventId?: string | null;
+  participantPoolIds?: string[];
+  activeParticipantPoolId?: string | null;
   name?: string;
 }): LiveTrackingSetupDocument {
+  const participantPoolIds = normalizeParticipantPoolIds(args?.participantPoolIds);
+  const requestedActiveId = args?.activeParticipantPoolId == null ? null : String(args.activeParticipantPoolId).trim();
+  const activeParticipantPoolId = requestedActiveId && participantPoolIds.includes(requestedActiveId) ? requestedActiveId : null;
+
   return {
     kind: "liveTrackingSetup",
     version: 1,
     setupId: String(args?.setupId ?? "").trim(),
     eventId: args?.eventId == null ? null : String(args.eventId).trim(),
+    participantPoolIds,
+    activeParticipantPoolId,
     name: String(args?.name ?? "").trim(),
     track: {
       id: "",
@@ -109,6 +169,7 @@ export function createLiveTrackingSetupDocument(args?: {
     updatedAt: null,
   };
 }
+
 
 /**
  * Returns timing-points sorted by `order` with recalculated `absolutePositionM`.
@@ -130,8 +191,15 @@ export function normalizeTimingPoints(points: LiveTrackingTimingPoint[]): LiveTr
       order: index + 1,
       distanceFromPreviousM: distance,
       absolutePositionM: absolute,
-      websocketPortAMM: Math.max(0, toFiniteInt(point.websocketPortAMM, 0)),
+            websocketPortAMM: Math.max(0, toFiniteInt(point.websocketPortAMM, 0)),
+      decoderType: point.decoderType === "sim" ? "sim" : "amb",
+      simTranCodes: Array.isArray(point.simTranCodes)
+        ? point.simTranCodes.map((x) => String(x ?? "").trim()).filter(Boolean)
+        : [],
+      simPassingDelay: String(point.simPassingDelay ?? "1000").trim() || "1000",
+      simStartupDelaySecs: Math.max(0, toFiniteInt(point.simStartupDelaySecs, 0)),
       enabled: Boolean(point.enabled),
+
     };
   });
 }
@@ -260,8 +328,13 @@ export function isLiveTrackingTimingPoint(value: unknown): value is LiveTracking
     typeof value.name === "string" &&
     typeof value.decoderId === "string" &&
     typeof value.decoderIp === "string" &&
-    typeof value.websocketPortAMM === "number" &&
+        typeof value.websocketPortAMM === "number" &&
+    (value.decoderType === undefined || value.decoderType === "amb" || value.decoderType === "sim") &&
+    (value.simTranCodes === undefined || (Array.isArray(value.simTranCodes) && value.simTranCodes.every((x) => typeof x === "string"))) &&
+    (value.simPassingDelay === undefined || typeof value.simPassingDelay === "string") &&
+    (value.simStartupDelaySecs === undefined || typeof value.simStartupDelaySecs === "number") &&
     typeof value.order === "number" &&
+
     typeof value.distanceFromPreviousM === "number" &&
     typeof value.absolutePositionM === "number" &&
     (value.role === "start_finish" || value.role === "split") &&
@@ -289,8 +362,15 @@ export function isLiveTrackingSetupDocument(value: unknown): value is LiveTracki
     value.version === 1 &&
     typeof value.setupId === "string" &&
     (typeof value.eventId === "string" || value.eventId === null) &&
+        (value.participantPoolIds === undefined ||
+      (Array.isArray(value.participantPoolIds) && value.participantPoolIds.every((x) => typeof x === "string"))) &&
+    (value.activeParticipantPoolId === undefined ||
+      typeof value.activeParticipantPoolId === "string" ||
+      value.activeParticipantPoolId === null) &&
+
     typeof value.name === "string" &&
     isLiveTrackingTrack(value.track) &&
     (typeof value.updatedAt === "string" || value.updatedAt === null)
   );
 }
+

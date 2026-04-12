@@ -32,24 +32,47 @@ export type LiveTrackingAthlete = {
 export type LiveTrackingParticipantPoolDocument = {
   kind: "liveTrackingParticipants";
   version: 1;
-  eventId: string;
+
+  /** Stable participant-pool identity, usually encoded in the document id suffix. */
+    poolId?: string;
+
+  /** Optional owner event when this pool is event-scoped. */
+  eventId?: string | null;
+
+  /** Optional owner setup when this pool is setup-scoped (standalone live-tracking mode). */
+  setupId?: string | null;
+
+  /** Human-readable operations label (e.g. "Cadets Ladies - Setup A"). */
+  name?: string;
+
+
   athletes: LiveTrackingAthlete[];
   updatedAt: string | null;
 };
+
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-export function createLiveTrackingParticipantPoolDocument(eventId: string): LiveTrackingParticipantPoolDocument {
+export function createLiveTrackingParticipantPoolDocument(args: {
+  poolId: string;
+  eventId?: string | null;
+  setupId?: string | null;
+  name?: string;
+}): LiveTrackingParticipantPoolDocument {
   return {
     kind: "liveTrackingParticipants",
     version: 1,
-    eventId: String(eventId ?? "").trim(),
+    poolId: String(args.poolId ?? "").trim(),
+    eventId: args.eventId == null ? null : String(args.eventId).trim(),
+    setupId: args.setupId == null ? null : String(args.setupId).trim(),
+    name: String(args.name ?? "").trim(),
     athletes: [],
     updatedAt: null,
   };
 }
+
 
 export function isLiveTrackingAthlete(value: unknown): value is LiveTrackingAthlete {
   if (!isRecord(value)) return false;
@@ -72,9 +95,14 @@ export function isLiveTrackingParticipantPoolDocument(value: unknown): value is 
   return (
     value.kind === "liveTrackingParticipants" &&
     value.version === 1 &&
-    typeof value.eventId === "string" &&
+        (value.poolId === undefined || typeof value.poolId === "string") &&
+    (value.eventId === undefined || typeof value.eventId === "string" || value.eventId === null) &&
+    (value.setupId === undefined || typeof value.setupId === "string" || value.setupId === null) &&
+    (value.name === undefined || typeof value.name === "string") &&
+
     Array.isArray(value.athletes) &&
     value.athletes.every(isLiveTrackingAthlete) &&
     (typeof value.updatedAt === "string" || value.updatedAt === null)
   );
 }
+

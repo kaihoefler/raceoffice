@@ -31,8 +31,10 @@ export {
   isLiveTrackingTimingPoint,
   isLiveTrackingTrack,
   isLiveTrackingSetupDocument,
-  type LiveTrackingTimingPointRole,
+    type LiveTrackingTimingPointRole,
+  type LiveTrackingDecoderType,
   type LiveTrackingTimingPoint,
+
   type LiveTrackingTrack,
   type LiveTrackingSetupDocument,
   type LiveTrackingSetupValidationIssue,

@@ -48,12 +48,14 @@ import { useEventList } from "../providers/EventListProvider";
 import RaceStartersImport from "../components/RaceStartersImport";
 import RaceSelector from "../components/RaceSelector";
 
-import type { Athlete, Race } from "@raceoffice/domain";
+import type { Athlete, Race, StarterImportRow } from "@raceoffice/domain";
+
 
 
 import { useEventsActions } from "../hooks/useEventsActions";
 
-import { normalizeIoc, parseBib, rowsToAthletes, type StarterImportRow } from "../domain/startersActions";
+import { normalizeIoc, parseBib, rowsToAthletes } from "../domain/startersActions";
+
 
 
 

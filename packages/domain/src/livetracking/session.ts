@@ -37,8 +37,11 @@ export type LiveTrackingCommandTargetState = Exclude<LiveTrackingSessionState, "
 /**
  * Session input source.
  *
- * `event_participant_pool`:
+  * `event_participant_pool`:
  * - participants are sourced from liveTrackingParticipants:{eventId}
+ *
+ * `setup_participant_pool`:
+ * - participants are sourced from a standalone setup-managed pool
  *
  * `race`:
  * - participants are sourced from a Race in Event-{eventId}
@@ -50,11 +53,19 @@ export type LiveTrackingParticipantSource =
       participantPoolDocId: string;
     }
   | {
+      kind: "setup_participant_pool";
+      /** Optional event context kept for UI filtering and backwards compatibility. */
+      eventId: string;
+      setupId: string;
+      participantPoolDocId: string;
+    }
+  | {
       kind: "race";
       eventId: string;
       raceId: string;
       eventDocId: string;
     };
+
 
 export type LiveTrackingCommand = {
   id: string;
@@ -461,7 +472,16 @@ export function isLiveTrackingParticipantSource(value: unknown): value is LiveTr
     return typeof value.eventId === "string" && typeof value.participantPoolDocId === "string";
   }
 
+    if (value.kind === "setup_participant_pool") {
+    return (
+      typeof value.eventId === "string" &&
+      typeof value.setupId === "string" &&
+      typeof value.participantPoolDocId === "string"
+    );
+  }
+
   if (value.kind === "race") {
+
     return (
       typeof value.eventId === "string" &&
       typeof value.raceId === "string" &&

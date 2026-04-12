@@ -13,22 +13,28 @@ export const LIVE_TRACKING_DOC_PREFIX = "liveTracking" as const;
 export type LiveTrackingDocKind = "participants" | "setup" | "session" | "runtime" | "results";
 
 export type LiveTrackingDocRef =
-  | { kind: "participants"; eventId: string }
+  | { kind: "participants"; poolRef: string }
   | { kind: "setup"; setupRef: string }
   | { kind: "session"; sessionId: string }
   | { kind: "runtime"; sessionId: string }
   | { kind: "results"; sessionId: string };
+
 
 function cleanId(value: string): string {
   return String(value ?? "").trim();
 }
 
 /**
- * Primary helper for the event-level participant pool document.
+ * Primary helper for a participant-pool document.
+ *
+ * `poolRef` can represent:
+ * - event id (legacy/event-scoped pools)
+ * - dedicated pool id (setup-scoped standalone pools)
  */
-export function makeLiveTrackingParticipantPoolDocId(eventId: string): string {
-  return `${LIVE_TRACKING_DOC_PREFIX}Participants:${cleanId(eventId)}`;
+export function makeLiveTrackingParticipantPoolDocId(poolRef: string): string {
+  return `${LIVE_TRACKING_DOC_PREFIX}Participants:${cleanId(poolRef)}`;
 }
+
 
 /**
  * Setup supports event-based and setup-based addressing:
@@ -84,7 +90,8 @@ export function parseLiveTrackingDocId(docId: string): LiveTrackingDocRef | null
   const tail = raw.slice(splitAt + 1).trim();
   if (!tail) return null;
 
-  if (head === `${LIVE_TRACKING_DOC_PREFIX}Participants`) return { kind: "participants", eventId: tail };
+    if (head === `${LIVE_TRACKING_DOC_PREFIX}Participants`) return { kind: "participants", poolRef: tail };
+
   if (head === `${LIVE_TRACKING_DOC_PREFIX}Setup`) return { kind: "setup", setupRef: tail };
   if (head === `${LIVE_TRACKING_DOC_PREFIX}Session`) return { kind: "session", sessionId: tail };
   if (head === `${LIVE_TRACKING_DOC_PREFIX}Runtime`) return { kind: "runtime", sessionId: tail };
