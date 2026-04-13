@@ -34,7 +34,15 @@ export type LiveTrackingAthleteLiveState = {
   athleteId: string;
   firstName: string;
   lastName: string;
+
+  /** Start number if known in participant pool; null for unknown/synthetic participants. */
+  bib: number | null;
+
+  /** IOC/nation code if known in participant pool; null otherwise. */
+  nation: string | null;
+
   transponderId: string | null;
+
 
   /**
    * Derived activity state used by UI/ops views.
@@ -122,9 +130,12 @@ export function isLiveTrackingAthleteLiveState(value: unknown): value is LiveTra
 
   return (
     typeof value.athleteId === "string" &&
-    typeof value.firstName === "string" &&
+        typeof value.firstName === "string" &&
     typeof value.lastName === "string" &&
+    (typeof value.bib === "number" || value.bib === null) &&
+    (typeof value.nation === "string" || value.nation === null) &&
     (typeof value.transponderId === "string" || value.transponderId === null) &&
+
     (value.activityStatus === "active" || value.activityStatus === "inactive") &&
     typeof value.isActive === "boolean" &&
     (typeof value.lastPassingAt === "string" || value.lastPassingAt === null) &&

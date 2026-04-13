@@ -7,7 +7,7 @@ import {
   CardContent,
   CardHeader,
   Checkbox,
-  Chip,
+  
   Divider,
   MenuItem,
   Stack,
@@ -41,7 +41,8 @@ import {
 } from "@raceoffice/domain";
 
 import { Link as RouterLink } from "react-router-dom";
-import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
+import { useRealtimeDoc } from "../../realtime/useRealtimeDoc";
+
 
 
 
@@ -85,21 +86,7 @@ function calcSimStartupDelaySecs(absolutePositionM: number): number {
 }
 
 
-function workerStatusColor(status: LiveTrackingRuntimeDocument["workerStatus"] | undefined) {
-  if (status === "running") return "success" as const;
-  if (status === "ready") return "info" as const;
-  if (status === "starting" || status === "stopping") return "warning" as const;
-  if (status === "error") return "error" as const;
-  return "default" as const;
-}
 
-function liveTrackingStateColor(state: LiveTrackingSessionDocument["state"] | undefined) {
-  if (state === "running") return "success" as const;
-  if (state === "ready") return "info" as const;
-  if (state === "preparing" || state === "stopping") return "warning" as const;
-  if (state === "error") return "error" as const;
-  return "default" as const;
-}
 
 function toSetupDraft(doc: LiveTrackingSetupDocument): SetupDraft {
   return {
@@ -119,7 +106,8 @@ export default function LiveTrackingControlPage() {
   const runtimeDocId = useMemo(() => makeLiveTrackingRuntimeDocId(), []);
   const resultsDocId = useMemo(() => makeLiveTrackingResultsDocId(), []);
 
-  const { data: session, update: updateSession, status: sessionStatus } = useRealtimeDoc<LiveTrackingSessionDocument>(sessionDocId);
+    const { data: session, update: updateSession } = useRealtimeDoc<LiveTrackingSessionDocument>(sessionDocId);
+
     const { data: runtime, update: updateRuntime } = useRealtimeDoc<LiveTrackingRuntimeDocument>(runtimeDocId);
   const { data: results } = useRealtimeDoc<LiveTrackingResultsDocument>(resultsDocId);
 
@@ -459,17 +447,7 @@ export default function LiveTrackingControlPage() {
 
   return (
     <Box sx={{ display: "grid", gap: 2 }}>
-      <Card variant="outlined">
-        <CardHeader title="Live Tracking" subheader="Control + Setup Editor + Debug" />
-        <Divider />
-        <CardContent>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-            <Chip size="small" label={`Control Link: ${sessionStatus}`} color={sessionStatus === "connected" ? "success" : "default"} />
-            <Chip size="small" label={`LiveTracking State: ${session?.state ?? "unknown"}`} color={liveTrackingStateColor(session?.state)} />
-            <Chip size="small" label={`Worker State: ${runtime?.workerStatus ?? "offline"}`} color={workerStatusColor(runtime?.workerStatus)} />
-          </Stack>
-        </CardContent>
-      </Card>
+      
 
       <Card variant="outlined">
         <CardHeader title="Tracking Control" />

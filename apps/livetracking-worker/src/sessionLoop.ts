@@ -386,10 +386,16 @@ export class SessionLoop {
     return setup;
   }
 
-  private ensureParticipantPoolClient(): LiveTrackingParticipantPoolDocument | null {
+    private ensureParticipantPoolClient(): LiveTrackingParticipantPoolDocument | null {
     const session = this.sessionClient.data;
     if (!session || !isLiveTrackingSessionDocument(session)) return null;
-    if (session.participantSource.kind !== "event_participant_pool") {
+
+    const poolDocId =
+      session.participantSource.kind === "event_participant_pool" || session.participantSource.kind === "setup_participant_pool"
+        ? session.participantSource.participantPoolDocId
+        : null;
+
+    if (!poolDocId) {
       this.unsubscribeParticipantPool?.();
       this.participantPoolClient?.close();
       this.participantPoolClient = null;
@@ -397,7 +403,6 @@ export class SessionLoop {
       return null;
     }
 
-    const poolDocId = session.participantSource.participantPoolDocId;
     if (this.activeParticipantPoolDocId !== poolDocId) {
       this.unsubscribeParticipantPool?.();
       this.participantPoolClient?.close();
@@ -426,9 +431,10 @@ export class SessionLoop {
     const warnings: string[] = [];
     const athletes = pool?.athletes ?? [];
 
-    if (session.participantSource.kind !== "event_participant_pool") {
-      warnings.push("race participant source projection is not connected yet; only event participant pool is supported.");
+        if (session.participantSource.kind === "race") {
+      warnings.push("race participant source projection is not connected yet; only participant-pool sources are supported.");
     }
+
 
     const projected = buildLiveTrackingResultsProjection({
       passings: runtime.recentPassings ?? [],

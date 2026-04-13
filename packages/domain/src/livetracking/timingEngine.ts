@@ -329,12 +329,15 @@ export function buildLiveTrackingResultsProjection(args: {
     const lastLap = recentLapTimes.length ? recentLapTimes[recentLapTimes.length - 1] : null;
     const status = activityStatus(state?.lastPassingMs ?? null, generatedAtMs, options.activityWindowMs);
 
-    athleteStates.push({
+        athleteStates.push({
       athleteId: athlete.id,
       firstName: athlete.firstName,
       lastName: athlete.lastName,
+      bib: athlete.bib,
+      nation: athlete.nation,
       transponderId: state?.transponderId ?? athlete.transponderIds[0] ?? null,
       activityStatus: status,
+
       isActive: status === "active",
       lastPassingAt: state?.lastPassingAt ?? null,
       lapsCompleted: state?.completedLaps.length ?? 0,

@@ -1,8 +1,9 @@
 // src/ui/AppLayout.tsx
-import { AppBar, Box, Container, Toolbar, Typography, Button, Chip, Tooltip } from "@mui/material";
+import TimerIcon from "@mui/icons-material/Timer";
+import { AppBar, Box, Button, Chip, Container, IconButton, Toolbar, Tooltip, Typography } from "@mui/material";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { useEventList } from "../providers/EventListProvider";
 
+import { useEventList } from "../providers/EventListProvider";
 
 export default function AppLayout() {
   const { status, error } = useEventList();
@@ -14,13 +15,8 @@ export default function AppLayout() {
   // Mark "Active Event" as active also while working inside race sub-pages (starters/scoring)
   const isActiveEvent = location.pathname === "/" || isStartersPage || isScoringPage;
   const isEvents = location.pathname.startsWith("/events");
-    const isVisualizations = location.pathname.startsWith("/visualizations");
-  const isLiveTracking = location.pathname.startsWith("/live-tracking");
+  const isVisualizations = location.pathname.startsWith("/visualizations");
   const isAbout = location.pathname.startsWith("/about");
-
-
-
-
 
   const label =
     status === "connected"
@@ -54,20 +50,10 @@ export default function AppLayout() {
             <Button color="inherit" component={Link} to="/events" variant={isEvents ? "outlined" : "text"}>
               Events
             </Button>
-                        <Button
-              color="inherit"
-              component={Link}
-              to="/visualizations"
-              variant={isVisualizations ? "outlined" : "text"}
-            >
+            <Button color="inherit" component={Link} to="/visualizations" variant={isVisualizations ? "outlined" : "text"}>
               Visualizations
             </Button>
-            <Button color="inherit" component={Link} to="/live-tracking" variant={isLiveTracking ? "outlined" : "text"}>
-              Live Tracking
-            </Button>
           </Box>
-
-
 
           {/* spacer */}
           <Box sx={{ flexGrow: 1 }} />
@@ -77,11 +63,15 @@ export default function AppLayout() {
             <Chip size="small" variant="outlined" label={label} color={color} sx={{ mr: 2 }} />
           </Tooltip>
 
-          {/* right-aligned button */}
+          {/* right-aligned buttons */}
           <Button color="inherit" component={Link} to="/about" variant={isAbout ? "outlined" : "text"}>
             About
           </Button>
-
+          <Tooltip title="Open Live Tracking" arrow>
+            <IconButton color="inherit" component={Link} to="/live-tracking/setup" aria-label="Open Live Tracking" sx={{ ml: 0.5 }}>
+              <TimerIcon />
+            </IconButton>
+          </Tooltip>
         </Toolbar>
       </AppBar>
 
@@ -94,7 +84,6 @@ export default function AppLayout() {
           <Outlet />
         </Container>
       )}
-
     </Box>
   );
 }

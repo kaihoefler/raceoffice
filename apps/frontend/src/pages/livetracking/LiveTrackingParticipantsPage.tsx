@@ -36,8 +36,9 @@ import {
   type StarterImportRow,
 } from "@raceoffice/domain";
 import { useNavigate } from "react-router-dom";
-import RaceStartersImport from "../components/RaceStartersImport";
-import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
+import RaceStartersImport from "../../components/RaceStartersImport";
+import { useRealtimeDoc } from "../../realtime/useRealtimeDoc";
+
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -263,7 +264,8 @@ export default function LiveTrackingParticipantsPage() {
           action={
             <Tooltip title="Back to Live Tracking" arrow>
               <span>
-                <IconButton onClick={() => navigate("/live-tracking")} aria-label="Back to Live Tracking">
+                                <IconButton onClick={() => navigate("/live-tracking/setup")} aria-label="Back to Live Tracking">
+
                   <HomeIcon />
                 </IconButton>
               </span>
