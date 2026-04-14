@@ -11,7 +11,7 @@ permissions:
 jobs:
   build-release:
     runs-on: windows-latest
-        env:
+    env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       RELEASE_TAG: ${{ github.ref_name }}
       ZIP_NAME: raceoffice-${{ github.ref_name }}.zip
