@@ -19,7 +19,13 @@
     "build:server": "npm --workspace @raceoffice/server run build",
     "dev:server": "npm --workspace @raceoffice/server run dev",
     "start:server": "npm --workspace @raceoffice/server run start",
-    "build:all": "npm run build && npm run build:server",
+    "build:livetracking-worker": "npm --workspace @raceoffice/livetracking-worker run build",
+    "dev:livetracking-worker": "npm --workspace @raceoffice/livetracking-worker run dev",
+    "start:livetracking-worker": "npm --workspace @raceoffice/livetracking-worker run start",
+    "build:livetracking-frontend": "npm --workspace @raceoffice/livetracking-frontend run build",
+    "dev:livetracking-frontend": "npm --workspace @raceoffice/livetracking-frontend run dev",
+    "preview:livetracking-frontend": "npm --workspace @raceoffice/livetracking-frontend run preview",
+    "build:all": "npm run build && npm run build:server && npm run build:livetracking-worker && npm run build:livetracking-frontend",
     "deploy": "node scripts/deploy.mjs"
   }
 }

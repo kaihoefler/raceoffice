@@ -13,6 +13,8 @@ export default defineConfig({
       "/ws": { target: "http://localhost:8787", ws: true },
       "/sse": { target: "http://localhost:8787", changeOrigin: true },
       "/health": { target: "http://localhost:8787" },
+      "/live-tracking/worker": { target: "http://localhost:8787", changeOrigin: true },
+      "/current_race_result": { target: "http://localhost:8787", changeOrigin: true },
     },
   },
 })

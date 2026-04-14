@@ -32,7 +32,10 @@ jobs:
 
       
 
-      - name: Download WinSW (v2.12.0) + portable Node.exe
+            
+
+      - name: Download WinSW + portable Node.exe + AMMC tools
+
         shell: powershell
         run: |
           # --- WinSW ---
@@ -51,7 +54,35 @@ jobs:
           Expand-Archive -Path $zipName -DestinationPath nodezip
           Copy-Item "nodezip\node-v$nodeVer-win-x64\node.exe" -Destination "tools\node\node.exe" -Force
 
+          # --- AMMC tools (from ammc-latest.zip) ---
+          New-Item -ItemType Directory -Force tools\ammc | Out-Null
+          $ammcZip = "ammc-latest.zip"
+          $ammcUrl = "https://www.ammconverter.eu/ammc-latest.zip"
+          Invoke-WebRequest -Uri $ammcUrl -OutFile $ammcZip
+
+          if (Test-Path ammczip) { Remove-Item ammczip -Recurse -Force }
+          Expand-Archive -Path $ammcZip -DestinationPath ammczip
+
+          $entries = Get-ChildItem -Path ammczip
+          if ($entries.Count -eq 1 -and $entries[0].PSIsContainer) {
+            $ammcSourcePath = $entries[0].FullName
+          } else {
+            $ammcSourcePath = "ammczip"
+          }
+
+          Copy-Item "$ammcSourcePath\*" -Destination "tools\ammc" -Recurse -Force
+
+          # Validate AMMC payload to fail fast on broken/changed upstream archive.
+          $ammcExecutables = Get-ChildItem -Path "tools\ammc" -Recurse -File -Filter "ammc-*.exe"
+          if ($ammcExecutables.Count -eq 0) {
+            Write-Error "AMMC download validation failed: no ammc-*.exe found under tools\ammc"
+            exit 1
+          }
+
+          Write-Host "AMMC executables found:" ($ammcExecutables | ForEach-Object { $_.FullName } | Out-String)
+
       - name: Build deploy folder
+
         run: npm run deploy
 
       - name: Create ZIP from deploy folder

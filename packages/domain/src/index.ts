@@ -25,6 +25,13 @@ export function sumPoints(points: number[]): number {
 // Core shared domain types.
 export type { AgeGroup } from "./agegroup.js";
 export type { Athlete } from "./athlete.js";
+export type {
+  CsvParseResult,
+  SkippedStarterRowInfo,
+  StarterImportAnalysis,
+  StarterImportRow,
+} from "./starterImport.js";
+
 export type { Event, EventList, FullEvent } from "./event.js";
 export type { Race } from "./race.js";
 export type {
@@ -53,3 +60,14 @@ export {
   filterActivitiesByAllowedBibs,
   removeBibFromActivities,
 } from "./raceActivitiesActions.js";
+
+// Shared starter-import parsing + mapping helpers.
+export {
+  analyzeStarterImportCsv,
+  buildHeaderIndex,
+  parseDelimitedText,
+} from "./starterImport.js";
+
+// LiveTracking domain model (phase 0 baseline).
+export * from "./livetracking/index.js";
+

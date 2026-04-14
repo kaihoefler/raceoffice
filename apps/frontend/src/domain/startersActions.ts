@@ -1,15 +1,4 @@
-import type { Athlete } from "@raceoffice/domain";
-
-/**
- * Generic row type for importing/merging starters.
- * (Used by RaceStartersImport + other sources such as Live feeds.)
- */
-export type StarterImportRow = {
-  bib: number | null;
-  firstName: string;
-  lastName: string;
-  nation: string | null;
-};
+import type { Athlete, StarterImportRow } from "@raceoffice/domain";
 
 /**
  * Normalizes an IOC/nation code.
@@ -54,6 +43,16 @@ export function makeNameKey(row: {
     .toUpperCase()}`;
 }
 
+function normalizeTransponderIds(ids: string[] | undefined): string[] {
+  const unique = new Set<string>();
+  for (const raw of ids ?? []) {
+    const normalized = String(raw ?? "").trim();
+    if (!normalized) continue;
+    unique.add(normalized);
+  }
+  return [...unique];
+}
+
 /**
  * Converts import rows to Athletes (new ids).
  * Filters out rows without first+last name.
@@ -68,6 +67,7 @@ export function rowsToAthletes(rows: StarterImportRow[], ageGroupId: string): At
       lastName: String(r.lastName ?? "").trim(),
       nation: r.nation,
       ageGroupId,
+      transponderIds: normalizeTransponderIds(r.transponderIds),
     }));
 }
 
@@ -110,6 +110,7 @@ export function mergeStarters(existing: Athlete[], rows: StarterImportRow[], age
       lastName,
       nation: r.nation,
       ageGroupId,
+      transponderIds: normalizeTransponderIds(r.transponderIds),
     };
 
     const match =
@@ -161,6 +162,7 @@ export function upsertStarters(existing: Athlete[], incoming: Athlete[]): Athlet
       updatesById.set(match.id, {
         ...match,
         ...inc,
+        transponderIds: normalizeTransponderIds(inc.transponderIds ?? match.transponderIds),
         id: match.id,
       });
     } else {

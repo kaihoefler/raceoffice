@@ -9,6 +9,7 @@ import { router } from "./router";
 import { EventListProvider } from "./providers/EventListProvider";
 import { VisualizationListProvider } from "./providers/VisualizationListProvider";
 import { RaceStatusProvider } from "./providers/RaceStatusProvider";
+import { LiveTrackingVisualizationListProvider } from "./providers/LiveTrackingVisualizationListProvider";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -16,9 +17,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <CssBaseline />
       <EventListProvider>
         <VisualizationListProvider>
-          <RaceStatusProvider>
-            <RouterProvider router={router} />
-          </RaceStatusProvider>
+          <LiveTrackingVisualizationListProvider>
+            <RaceStatusProvider>
+              <RouterProvider router={router} />
+            </RaceStatusProvider>
+          </LiveTrackingVisualizationListProvider>
         </VisualizationListProvider>
       </EventListProvider>
     </ThemeProvider>

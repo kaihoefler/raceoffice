@@ -13,4 +13,12 @@ export type Athlete = {
   bib: number | null;
   ageGroupId: string | null;
   nation: string | null;
+
+  /**
+   * Optional chip ids linked to this athlete.
+   *
+   * Kept optional for backwards compatibility with older persisted documents;
+   * new imports should set this field explicitly.
+   */
+  transponderIds?: string[];
 };
