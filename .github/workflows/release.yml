@@ -11,8 +11,11 @@ permissions:
 jobs:
   build-release:
     runs-on: windows-latest
-    env:
+        env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      RELEASE_TAG: ${{ github.ref_name }}
+      ZIP_NAME: raceoffice-${{ github.ref_name }}.zip
+
 
     steps:
       - name: Checkout
@@ -88,11 +91,13 @@ jobs:
       - name: Create ZIP from deploy folder
         shell: powershell
         run: |
-          if (Test-Path raceoffice.zip) { Remove-Item raceoffice.zip -Force }
-          Compress-Archive -Path deploy\* -DestinationPath raceoffice.zip
+          if (Test-Path $env:ZIP_NAME) { Remove-Item $env:ZIP_NAME -Force }
+          Compress-Archive -Path deploy\* -DestinationPath $env:ZIP_NAME
+
 
       - name: Create GitHub Release + upload asset
         uses: softprops/action-gh-release@v2
         with:
-          files: raceoffice.zip
+          files: ${{ env.ZIP_NAME }}
           generate_release_notes: true
+
