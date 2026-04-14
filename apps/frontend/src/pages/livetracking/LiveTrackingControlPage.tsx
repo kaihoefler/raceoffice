@@ -22,7 +22,10 @@ import {
 import {
   canIssueLiveTrackingCommand,
   createLiveTrackingCommand,
+  createLiveTrackingResultsDocument,
   enqueueLiveTrackingCommand,
+
+
   makeLiveTrackingParticipantPoolDocId,
   makeLiveTrackingResultsDocId,
   makeLiveTrackingRuntimeDocId,
@@ -41,7 +44,12 @@ import {
 } from "@raceoffice/domain";
 
 import { Link as RouterLink } from "react-router-dom";
+import LiveTrackingLiveBoard from "../../components/livetracking/LiveTrackingLiveBoard";
+import { getLiveTrackingControlGuards } from "./liveTrackingControlGuards";
+
+import { resolveLiveTrackingDisplayName } from "../../components/livetracking/liveTrackingDisplayName";
 import { useRealtimeDoc } from "../../realtime/useRealtimeDoc";
+
 
 
 
@@ -66,13 +74,15 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function formatMs(ms: number | null): string {
-  if (ms == null) return "—";
-  return `${Math.floor(ms / 1000)}.${String(ms % 1000).padStart(3, "0")}s`;
-}
+
 
 // Simulator baseline speed requested by operations: 30 km/h.
 const SIM_SPEED_M_PER_S = (30 * 1000) / 3600;
+
+// Reset behavior policy toggles (explicitly documented to keep operator semantics clear).
+const RESET_CLEARS_RUNTIME_BUFFERS = true;
+const RESET_CLEARS_RESULTS = false;
+
 
 function calcSimPassingDelayMs(trackLengthM: number): string {
   const safeLength = Number.isFinite(trackLengthM) ? Math.max(0, trackLengthM) : 0;
@@ -109,7 +119,8 @@ export default function LiveTrackingControlPage() {
     const { data: session, update: updateSession } = useRealtimeDoc<LiveTrackingSessionDocument>(sessionDocId);
 
     const { data: runtime, update: updateRuntime } = useRealtimeDoc<LiveTrackingRuntimeDocument>(runtimeDocId);
-  const { data: results } = useRealtimeDoc<LiveTrackingResultsDocument>(resultsDocId);
+    const { data: results, update: updateResults } = useRealtimeDoc<LiveTrackingResultsDocument>(resultsDocId);
+
 
   const sessionParticipantPoolDocId = useMemo(() => {
     if (!session) return "";
@@ -148,15 +159,7 @@ export default function LiveTrackingControlPage() {
   }, [participantPoolDoc]);
 
 
-  const sortedAthleteLiveStates = useMemo(() => {
-    const rows = [...(results?.athleteLiveStates ?? [])];
-    rows.sort((a, b) => {
-      const ams = a.lastPassingAt ? Date.parse(a.lastPassingAt) : Number.NEGATIVE_INFINITY;
-      const bms = b.lastPassingAt ? Date.parse(b.lastPassingAt) : Number.NEGATIVE_INFINITY;
-      return bms - ams;
-    });
-    return rows;
-  }, [results]);
+    
 
   const sessionForDebug = useMemo(
 
@@ -186,7 +189,11 @@ export default function LiveTrackingControlPage() {
   const { data: setupDoc, update: updateSetup } = useRealtimeDoc<LiveTrackingSetupDocument>(setupDocId);
   const setupJson = useMemo(() => (setupDoc ? JSON.stringify(setupDoc, null, 2) : "—"), [setupDoc]);
 
-  const [setupDraft, setSetupDraft] = useState<SetupDraft | null>(null);
+    const [setupDraft, setSetupDraft] = useState<SetupDraft | null>(null);
+  const [workerControlBusy, setWorkerControlBusy] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+
 
     useEffect(() => {
     if (!session) return;
@@ -205,13 +212,19 @@ export default function LiveTrackingControlPage() {
   }, [session]);
 
 
-  useEffect(() => {
+    useEffect(() => {
     if (!setupDoc) {
       setSetupDraft(null);
       return;
     }
     setSetupDraft(toSetupDraft(setupDoc));
   }, [setupDoc]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 5_000);
+    return () => clearInterval(timer);
+  }, []);
+
 
     const setupIssues = useMemo(() => {
     if (!setupDraft) return [];
@@ -327,10 +340,92 @@ export default function LiveTrackingControlPage() {
     });
   }
 
-  function canQueue(intent: LiveTrackingCommandIntent): boolean {
-    if (!session) return false;
-    return canIssueLiveTrackingCommand(session.state, intent);
+      
+
+
+
+      async function postWorkerControl(action: "start" | "stop"): Promise<boolean> {
+    try {
+      const response = await fetch(`/live-tracking/worker/${action}`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        console.error(`[live-tracking] worker ${action} request failed with status ${response.status}`);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error(`[live-tracking] worker ${action} request failed`, error);
+      return false;
+    }
   }
+
+
+    async function handleStartWorker() {
+    setWorkerControlBusy(true);
+    try {
+      const ok = await postWorkerControl("start");
+      if (!ok) window.alert("Start Worker failed. Check browser console and server logs.");
+    } finally {
+      setWorkerControlBusy(false);
+    }
+  }
+
+
+    async function handleShutdownWorker() {
+    const shouldQueueShutdown = !!session && canIssueLiveTrackingCommand(session.state, "shutdown");
+
+    setWorkerControlBusy(true);
+    try {
+      if (shouldQueueShutdown) queue("shutdown");
+      await postWorkerControl("stop");
+    } finally {
+      setWorkerControlBusy(false);
+    }
+  }
+
+
+    async function handleReset() {
+    setWorkerControlBusy(true);
+    try {
+      if ((runtime?.workerStatus ?? "offline") !== "offline") {
+        await postWorkerControl("stop");
+      }
+
+      // Reset is an explicit operator safety action: force session back to idle
+      // regardless of queued command history.
+      updateSession((prev) => ({
+        ...prev,
+        desiredState: "idle",
+        state: "idle",
+        lastError: null,
+        updatedAt: nowIso(),
+      }));
+
+      if (RESET_CLEARS_RUNTIME_BUFFERS) {
+        updateRuntime((prev) => ({
+          ...prev,
+          recentPassings: [],
+          recentRawPayloads: [],
+          warnings: [],
+          workerStatusCheck: null,
+          updatedAt: nowIso(),
+        }));
+      }
+
+      if (RESET_CLEARS_RESULTS) {
+        updateResults(() => ({
+          ...createLiveTrackingResultsDocument(),
+          generatedAt: nowIso(),
+        }));
+      }
+    } finally {
+      setWorkerControlBusy(false);
+    }
+  }
+
 
   function clearRuntimeBuffers() {
     updateRuntime((prev) => ({
@@ -341,6 +436,7 @@ export default function LiveTrackingControlPage() {
       updatedAt: nowIso(),
     }));
   }
+
 
   function patchPoint(index: number, patch: Partial<LiveTrackingTimingPoint>) {
     setSetupDraft((prev) => {
@@ -416,7 +512,19 @@ export default function LiveTrackingControlPage() {
     });
   }
 
+      const workerStatus = runtime?.workerStatus ?? "offline";
+    const guards = getLiveTrackingControlGuards({
+    workerStatus,
+    workerHeartbeatAt: runtime?.workerHeartbeatAt,
+    nowMs,
+    sessionState: session?.state ?? null,
+    workerControlBusy,
+  });
+
+
+
   function saveSetup() {
+
     if (!setupDraft) return;
     const stableTrackId = setupDraft.trackId.trim() || `track-${crypto.randomUUID().slice(0, 8)}`;
         const normalizedPoints = normalizeTimingPoints(setupDraft.timingPoints).map((point) => {
@@ -488,18 +596,43 @@ export default function LiveTrackingControlPage() {
               />
             </Stack>
 
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                            <Button variant={trackingConfigDirty ? "contained" : "outlined"} onClick={saveSessionConfig} disabled={!trackingConfigDirty}>Save Tracking Setup</Button>
-              <Button variant={canQueue("prepare") ? "contained" : "outlined"} onClick={() => queue("prepare")} disabled={!canQueue("prepare")}>Prepare</Button>
-              <Button variant={canQueue("start") ? "contained" : "outlined"} onClick={() => queue("start")} disabled={!canQueue("start")}>Start</Button>
-              <Button variant={canQueue("stop") ? "contained" : "outlined"} onClick={() => queue("stop")} disabled={!canQueue("stop")}>Stop</Button>
-              <Button variant={canQueue("shutdown") ? "contained" : "outlined"} onClick={() => queue("shutdown")} disabled={!canQueue("shutdown")}>Shutdown</Button>
-              <Button variant={canQueue("reset") ? "contained" : "outlined"} onClick={() => queue("reset")} disabled={!canQueue("reset")}>Reset</Button>
+                        <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+              <Button variant={trackingConfigDirty ? "contained" : "outlined"} onClick={saveSessionConfig} disabled={!trackingConfigDirty || workerControlBusy}>
+                Save Tracking Setup
+              </Button>
+                            <Button variant={guards.canStartWorker ? "contained" : "outlined"} onClick={handleStartWorker} disabled={!guards.canStartWorker}>
 
-              <Button color="warning" variant="outlined" onClick={clearRuntimeBuffers}>Clear Passings/Runtime Buffers</Button>
-              <Button component={RouterLink} to="/live-tracking/participants" variant="outlined">Manage Setup Pools</Button>
+                Start Worker
+              </Button>
+                            <Button variant={guards.canPrepareTracking ? "contained" : "outlined"} onClick={() => queue("prepare")} disabled={!guards.canPrepareTracking}>
 
+                Prepare Tracking
+              </Button>
+                            <Button variant={guards.canStartTracking ? "contained" : "outlined"} onClick={() => queue("start")} disabled={!guards.canStartTracking}>
+
+                Start Tracking
+              </Button>
+                            <Button variant={guards.canStopTracking ? "contained" : "outlined"} onClick={() => queue("stop")} disabled={!guards.canStopTracking}>
+
+                Stop Tracking
+              </Button>
+                            <Button color="warning" variant={guards.canShutdownWorker ? "contained" : "outlined"} onClick={handleShutdownWorker} disabled={!guards.canShutdownWorker}>
+
+                Shutdown Worker
+              </Button>
+                            <Button color="secondary" variant={guards.canResetTracking ? "contained" : "outlined"} onClick={handleReset} disabled={!guards.canResetTracking}>
+
+                Reset
+              </Button>
+
+              <Button color="warning" variant="outlined" onClick={clearRuntimeBuffers} disabled={workerControlBusy}>
+                Clear Passings/Runtime Buffers
+              </Button>
+              <Button component={RouterLink} to="/live-tracking/participants" variant="outlined">
+                Manage Setup Pools
+              </Button>
             </Stack>
+
           </Stack>
         </CardContent>
       </Card>
@@ -627,70 +760,25 @@ export default function LiveTrackingControlPage() {
         </CardContent>
       </Card>
 
-      <Card variant="outlined">
+            <Card variant="outlined">
         <CardHeader title="Live Board" />
         <Divider />
         <CardContent>
-          <Table size="small">
-            <TableHead>
-                            <TableRow>
-                <TableCell>Athlete</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Laps</TableCell>
-                <TableCell align="right">Last Lap</TableCell>
-                <TableCell align="right">Best Lap</TableCell>
-                <TableCell>Splits (current lap)</TableCell>
-              </TableRow>
-
-            </TableHead>
-                        <TableBody>
-              {sortedAthleteLiveStates.map((row) => {
-                                const participantName = participantNameByAthleteId.get(row.athleteId) ?? null;
-                const participantNameByChip = row.transponderId
-                  ? participantNameByTransponderId.get(String(row.transponderId).trim()) ?? null
-                  : null;
-                const computedName = `${String(row.firstName ?? "").trim()} ${String(row.lastName ?? "").trim()}`.trim();
-                const syntheticUnknownName = computedName === String(row.transponderId ?? "").trim();
-                const displayName =
-                  participantName ||
-                  participantNameByChip ||
-                  (!syntheticUnknownName ? computedName : "") ||
-                  row.athleteId;
-
-
-                return (
-                <TableRow key={row.athleteId}>
-                  <TableCell>{displayName}</TableCell>
-
-                  <TableCell>{row.activityStatus}</TableCell>
-                  <TableCell align="right">{row.lapsCompleted}</TableCell>
-                  <TableCell align="right">{formatMs(row.lastLapTimeMs)}</TableCell>
-                  <TableCell align="right">{formatMs(row.bestLapTimeMs)}</TableCell>
-                  <TableCell>
-                                        {row.currentLapSplits.length > 0
-                      ? row.currentLapSplits
-                          .map((split) => `${timingPointLabelById.get(split.timingPointId) ?? split.timingPointId}: ${formatMs(split.splitTimeMs)}`)
-                          .join(" | ")
-                      : "—"}
-
-                  </TableCell>
-                                </TableRow>
-                );
-              })}
-
-              {sortedAthleteLiveStates.length === 0 ? (
-
-                <TableRow>
-                                    <TableCell colSpan={6}>
-
-                    <Typography color="text.secondary">No live athletes yet.</Typography>
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
+          <LiveTrackingLiveBoard
+            athleteLiveStates={results?.athleteLiveStates ?? []}
+            resolveDisplayName={(row) =>
+              resolveLiveTrackingDisplayName({
+                row,
+                participantNameByAthleteId,
+                participantNameByTransponderId,
+              })
+            }
+            variant="split-inline"
+            timingPointLabelById={timingPointLabelById}
+          />
         </CardContent>
       </Card>
+
 
       <Card variant="outlined">
         <CardHeader title="Debug View" />

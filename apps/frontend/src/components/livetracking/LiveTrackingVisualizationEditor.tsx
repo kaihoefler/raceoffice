@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Box, Button, Card, CardContent, CardHeader, Divider, InputAdornment, MenuItem, Stack, TextField, Typography } from "@mui/material";
 
-import { useLiveTrackingVisualizationList } from "../providers/LiveTrackingVisualizationListProvider";
-import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
-import type { FullLiveTrackingVisualization } from "../types/liveTrackingVisualization";
+import { useLiveTrackingVisualizationList } from "../../providers/LiveTrackingVisualizationListProvider";
+import { useRealtimeDoc } from "../../realtime/useRealtimeDoc";
+import type { FullLiveTrackingVisualization } from "../../types/liveTrackingVisualization";
 
 type Props = {
   open: boolean;

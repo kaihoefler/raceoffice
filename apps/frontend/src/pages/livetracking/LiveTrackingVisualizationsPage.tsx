@@ -24,7 +24,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import DesktopWindowsIcon from "@mui/icons-material/DesktopWindows";
 import EditIcon from "@mui/icons-material/Edit";
 
-import LiveTrackingVisualizationEditor from "../../components/LiveTrackingVisualizationEditor";
+import LiveTrackingVisualizationEditor from "../../components/livetracking/LiveTrackingVisualizationEditor";
 import { useLiveTrackingVisualizationList } from "../../providers/LiveTrackingVisualizationListProvider";
 import type { LiveTrackingVisualization } from "../../types/liveTrackingVisualization";
 

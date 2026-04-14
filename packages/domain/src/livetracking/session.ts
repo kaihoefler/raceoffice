@@ -13,6 +13,13 @@ import { makeLiveTrackingParticipantPoolDocId } from "./ids.js";
 
 export type LiveTrackingMode = "training" | "qualifying";
 
+/**
+ * Measurement lifecycle state.
+ *
+ * This is intentionally different from runtime.workerStatus:
+ * - session state tracks sporting measurement flow (prepare/start/stop/reset)
+ * - worker status tracks process liveness/health.
+ */
 export type LiveTrackingSessionState =
   | "idle"
   | "preparing"
@@ -20,6 +27,7 @@ export type LiveTrackingSessionState =
   | "running"
   | "stopping"
   | "error";
+
 
 export type LiveTrackingCommandIntent = "prepare" | "start" | "stop" | "shutdown" | "reset";
 

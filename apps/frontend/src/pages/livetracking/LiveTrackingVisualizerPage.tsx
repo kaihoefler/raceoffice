@@ -189,7 +189,9 @@ export default function LiveTrackingVisualizerPage() {
   }, [results, startFinishTimingPointId]);
 
   const sortedAthleteLiveStates = useMemo(() => {
-    const rows = [...(results?.athleteLiveStates ?? [])];
+    // Training/standard board should only show athletes with at least one passing,
+    // consistent with the other live-tracking views.
+    const rows = [...(results?.athleteLiveStates ?? [])].filter((row) => Boolean(row.lastPassingAt));
     rows.sort((a, b) => {
       const ams = a.lastPassingAt ? Date.parse(a.lastPassingAt) : Number.NEGATIVE_INFINITY;
       const bms = b.lastPassingAt ? Date.parse(b.lastPassingAt) : Number.NEGATIVE_INFINITY;

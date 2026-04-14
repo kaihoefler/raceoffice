@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import FlagIcon from "@mui/icons-material/Flag";
 import { AppBar, Box, Button, Chip, Container, IconButton, Toolbar, Tooltip, Typography } from "@mui/material";
@@ -29,6 +29,8 @@ function liveTrackingStateColor(state: LiveTrackingSessionDocument["state"] | un
 }
 
 const ACTIVE_WARNING = "Live Tracking is still activated. Please stop Live Tracking bevore closing this page.";
+const WORKER_HEARTBEAT_STALE_MS = 30_000;
+const WORKER_STATUS_CHECK_TIMEOUT_MS = 5_000;
 
 export default function LiveTrackingLayout() {
   const location = useLocation();
@@ -37,11 +39,96 @@ export default function LiveTrackingLayout() {
   const runtimeDocId = useMemo(() => makeLiveTrackingRuntimeDocId(), []);
 
   const { data: session, status: sessionStatus } = useRealtimeDoc<LiveTrackingSessionDocument>(sessionDocId);
-  const { data: runtime } = useRealtimeDoc<LiveTrackingRuntimeDocument>(runtimeDocId);
+  const { data: runtime, update: updateRuntime } = useRealtimeDoc<LiveTrackingRuntimeDocument>(runtimeDocId);
 
-  const workerState = runtime?.workerStatus ?? "offline";
+  const [workerCheckPhase, setWorkerCheckPhase] = useState<"idle" | "waiting" | "acked" | "timeout">("idle");
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  const hasSentInitialWorkerStatusCheckRef = useRef(false);
+  const pendingWorkerStatusCheckRef = useRef<{ requestId: string; requestedAtMs: number } | null>(null);
+  const workerStatusCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const heartbeatMs = Number.isFinite(Date.parse(String(runtime?.workerHeartbeatAt ?? "")))
+    ? Date.parse(String(runtime?.workerHeartbeatAt ?? ""))
+    : Number.NaN;
+  const heartbeatFresh = Number.isFinite(heartbeatMs) && nowMs - heartbeatMs <= WORKER_HEARTBEAT_STALE_MS;
+
+  const workerState: LiveTrackingRuntimeDocument["workerStatus"] = heartbeatFresh
+    ? (runtime?.workerStatus ?? "offline")
+    : "offline";
   const liveTrackingState = session?.state ?? "idle";
   const shouldPreventLeaving = workerState !== "offline" || liveTrackingState !== "idle";
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 5_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!runtime) return;
+    if (hasSentInitialWorkerStatusCheckRef.current) return;
+
+    hasSentInitialWorkerStatusCheckRef.current = true;
+
+    const requestId = crypto.randomUUID();
+    const requestedAt = new Date().toISOString();
+    const requestedAtMs = Date.parse(requestedAt);
+
+    pendingWorkerStatusCheckRef.current = { requestId, requestedAtMs };
+    setWorkerCheckPhase("waiting");
+
+    updateRuntime((prev) => ({
+      ...prev,
+      workerStatusCheck: {
+        action: "checkStatus",
+        requestId,
+        requestedAt,
+      },
+      updatedAt: new Date().toISOString(),
+    }));
+
+    workerStatusCheckTimeoutRef.current = setTimeout(() => {
+      if (pendingWorkerStatusCheckRef.current?.requestId !== requestId) return;
+      pendingWorkerStatusCheckRef.current = null;
+      setWorkerCheckPhase("timeout");
+    }, WORKER_STATUS_CHECK_TIMEOUT_MS);
+  }, [runtime, updateRuntime]);
+
+  useEffect(() => {
+    const pending = pendingWorkerStatusCheckRef.current;
+    if (!pending || !runtime) return;
+
+    const checkStillPending = runtime.workerStatusCheck?.requestId === pending.requestId;
+    if (checkStillPending) return;
+
+    const ackMs = Number.isFinite(Date.parse(String(runtime.lastCheckAckAt ?? "")))
+      ? Date.parse(String(runtime.lastCheckAckAt ?? ""))
+      : Number.NaN;
+    const latestHeartbeatMs = Number.isFinite(Date.parse(String(runtime.workerHeartbeatAt ?? "")))
+      ? Date.parse(String(runtime.workerHeartbeatAt ?? ""))
+      : Number.NaN;
+
+    const acknowledged =
+      (Number.isFinite(ackMs) && ackMs >= pending.requestedAtMs) ||
+      (Number.isFinite(latestHeartbeatMs) && latestHeartbeatMs >= pending.requestedAtMs);
+
+    if (!acknowledged) return;
+
+    pendingWorkerStatusCheckRef.current = null;
+    if (workerStatusCheckTimeoutRef.current) {
+      clearTimeout(workerStatusCheckTimeoutRef.current);
+      workerStatusCheckTimeoutRef.current = null;
+    }
+    setWorkerCheckPhase("acked");
+  }, [runtime]);
+
+  useEffect(() => {
+    return () => {
+      if (!workerStatusCheckTimeoutRef.current) return;
+      clearTimeout(workerStatusCheckTimeoutRef.current);
+      workerStatusCheckTimeoutRef.current = null;
+    };
+  }, []);
 
   const blocker = useBlocker(({ nextLocation }) => {
     if (!shouldPreventLeaving) return false;
@@ -103,7 +190,11 @@ export default function LiveTrackingLayout() {
 
           <Box sx={{ display: "flex", gap: 1, mr: 1 }}>
             <Chip size="small" label={`Control Link: ${sessionStatus}`} color={sessionStatus === "connected" ? "success" : "default"} />
-            <Chip size="small" label={`Worker State: ${workerState}`} color={workerStatusColor(runtime?.workerStatus)} />
+            <Chip
+              size="small"
+              label={`Worker State: ${workerState}${workerCheckPhase === "waiting" ? " (check…)" : workerCheckPhase === "timeout" ? " (check timeout)" : ""}`}
+              color={workerStatusColor(workerState)}
+            />
             <Chip size="small" label={`LiveTracking State: ${liveTrackingState}`} color={liveTrackingStateColor(session?.state)} />
           </Box>
 

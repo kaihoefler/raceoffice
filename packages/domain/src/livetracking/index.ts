@@ -74,14 +74,18 @@ export {
   createLiveTrackingRuntimeDocument,
   isLiveTrackingRuntimeDecoderState,
   isLiveTrackingRuntimePassingEvent,
-  isLiveTrackingRuntimeRawPayload,
+    isLiveTrackingRuntimeRawPayload,
+  isLiveTrackingWorkerStatusCheck,
   isLiveTrackingRuntimeDocument,
   type LiveTrackingWorkerStatus,
+
   type LiveTrackingRuntimeDecoderState,
   type LiveTrackingRuntimePassingEvent,
-  type LiveTrackingRuntimeRawPayload,
+    type LiveTrackingRuntimeRawPayload,
+  type LiveTrackingWorkerStatusCheck,
   type LiveTrackingRuntimeDocument,
 } from "./runtime.js";
+
 
 export {
   createLiveTrackingResultsDocument,

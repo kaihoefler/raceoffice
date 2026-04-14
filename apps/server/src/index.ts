@@ -6,12 +6,15 @@
  * - Persist revisioned JSON documents in SQLite
  * - Synchronize docs via WebSocket JSON-Patch protocol
  * - Offer optional SSE snapshots/patch stream
- * - Expose lightweight service endpoints (/health, /current_race_result)
+ * - Expose service endpoints and wire feature-specific route modules
  *
  * Architectural rule:
  * - This process is the single source of truth for document persistence.
  * - Clients/workers only interact through document ids + revisions + patches.
+ * - Feature-specific concerns (e.g. LiveTracking worker lifecycle routes) should
+ *   live in dedicated service modules, not in the generic realtime core.
  */
+
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import { FastifySSEPlugin } from "fastify-sse-v2";
@@ -22,13 +25,28 @@ import cors from "@fastify/cors";
 
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
+
 import {
   buildCurrentRaceResultPayload,
   resolveCurrentRaceContext,
 } from "./services/currentRaceResultService.js";
-import { createInitialLiveTrackingDocument } from "@raceoffice/domain";
+import {
+  createInitialLiveTrackingDocument,
+  createLiveTrackingRuntimeDocument,
+  isLiveTrackingRuntimeDocument,
+  makeLiveTrackingRuntimeDocId,
+} from "@raceoffice/domain";
+import { LiveTrackingWorkerManager } from "./services/liveTrackingWorkerManager.js";
+import {
+  LIVE_TRACKING_WORKER_SERVICE_ENDPOINTS,
+  registerLiveTrackingWorkerRoutes,
+} from "./services/liveTrackingWorkerRoutes.js";
+
+
+
 
 
 
@@ -79,9 +97,20 @@ function readArg(name: string): string | null {
   return value ?? null;
 }
 
+// Server bind configuration (CLI args override env defaults).
+const port = Number(readArg("--port") ?? process.env.PORT ?? 8787);
+const host = readArg("--host") ?? process.env.HOST ?? "0.0.0.0";
+
+// Worker reaches the server over loopback by default because both run on same host.
+const liveTrackingServerUrl =
+  readArg("--livetracking-server-url") ??
+  process.env.LIVETRACKING_SERVER_URL ??
+  process.env.RACEOFFICE_SERVER_URL ??
+  `http://127.0.0.1:${port}`;
 
 // Fastify application with structured logger enabled.
 const app = Fastify({ logger: true });
+
 
 
 
@@ -178,7 +207,88 @@ function saveDoc(id: string, doc: Doc) {
   upsertDocStmt.run({ id, rev: doc.rev, json: JSON.stringify(doc.data) });
 }
 
+/**
+ * Server-originated document mutation helper.
+ *
+ * Why this exists:
+ * - server-side services (like worker lifecycle manager) must be able to mutate
+ *   docs without going through websocket patch clients
+ * - subscribers still need a deterministic realtime update frame
+ */
+function commitServerDocUpdate(docId: string, updater: (currentData: unknown) => unknown): Doc {
+  const current = loadDoc(docId);
+  const nextData = updater(structuredClone(current.data));
+  const next: Doc = { rev: current.rev + 1, data: nextData };
+  saveDoc(docId, next);
+
+  // Broadcast as full-document replace patch to keep ws/sse consumers in sync.
+  broadcastPatch(docId, next.rev, [{ op: "replace", path: "", value: next.data }]);
+  return next;
+}
+
+const LIVE_TRACKING_RUNTIME_DOC_ID = makeLiveTrackingRuntimeDocId();
+
+function commitLiveTrackingRuntimeUpdate(
+  updater: (runtime: ReturnType<typeof createLiveTrackingRuntimeDocument>) => ReturnType<typeof createLiveTrackingRuntimeDocument>,
+): void {
+  commitServerDocUpdate(LIVE_TRACKING_RUNTIME_DOC_ID, (currentData) => {
+    const runtime = isLiveTrackingRuntimeDocument(currentData)
+      ? {
+          ...createLiveTrackingRuntimeDocument(),
+          ...currentData,
+        }
+      : createLiveTrackingRuntimeDocument();
+
+    return updater(runtime);
+  });
+}
+
+const liveTrackingWorkerManager = new LiveTrackingWorkerManager({
+  repoRoot: path.resolve(__dirname, "../../.."),
+  liveTrackingServerUrl,
+  logger: {
+    info: (obj, msg) => app.log.info(obj as any, msg),
+    warn: (obj, msg) => app.log.warn(obj as any, msg),
+  },
+  runtimeSync: {
+    markStarting: (pid) => {
+      const t = new Date().toISOString();
+      commitLiveTrackingRuntimeUpdate((runtime) => ({
+        ...runtime,
+        workerStatus: "starting",
+        workerProcessId: pid,
+        workerHost: os.hostname(),
+        updatedAt: t,
+      }));
+    },
+    markStopping: (pid) => {
+      const t = new Date().toISOString();
+      commitLiveTrackingRuntimeUpdate((runtime) => ({
+        ...runtime,
+        workerStatus: "stopping",
+        workerProcessId: pid,
+        workerHost: os.hostname(),
+        updatedAt: t,
+      }));
+    },
+    markOffline: (reason) => {
+      const t = new Date().toISOString();
+      commitLiveTrackingRuntimeUpdate((runtime) => ({
+        ...runtime,
+        workerStatus: "offline",
+        workerHeartbeatAt: null,
+        workerProcessId: null,
+        workerHost: null,
+        updatedAt: t,
+        warnings: [...runtime.warnings.slice(-99), `[server] worker offline: ${reason}`],
+      }));
+    },
+  },
+});
+
+
 // --- In-memory subscriber registries (per docId)
+
 // SSE keeps Fastify reply handles, WS keeps raw socket handles.
 type SSEClient = { id: string; reply: any };
 const sseClients = new Map<string, Set<SSEClient>>(); // docId -> clients
@@ -257,7 +367,10 @@ const publicServiceEndpoints = [
     path: "/current_race_result",
     description: "Current active race result export",
   },
+  ...LIVE_TRACKING_WORKER_SERVICE_ENDPOINTS,
 ] as const;
+
+
 
 /**
  * Standardized JSON body for unknown non-SPA endpoints.
@@ -273,8 +386,13 @@ function serviceDiscoveryBody() {
 // --- Health
 app.get("/health", async () => ({ ok: true }));
 
+// --- LiveTracking worker process lifecycle
+registerLiveTrackingWorkerRoutes(app, liveTrackingWorkerManager);
+
+
 // --- Current race status export for external systems/integrations
 app.get("/current_race_result", async (_req, reply) => {
+
 
   const ctx = resolveCurrentRaceContext(loadDoc);
 
@@ -446,8 +564,10 @@ function noteSnapshot(socket: any, docId: string) {
   console.log("sent snapshot:", docId, doc.rev, doc.data);
 }
 
-// Server bind configuration (CLI args override env defaults).
-const port = Number(readArg("--port") ?? process.env.PORT ?? 8787);
-const host = readArg("--host") ?? process.env.HOST ?? "0.0.0.0";
+app.addHook("onClose", async () => {
+  liveTrackingWorkerManager.stop();
+});
+
 await app.listen({ port, host });
+
 

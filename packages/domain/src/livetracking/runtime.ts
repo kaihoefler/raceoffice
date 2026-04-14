@@ -8,7 +8,17 @@
  * - No persistent setup config and no final sporting ranking should live here.
  */
 
+/**
+ * Worker process lifecycle state.
+ *
+ * Separation rule vs. session state:
+ * - workerStatus answers: "is the worker process alive / starting / stopping?"
+ * - session.state answers: "is measurement idle / preparing / running / ...?"
+ *
+ * They are related, but intentionally not a 1:1 mirror.
+ */
 export type LiveTrackingWorkerStatus = "offline" | "starting" | "ready" | "running" | "stopping" | "error";
+
 
 export type LiveTrackingRuntimeDecoderState = {
   decoderId: string;
@@ -46,11 +56,28 @@ export type LiveTrackingRuntimeRawPayload = {
   payload: string;
 };
 
+/**
+ * Liveness probe request written by clients/server and acknowledged by worker.
+ *
+ * Protocol intent:
+ * - requester writes a new request with unique `requestId`
+ * - worker observes the request, writes fresh heartbeat/ack timestamp
+ * - worker clears `workerStatusCheck` back to null
+ */
+export type LiveTrackingWorkerStatusCheck = {
+  action: "checkStatus";
+  requestId: string;
+  requestedAt: string;
+};
+
 export type LiveTrackingRuntimeDocument = {
   kind: "liveTrackingRuntime";
+
   version: 1;
 
+    /** Worker process lifecycle status (not the sporting session lifecycle). */
   workerStatus: LiveTrackingWorkerStatus;
+
   workerHeartbeatAt: string | null;
   workerProcessId: number | null;
   workerHost: string | null;
@@ -58,10 +85,19 @@ export type LiveTrackingRuntimeDocument = {
   decoders: LiveTrackingRuntimeDecoderState[];
 
   recentPassings: LiveTrackingRuntimePassingEvent[];
+
   recentRawPayloads: LiveTrackingRuntimeRawPayload[];
   warnings: string[];
+
+  /** Client/server initiated liveness probe consumed by worker. */
+  workerStatusCheck: LiveTrackingWorkerStatusCheck | null;
+
+  /** Last successful liveness-probe acknowledgement time (written by worker). */
+  lastCheckAckAt: string | null;
+
   updatedAt: string | null;
 };
+
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -75,13 +111,17 @@ export function createLiveTrackingRuntimeDocument(): LiveTrackingRuntimeDocument
     workerHeartbeatAt: null,
     workerProcessId: null,
     workerHost: null,
-    decoders: [],
+        decoders: [],
     recentPassings: [],
+
     recentRawPayloads: [],
     warnings: [],
+    workerStatusCheck: null,
+    lastCheckAckAt: null,
     updatedAt: null,
   };
 }
+
 
 export function isLiveTrackingRuntimeDecoderState(value: unknown): value is LiveTrackingRuntimeDecoderState {
   if (!isRecord(value)) return false;
@@ -126,8 +166,19 @@ export function isLiveTrackingRuntimeRawPayload(value: unknown): value is LiveTr
   );
 }
 
+export function isLiveTrackingWorkerStatusCheck(value: unknown): value is LiveTrackingWorkerStatusCheck {
+  if (!isRecord(value)) return false;
+
+  return (
+    value.action === "checkStatus" &&
+    typeof value.requestId === "string" &&
+    typeof value.requestedAt === "string"
+  );
+}
+
 export function isLiveTrackingRuntimeDocument(value: unknown): value is LiveTrackingRuntimeDocument {
   if (!isRecord(value)) return false;
+
 
   return (
     value.kind === "liveTrackingRuntime" &&
@@ -145,10 +196,15 @@ export function isLiveTrackingRuntimeDocument(value: unknown): value is LiveTrac
     value.decoders.every(isLiveTrackingRuntimeDecoderState) &&
     Array.isArray(value.recentPassings) &&
     value.recentPassings.every(isLiveTrackingRuntimePassingEvent) &&
-    Array.isArray(value.recentRawPayloads) &&
+        Array.isArray(value.recentRawPayloads) &&
     value.recentRawPayloads.every(isLiveTrackingRuntimeRawPayload) &&
     Array.isArray(value.warnings) &&
+
     value.warnings.every((x) => typeof x === "string") &&
+    // Backwards-compatible acceptance: legacy runtime docs may not have these fields yet.
+    (value.workerStatusCheck === undefined || value.workerStatusCheck === null || isLiveTrackingWorkerStatusCheck(value.workerStatusCheck)) &&
+    (value.lastCheckAckAt === undefined || typeof value.lastCheckAckAt === "string" || value.lastCheckAckAt === null) &&
     (typeof value.updatedAt === "string" || value.updatedAt === null)
   );
 }
+

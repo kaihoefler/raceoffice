@@ -19,9 +19,11 @@ import {
   getNextQueuedLiveTrackingCommand,
   getRunningLiveTrackingCommand,
   buildLiveTrackingResultsProjection,
-  isLiveTrackingParticipantPoolDocument,
+    isLiveTrackingParticipantPoolDocument,
   isLiveTrackingSessionDocument,
   isLiveTrackingSetupDocument,
+  isLiveTrackingWorkerStatusCheck,
+
   makeLiveTrackingResultsDocId,
   makeLiveTrackingRuntimeDocId,
   makeLiveTrackingSessionDocId,
@@ -81,8 +83,10 @@ export class SessionLoop {
   private readonly workerHost = os.hostname();
   private readonly workerProcessId = process.pid;
 
-  private lastSessionState: LiveTrackingSessionDocument["state"] | null = null;
+    private lastSessionState: LiveTrackingSessionDocument["state"] | null = null;
   private lastWorkerStatus: LiveTrackingRuntimeDocument["workerStatus"] | null = null;
+  private lastHandledWorkerStatusCheckRequestId: string | null = null;
+
 
   private readonly ammConnections = new Map<string, AmmConnection>();
   private readonly pendingAmmConnectTimers = new Map<string, NodeJS.Timeout>();
@@ -134,9 +138,11 @@ export class SessionLoop {
       this.scheduleUpdateResultsProjection();
     });
 
-    this.unsubscribeRuntime = this.runtimeClient.onData(() => {
+        this.unsubscribeRuntime = this.runtimeClient.onData(() => {
+      this.handleWorkerStatusCheck();
       this.scheduleUpdateResultsProjection();
     });
+
 
     console.log(
       `[livetracking-worker] session loop started (pid=${this.workerProcessId}, host=${this.workerHost}, sessionDocId=${this.sessionDocId})`,
@@ -175,11 +181,13 @@ export class SessionLoop {
     this.commitRuntimeUpdate((doc) => ({
       ...doc,
       workerStatus: "offline",
-      workerHeartbeatAt: t,
-      workerProcessId: this.workerProcessId,
-      workerHost: this.workerHost,
+      workerHeartbeatAt: null,
+      workerProcessId: null,
+      workerHost: null,
+      workerStatusCheck: null,
       updatedAt: t,
     }));
+
 
     this.setupClient?.close();
     this.setupClient = null;
@@ -278,45 +286,16 @@ export class SessionLoop {
     });
   }
 
-    private isHeartbeatEnabled(sessionOverride?: LiveTrackingSessionDocument | null): boolean {
-    const session = sessionOverride ?? this.sessionClient.data;
-    return !!session && isLiveTrackingSessionDocument(session) && (session.state === "ready" || session.state === "running");
-  }
-
-
-    private syncHeartbeatLifecycle(sessionOverride?: LiveTrackingSessionDocument | null) {
-    const workerStatus = this.mapWorkerStatus(sessionOverride);
-    this.logWorkerStatusTransition(workerStatus);
-
-    if (this.isHeartbeatEnabled(sessionOverride)) {
-      if (!this.heartbeatTimer) {
-        const heartbeatMs = Math.max(5_000, this.options?.heartbeatMs ?? 5_000);
-        this.heartbeatTimer = setInterval(() => this.writeHeartbeat(), heartbeatMs);
-      }
-      this.writeHeartbeat(sessionOverride);
-      return;
+      private syncHeartbeatLifecycle(sessionOverride?: LiveTrackingSessionDocument | null) {
+    if (!this.heartbeatTimer) {
+      const heartbeatMs = Math.max(5_000, this.options?.heartbeatMs ?? 5_000);
+      this.heartbeatTimer = setInterval(() => this.writeHeartbeat(), heartbeatMs);
     }
 
-
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
-
-    const t = nowIso();
-    this.commitRuntimeUpdate((doc) => ({
-      ...doc,
-      workerStatus,
-      workerHeartbeatAt: null,
-      workerProcessId: this.workerProcessId,
-      workerHost: this.workerHost,
-      updatedAt: t,
-    }));
+    this.writeHeartbeat(sessionOverride);
   }
 
-    private writeHeartbeat(sessionOverride?: LiveTrackingSessionDocument | null) {
-    if (!this.isHeartbeatEnabled(sessionOverride)) return;
-
+  private writeHeartbeat(sessionOverride?: LiveTrackingSessionDocument | null) {
     const workerStatus = this.mapWorkerStatus(sessionOverride);
 
     this.logWorkerStatusTransition(workerStatus);
@@ -333,6 +312,7 @@ export class SessionLoop {
       };
     });
   }
+
 
   private logSessionStateTransition() {
     const session = this.sessionClient.data;
@@ -351,18 +331,65 @@ export class SessionLoop {
     console.log(`[livetracking-worker] worker status changed: ${from} -> ${nextStatus}`);
   }
 
-    private mapWorkerStatus(sessionOverride?: LiveTrackingSessionDocument | null): LiveTrackingRuntimeDocument["workerStatus"] {
+        /**
+   * Maps current activity into worker process status signal.
+   *
+   * Important: this is intentionally not a 1:1 mirror of session.state.
+   * Session tracks measurement lifecycle, while workerStatus tracks process lifecycle.
+   */
+  private mapWorkerStatus(sessionOverride?: LiveTrackingSessionDocument | null): LiveTrackingRuntimeDocument["workerStatus"] {
     const session = sessionOverride ?? this.sessionClient.data;
-    if (!session || !isLiveTrackingSessionDocument(session)) return "starting";
 
+    if (!session || !isLiveTrackingSessionDocument(session)) return "ready";
 
     if (session.state === "running") return "running";
     if (session.state === "stopping") return "stopping";
-    if (session.state === "ready") return "ready";
-    if (session.state === "preparing") return "starting";
     if (session.state === "error") return "error";
-    return "offline";
+    return "ready";
   }
+
+  /**
+   * Consumes one pending worker-status probe request from runtime document.
+   *
+   * Protocol:
+   * - requester writes `{ action: "checkStatus", requestId, requestedAt }`
+   * - worker acknowledges exactly once per requestId
+   * - worker heartbeat + ack timestamp are refreshed and the request is cleared
+   */
+  private handleWorkerStatusCheck() {
+    const runtime = this.runtimeClient.data;
+    if (!runtime) return;
+
+    const check = runtime.workerStatusCheck;
+    if (!isLiveTrackingWorkerStatusCheck(check)) return;
+    if (this.lastHandledWorkerStatusCheckRequestId === check.requestId) return;
+
+    this.lastHandledWorkerStatusCheckRequestId = check.requestId;
+    this.acknowledgeWorkerStatusCheck(check.requestId);
+  }
+
+  private acknowledgeWorkerStatusCheck(requestId: string) {
+    const workerStatus = this.mapWorkerStatus();
+    this.logWorkerStatusTransition(workerStatus);
+
+    this.commitRuntimeUpdate((doc) => {
+      const t = nowIso();
+      const matchesRequest =
+        isLiveTrackingWorkerStatusCheck(doc.workerStatusCheck) && doc.workerStatusCheck.requestId === requestId;
+
+      return {
+        ...doc,
+        workerStatus,
+        workerHeartbeatAt: t,
+        workerProcessId: this.workerProcessId,
+        workerHost: this.workerHost,
+        workerStatusCheck: matchesRequest ? null : doc.workerStatusCheck ?? null,
+        lastCheckAckAt: matchesRequest ? t : doc.lastCheckAckAt ?? null,
+        updatedAt: t,
+      };
+    });
+  }
+
 
   private ensureSetupClient(): LiveTrackingSetupDocument | null {
     const session = this.sessionClient.data;
