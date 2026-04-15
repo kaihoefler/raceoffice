@@ -126,6 +126,28 @@ describe("livetracking/timingEngine", () => {
     expect(results.invalidEvents.some((x) => x.reason === "unknown_transponder")).toBe(false);
   });
 
+    it("evaluates lap on start/finish even when splits are missing", () => {
+    const passings: LiveTrackingPassingEvent[] = [
+      p("1", "2026-01-01T10:00:00.000Z", "12345", "sf"),
+      p("2", "2026-01-01T10:00:30.000Z", "12345", "sf"), // missing all splits, but lap is valid
+    ];
+
+    const results = buildLiveTrackingResultsProjection({
+      passings,
+      track,
+      athletes,
+      generatedAt: "2026-01-01T10:00:31.000Z",
+      options: {
+        minLapTimeMs: 20_000,
+      },
+    });
+
+    const state = results.athleteLiveStates.find((x) => x.athleteId === "a1");
+    expect(state?.lapsCompleted).toBe(1);
+    expect(state?.lastLapTimeMs).toBe(30_000);
+    expect(results.invalidEvents.some((x) => x.reason === "sequence")).toBe(false);
+  });
+
   it("validates timing-point sequence", () => {
     const passings: LiveTrackingPassingEvent[] = [
       p("1", "2026-01-01T10:00:00.000Z", "12345", "sf"),
@@ -142,3 +164,4 @@ describe("livetracking/timingEngine", () => {
     expect(results.invalidEvents.some((x) => x.reason === "sequence")).toBe(true);
   });
 });
+

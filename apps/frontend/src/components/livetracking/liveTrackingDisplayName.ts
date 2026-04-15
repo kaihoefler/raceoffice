@@ -23,5 +23,12 @@ export function resolveLiveTrackingDisplayName(args: {
   const computedName = `${String(row.firstName ?? "").trim()} ${String(row.lastName ?? "").trim()}`.trim();
   const syntheticUnknownName = computedName === String(row.transponderId ?? "").trim();
 
-  return participantName || participantNameByChip || (!syntheticUnknownName ? computedName : "") || row.athleteId;
+  const unknownTransponderPrefix = "unknown:transponder:";
+  const fallbackAthleteId = String(row.athleteId ?? "").trim();
+  const fallbackDisplay = fallbackAthleteId.startsWith(unknownTransponderPrefix)
+    ? String(row.transponderId ?? "").trim() || fallbackAthleteId.slice(unknownTransponderPrefix.length)
+    : fallbackAthleteId;
+
+  return participantName || participantNameByChip || (!syntheticUnknownName ? computedName : "") || fallbackDisplay;
 }
+

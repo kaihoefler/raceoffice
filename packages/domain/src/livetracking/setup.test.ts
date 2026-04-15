@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { normalizeTimingPoints, validateLiveTrackingTrack, type LiveTrackingTrack } from "./setup.js";
 
 describe("livetracking/setup", () => {
-  it("normalizes order and derives absolutePositionM from distanceFromPreviousM", () => {
+    it("normalizes order, derived positions and decoder timestamp offset defaults", () => {
+
     const normalized = normalizeTimingPoints([
       {
         id: "tp-3",
@@ -45,9 +46,11 @@ describe("livetracking/setup", () => {
 
     expect(normalized.map((x) => x.id)).toEqual(["tp-1", "tp-2", "tp-3"]);
     expect(normalized.map((x) => x.order)).toEqual([1, 2, 3]);
-    expect(normalized.map((x) => x.absolutePositionM)).toEqual([0, 50, 120]);
+        expect(normalized.map((x) => x.absolutePositionM)).toEqual([0, 50, 120]);
     expect(normalized[0].distanceFromPreviousM).toBe(0);
+    expect(normalized.map((x) => x.decoderTimestampOffsetSecs)).toEqual([0, 0, 0]);
   });
+
 
   it("validates exactly one enabled start_finish", () => {
     const track: LiveTrackingTrack = {
@@ -136,7 +139,34 @@ describe("livetracking/setup", () => {
     expect(issues.some((x) => x.code === "timing_point_order_not_contiguous")).toBe(true);
   });
 
+    it("validates decoder timestamp offset bounds", () => {
+    const track: LiveTrackingTrack = {
+      id: "track-1",
+      name: "Track",
+      lengthM: 500,
+      timingPoints: [
+        {
+          id: "a",
+          name: "A",
+          decoderId: "d1",
+          decoderIp: "10.0.0.1",
+          websocketPortAMM: 5001,
+          decoderTimestampOffsetSecs: 90_000,
+          order: 1,
+          distanceFromPreviousM: 0,
+          absolutePositionM: 0,
+          role: "start_finish",
+          enabled: true,
+        },
+      ],
+    };
+
+    const issues = validateLiveTrackingTrack(track);
+    expect(issues.some((x) => x.code === "timing_point_decoder_time_offset_invalid")).toBe(true);
+  });
+
   it("validates distance plausibility and absolute position against track length", () => {
+
     const track: LiveTrackingTrack = {
       id: "track-1",
       name: "Track",

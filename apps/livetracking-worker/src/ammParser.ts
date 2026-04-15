@@ -35,11 +35,16 @@ function toRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function normalizeTimestamp(value: unknown): string | null {
+function normalizeTimestamp(value: unknown, offsetSecs: number): string | null {
   if (typeof value !== "string") return null;
-  const iso = new Date(value).toISOString();
-  return iso === "Invalid Date" ? null : iso;
+
+  const baseMs = Date.parse(value);
+  if (!Number.isFinite(baseMs)) return null;
+
+  const correctedMs = baseMs + offsetSecs * 1000;
+  return new Date(correctedMs).toISOString();
 }
+
 
 function normalizeTransponder(value: unknown): string | null {
   if (typeof value === "number" && Number.isFinite(value)) return String(Math.trunc(value));
@@ -65,15 +70,17 @@ function buildEventId(args: {
  */
 export function normalizeAmmPayloadToPassing(args: {
   payload: unknown;
-  timingPoint: Pick<LiveTrackingTimingPoint, "id" | "decoderId">;
+  timingPoint: Pick<LiveTrackingTimingPoint, "id" | "decoderId" | "decoderTimestampOffsetSecs">;
 }): AmmNormalizedPassing | null {
+
   const record = toRecord(args.payload);
   if (!record) return null;
 
   const payload = record as AmmPassingPayload;
   const warnings: string[] = [];
 
-  const timestamp = normalizeTimestamp(payload.rtc_time);
+    const timestamp = normalizeTimestamp(payload.rtc_time, Number(args.timingPoint.decoderTimestampOffsetSecs ?? 0));
+
   if (!timestamp) return null;
 
   // Real-world AMM payloads may use either `transponder` or `tran_code`.

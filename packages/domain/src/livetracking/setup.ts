@@ -36,11 +36,21 @@ export type LiveTrackingTimingPoint = {
   /** Simulator-only passing delay argument (string to support fixed/range formats). */
   simPassingDelay?: string;
 
-  /** Simulator-only startup delay in seconds (for controlled ordering between points). */
+    /** Simulator-only startup delay in seconds (for controlled ordering between points). */
   simStartupDelaySecs?: number;
 
+  /**
+   * Decoder-side timestamp offset in seconds.
+   *
+   * Domain rule:
+   * - applied later by ingestion/parser layer to align decoder-local clocks
+   * - positive values shift passings into the future, negative into the past
+   * - default is `0` (no correction)
+   */
+  decoderTimestampOffsetSecs?: number;
 
   /** Logical order around the track (1..N). */
+
   order: number;
 
   /** Distance from the previous timing-point in meters. */
@@ -106,8 +116,10 @@ export type LiveTrackingSetupValidationIssue = {
     | "timing_point_start_finish_count"
     | "timing_point_distance_invalid"
     | "timing_point_duplicate_id"
-    | "timing_point_duplicate_decoder_endpoint"
-    | "timing_point_absolute_position_exceeds_track_length";
+        | "timing_point_duplicate_decoder_endpoint"
+    | "timing_point_absolute_position_exceeds_track_length"
+    | "timing_point_decoder_time_offset_invalid";
+
   message: string;
   timingPointId?: string;
 };
@@ -124,6 +136,10 @@ function toFiniteNumber(value: unknown, fallback = 0): number {
 function toFiniteInt(value: unknown, fallback = 0): number {
   return Math.floor(toFiniteNumber(value, fallback));
 }
+
+// Hard safety bounds to avoid accidental multi-day shifts from malformed setup data.
+const MAX_ABS_DECODER_TIMESTAMP_OFFSET_SECS = 86_400;
+
 
 function sortTimingPointsByOrder(points: LiveTrackingTimingPoint[]): LiveTrackingTimingPoint[] {
   const list = Array.isArray(points) ? [...points] : [];
@@ -196,9 +212,14 @@ export function normalizeTimingPoints(points: LiveTrackingTimingPoint[]): LiveTr
       simTranCodes: Array.isArray(point.simTranCodes)
         ? point.simTranCodes.map((x) => String(x ?? "").trim()).filter(Boolean)
         : [],
-      simPassingDelay: String(point.simPassingDelay ?? "1000").trim() || "1000",
+            simPassingDelay: String(point.simPassingDelay ?? "1000").trim() || "1000",
       simStartupDelaySecs: Math.max(0, toFiniteInt(point.simStartupDelaySecs, 0)),
+      decoderTimestampOffsetSecs: Math.max(
+        -MAX_ABS_DECODER_TIMESTAMP_OFFSET_SECS,
+        Math.min(MAX_ABS_DECODER_TIMESTAMP_OFFSET_SECS, toFiniteInt(point.decoderTimestampOffsetSecs, 0)),
+      ),
       enabled: Boolean(point.enabled),
+
 
     };
   });
@@ -252,7 +273,7 @@ export function validateLiveTrackingTrack(track: LiveTrackingTrack): LiveTrackin
       decoderEndpoints.add(endpoint);
     }
 
-    const order = toFiniteInt(point.order, 0);
+        const order = toFiniteInt(point.order, 0);
     orders.push(order);
     if (order < 1) {
       issues.push({
@@ -261,6 +282,19 @@ export function validateLiveTrackingTrack(track: LiveTrackingTrack): LiveTrackin
         timingPointId: id || undefined,
       });
     }
+
+    const rawOffsetSecs = point.decoderTimestampOffsetSecs;
+    if (rawOffsetSecs !== undefined) {
+      const offsetSecs = Number(rawOffsetSecs);
+      if (!Number.isFinite(offsetSecs) || Math.abs(offsetSecs) > MAX_ABS_DECODER_TIMESTAMP_OFFSET_SECS) {
+        issues.push({
+          code: "timing_point_decoder_time_offset_invalid",
+          message: `Decoder time offset must be a finite number between -${MAX_ABS_DECODER_TIMESTAMP_OFFSET_SECS} and +${MAX_ABS_DECODER_TIMESTAMP_OFFSET_SECS} seconds.`,
+          timingPointId: id || undefined,
+        });
+      }
+    }
+
   }
 
   const validOrders = orders.filter((x) => x >= 1).sort((a, b) => a - b);
@@ -331,9 +365,11 @@ export function isLiveTrackingTimingPoint(value: unknown): value is LiveTracking
         typeof value.websocketPortAMM === "number" &&
     (value.decoderType === undefined || value.decoderType === "amb" || value.decoderType === "sim") &&
     (value.simTranCodes === undefined || (Array.isArray(value.simTranCodes) && value.simTranCodes.every((x) => typeof x === "string"))) &&
-    (value.simPassingDelay === undefined || typeof value.simPassingDelay === "string") &&
+        (value.simPassingDelay === undefined || typeof value.simPassingDelay === "string") &&
     (value.simStartupDelaySecs === undefined || typeof value.simStartupDelaySecs === "number") &&
+    (value.decoderTimestampOffsetSecs === undefined || typeof value.decoderTimestampOffsetSecs === "number") &&
     typeof value.order === "number" &&
+
 
     typeof value.distanceFromPreviousM === "number" &&
     typeof value.absolutePositionM === "number" &&

@@ -16,9 +16,11 @@ import {
 } from "@raceoffice/domain";
 import { useParams } from "react-router-dom";
 
+import { resolveLiveTrackingDisplayName } from "../../components/livetracking/liveTrackingDisplayName";
 import { useLiveTrackingVisualizationList } from "../../providers/LiveTrackingVisualizationListProvider";
 import { useRealtimeDoc } from "../../realtime/useRealtimeDoc";
 import type { FullLiveTrackingVisualization } from "../../types/liveTrackingVisualization";
+
 
 const flagModules = import.meta.glob("../../assets/flags/*.svg", {
   eager: true,
@@ -281,16 +283,14 @@ export default function LiveTrackingVisualizerPage() {
     return qualificationRankingRows.slice(start, start + qualificationPagingLines);
   }, [qualificationPagingEnabled, qualificationRankingRows, qualificationCurrentPage, qualificationPagingLines]);
 
-  function getDisplayName(row: LiveTrackingAthleteLiveState): string {
-    const participantName = participantNameByAthleteId.get(row.athleteId) ?? null;
-    const participantNameByChip = row.transponderId
-      ? participantNameByTransponderId.get(String(row.transponderId).trim()) ?? null
-      : null;
-    const computedName = `${String(row.firstName ?? "").trim()} ${String(row.lastName ?? "").trim()}`.trim();
-    const syntheticUnknownName = computedName === String(row.transponderId ?? "").trim();
-
-    return participantName || participantNameByChip || (!syntheticUnknownName ? computedName : "") || row.athleteId;
+    function getDisplayName(row: LiveTrackingAthleteLiveState): string {
+    return resolveLiveTrackingDisplayName({
+      row,
+      participantNameByAthleteId,
+      participantNameByTransponderId,
+    });
   }
+
 
   if (!effectiveVisualizationId) {
     return (

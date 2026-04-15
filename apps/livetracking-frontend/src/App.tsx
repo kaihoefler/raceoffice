@@ -65,6 +65,26 @@ function formatMs(ms: number | null): string {
   return `${Math.floor(ms / 1000)}.${String(ms % 1000).padStart(3, "0")}s`;
 }
 
+function resolveDisplayName(row: { athleteId: string; transponderId: string | null; firstName: string; lastName: string }): string {
+  const unknownPrefix = "unknown:transponder:";
+
+  const athleteId = String(row.athleteId ?? "").trim();
+  const transponderId = String(row.transponderId ?? "").trim();
+  const firstName = String(row.firstName ?? "").trim();
+  const lastName = String(row.lastName ?? "").trim();
+  const fullName = `${firstName} ${lastName}`.trim();
+
+  if (fullName && !fullName.startsWith(unknownPrefix)) return fullName;
+  if (lastName && !lastName.startsWith(unknownPrefix)) return lastName;
+
+  if (athleteId.startsWith(unknownPrefix)) {
+    return transponderId || athleteId.slice(unknownPrefix.length);
+  }
+
+  return athleteId;
+}
+
+
 // Simulator baseline speed requested by operations: 30 km/h.
 const SIM_SPEED_M_PER_S = (30 * 1000) / 3600;
 
@@ -355,8 +375,10 @@ export default function LiveTrackingControlPage() {
             simTranCodes: [],
             simPassingDelay: "1000",
             simStartupDelaySecs: 0,
+            decoderTimestampOffsetSecs: 0,
 
             order,
+
             distanceFromPreviousM: order === 1 ? 0 : 100,
             absolutePositionM: 0,
             role: order === 1 ? "start_finish" : "split",
@@ -486,11 +508,20 @@ export default function LiveTrackingControlPage() {
 
               <Table size="small">
                 <TableHead>
-                  <TableRow>
-                                                            <TableCell>#</TableCell><TableCell>Name</TableCell><TableCell>Role</TableCell><TableCell>Decoder</TableCell><TableCell>IP</TableCell><TableCell>WS</TableCell><TableCell>Dist (m)</TableCell><TableCell>Enabled</TableCell><TableCell>Simulation</TableCell><TableCell>Actions</TableCell>
-
-
+                                    <TableRow>
+                    <TableCell>#</TableCell>
+                    <TableCell>Name</TableCell>
+                    <TableCell>Role</TableCell>
+                    <TableCell>Decoder</TableCell>
+                    <TableCell>IP</TableCell>
+                    <TableCell>WS</TableCell>
+                    <TableCell>Time Offset (s)</TableCell>
+                    <TableCell>Dist (m)</TableCell>
+                    <TableCell>Enabled</TableCell>
+                    <TableCell>Simulation</TableCell>
+                    <TableCell>Actions</TableCell>
                   </TableRow>
+
                 </TableHead>
                                 <TableBody>
                                     {setupDraft.timingPoints.map((point, index) => {
@@ -515,8 +546,17 @@ export default function LiveTrackingControlPage() {
                           </TableCell>
                           <TableCell><TextField size="small" value={point.decoderId} onChange={(e) => patchPoint(index, { decoderId: e.target.value })} /></TableCell>
                           <TableCell><TextField size="small" value={point.decoderIp} onChange={(e) => patchPoint(index, { decoderIp: e.target.value })} /></TableCell>
-                          <TableCell><TextField size="small" type="number" value={point.websocketPortAMM} onChange={(e) => patchPoint(index, { websocketPortAMM: Number(e.target.value) })} /></TableCell>
+                                                    <TableCell><TextField size="small" type="number" value={point.websocketPortAMM} onChange={(e) => patchPoint(index, { websocketPortAMM: Number(e.target.value) })} /></TableCell>
+                          <TableCell>
+                            <TextField
+                              size="small"
+                              type="number"
+                              value={point.decoderTimestampOffsetSecs ?? 0}
+                              onChange={(e) => patchPoint(index, { decoderTimestampOffsetSecs: Number(e.target.value) })}
+                            />
+                          </TableCell>
                           <TableCell><TextField size="small" type="number" value={point.distanceFromPreviousM} onChange={(e) => patchPoint(index, { distanceFromPreviousM: Number(e.target.value) })} /></TableCell>
+
                           <TableCell><Checkbox checked={point.enabled} onChange={(e) => patchPoint(index, { enabled: e.target.checked })} /></TableCell>
                           <TableCell>
                                                         <Checkbox
@@ -530,7 +570,8 @@ export default function LiveTrackingControlPage() {
                         </TableRow>
                         {simulationEnabled ? (
                           <TableRow key={`${point.id}:sim`}>
-                            <TableCell colSpan={10}>
+                                                        <TableCell colSpan={11}>
+
                               <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
                                 <TextField
                                   size="small"
@@ -598,9 +639,10 @@ export default function LiveTrackingControlPage() {
 
             </TableHead>
             <TableBody>
-                            {(results?.athleteLiveStates ?? []).map((row) => (
+                                                        {(results?.athleteLiveStates ?? []).map((row) => (
                 <TableRow key={row.athleteId}>
-                  <TableCell>{row.lastName || row.athleteId}</TableCell>
+                  <TableCell>{resolveDisplayName(row)}</TableCell>
+
                   <TableCell>{row.activityStatus}</TableCell>
                   <TableCell align="right">{row.lapsCompleted}</TableCell>
                   <TableCell align="right">{formatMs(row.lastLapTimeMs)}</TableCell>

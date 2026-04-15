@@ -301,7 +301,7 @@ export default function LiveTrackingControlPage() {
     return JSON.stringify(currentComparable) !== JSON.stringify(draftComparable);
   }, [setupDoc, setupDraft, trackingDraft]);
 
-  const timingPointLabelById = useMemo(() => {
+    const timingPointLabelById = useMemo(() => {
     const map = new Map<string, string>();
     const points = setupDraft?.timingPoints ?? (setupDoc ? normalizeTimingPoints(setupDoc.track.timingPoints) : []);
 
@@ -312,6 +312,23 @@ export default function LiveTrackingControlPage() {
 
     return map;
   }, [setupDraft, setupDoc]);
+
+  function resolveControlBoardDisplayName(row: LiveTrackingResultsDocument["athleteLiveStates"][number]): string {
+    const resolved = resolveLiveTrackingDisplayName({
+      row,
+      participantNameByAthleteId,
+      participantNameByTransponderId,
+    });
+
+    const unknownPrefix = "unknown:transponder:";
+    if (resolved.startsWith(unknownPrefix)) {
+      const transponderId = String(row.transponderId ?? "").trim();
+      return transponderId || resolved.slice(unknownPrefix.length);
+    }
+
+    return resolved;
+  }
+
 
   function saveSessionConfig() {
 
@@ -493,8 +510,10 @@ export default function LiveTrackingControlPage() {
             simTranCodes: [],
             simPassingDelay: "1000",
             simStartupDelaySecs: 0,
+            decoderTimestampOffsetSecs: 0,
 
             order,
+
             distanceFromPreviousM: order === 1 ? 0 : 100,
             absolutePositionM: 0,
             role: order === 1 ? "start_finish" : "split",
@@ -653,11 +672,17 @@ export default function LiveTrackingControlPage() {
 
               <Table size="small">
                 <TableHead>
-                  <TableRow>
-                                                            <TableCell>#</TableCell><TableCell>Name</TableCell><TableCell>Role</TableCell><TableCell>Decoder</TableCell><TableCell>IP</TableCell><TableCell>WS</TableCell><TableCell>Dist (m)</TableCell><TableCell>Enabled</TableCell><TableCell>Simulation</TableCell><TableCell>Actions</TableCell>
-
-
+                                                      <TableRow>
+                    <TableCell>#</TableCell>
+                    <TableCell>Name</TableCell>
+                    <TableCell>Role</TableCell>
+                    <TableCell>Dist (m)</TableCell>
+                    <TableCell>Enabled</TableCell>
+                    <TableCell>Simulation</TableCell>
+                    <TableCell>Actions</TableCell>
                   </TableRow>
+
+
                 </TableHead>
                                 <TableBody>
                                     {setupDraft.timingPoints.map((point, index) => {
@@ -671,7 +696,11 @@ export default function LiveTrackingControlPage() {
                                         return (
                       <Fragment key={point.id}>
 
-                        <TableRow key={`${point.id}:base`}>
+                                                <TableRow
+                          key={`${point.id}:base`}
+                          sx={{ "& > td": { borderBottom: "none" } }}
+                        >
+
                           <TableCell>{index + 1}</TableCell>
                           <TableCell><TextField size="small" value={point.name} onChange={(e) => patchPoint(index, { name: e.target.value })} /></TableCell>
                           <TableCell>
@@ -680,11 +709,10 @@ export default function LiveTrackingControlPage() {
                               <MenuItem value="split">split</MenuItem>
                             </TextField>
                           </TableCell>
-                          <TableCell><TextField size="small" value={point.decoderId} onChange={(e) => patchPoint(index, { decoderId: e.target.value })} /></TableCell>
-                          <TableCell><TextField size="small" value={point.decoderIp} onChange={(e) => patchPoint(index, { decoderIp: e.target.value })} /></TableCell>
-                          <TableCell><TextField size="small" type="number" value={point.websocketPortAMM} onChange={(e) => patchPoint(index, { websocketPortAMM: Number(e.target.value) })} /></TableCell>
                           <TableCell><TextField size="small" type="number" value={point.distanceFromPreviousM} onChange={(e) => patchPoint(index, { distanceFromPreviousM: Number(e.target.value) })} /></TableCell>
+
                           <TableCell><Checkbox checked={point.enabled} onChange={(e) => patchPoint(index, { enabled: e.target.checked })} /></TableCell>
+
                           <TableCell>
                                                         <Checkbox
                               checked={simulationEnabled}
@@ -694,10 +722,53 @@ export default function LiveTrackingControlPage() {
 
                           </TableCell>
                           <TableCell><Button size="small" color="error" onClick={() => removePoint(index)}>Delete</Button></TableCell>
+                                                </TableRow>
+
+                                                                        <TableRow
+                          key={`${point.id}:decoder`}
+                          sx={simulationEnabled ? { "& > td": { borderBottom: "none" } } : undefined}
+                        >
+
+                          <TableCell />
+                          <TableCell colSpan={6}>
+                            <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+
+                              <TextField
+                                size="small"
+                                label="Decoder"
+                                value={point.decoderId}
+                                onChange={(e) => patchPoint(index, { decoderId: e.target.value })}
+                              />
+                              <TextField
+                                size="small"
+                                label="IP"
+                                value={point.decoderIp}
+                                onChange={(e) => patchPoint(index, { decoderIp: e.target.value })}
+                              />
+                              <TextField
+                                size="small"
+                                type="number"
+                                label="WS"
+                                value={point.websocketPortAMM}
+                                onChange={(e) => patchPoint(index, { websocketPortAMM: Number(e.target.value) })}
+                              />
+                              <TextField
+                                size="small"
+                                type="number"
+                                label="Time Offset (s)"
+                                value={point.decoderTimestampOffsetSecs ?? 0}
+                                onChange={(e) => patchPoint(index, { decoderTimestampOffsetSecs: Number(e.target.value) })}
+                              />
+                            </Stack>
+                          </TableCell>
                         </TableRow>
+
                         {simulationEnabled ? (
+
                           <TableRow key={`${point.id}:sim`}>
-                            <TableCell colSpan={10}>
+                                                                                                                <TableCell colSpan={7}>
+
+
                               <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
                                 <TextField
                                   size="small"
@@ -764,18 +835,13 @@ export default function LiveTrackingControlPage() {
         <CardHeader title="Live Board" />
         <Divider />
         <CardContent>
-          <LiveTrackingLiveBoard
+                    <LiveTrackingLiveBoard
             athleteLiveStates={results?.athleteLiveStates ?? []}
-            resolveDisplayName={(row) =>
-              resolveLiveTrackingDisplayName({
-                row,
-                participantNameByAthleteId,
-                participantNameByTransponderId,
-              })
-            }
+            resolveDisplayName={resolveControlBoardDisplayName}
             variant="split-inline"
             timingPointLabelById={timingPointLabelById}
           />
+
         </CardContent>
       </Card>
 

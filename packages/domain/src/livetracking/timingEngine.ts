@@ -249,13 +249,18 @@ export function buildLiveTrackingResultsProjection(args: {
       continue;
     }
 
-    if (athlete.expectedOrder !== null && point.order !== athlete.expectedOrder) {
+        // Sequence rule exception for start/finish:
+    // laps must still be evaluable when split passings are partially or fully missing.
+    // As soon as min-lap-time passes, a new start/finish passing can close a valid lap.
+    const isStartFinishPassing = Boolean(startFinish && point.id === startFinish.id);
+    if (!isStartFinishPassing && athlete.expectedOrder !== null && point.order !== athlete.expectedOrder) {
       doc.invalidEvents = appendBounded(doc.invalidEvents, {
         passingEventId: passing.id,
         reason: "sequence",
       }, options.keepInvalidEvents);
       continue;
     }
+
 
     if (athlete.lastAcceptedAtMs !== null && eventMs - athlete.lastAcceptedAtMs < options.minSectorTimeMs) {
       doc.invalidEvents = appendBounded(doc.invalidEvents, {
