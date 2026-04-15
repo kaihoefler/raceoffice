@@ -243,9 +243,37 @@ function commitLiveTrackingRuntimeUpdate(
   });
 }
 
+/**
+ * Resolves workspace/deploy root for worker + AMMC path resolution.
+ *
+ * Why dynamic:
+ * - dev layout:   apps/server/dist -> repo root is ../../..
+ * - deploy layout: server/dist      -> deploy root is ../..
+ */
+function resolveLiveTrackingRepoRoot(): string {
+  const explicitRoot = String(process.env.RACEOFFICE_REPO_ROOT ?? "").trim();
+  if (explicitRoot) return path.resolve(explicitRoot);
+
+  const candidates = [
+    path.resolve(__dirname, "../../.."),
+    path.resolve(__dirname, "../.."),
+    process.cwd(),
+  ];
+
+  for (const root of candidates) {
+    const workerDist = path.join(root, "apps", "livetracking-worker", "dist", "index.js");
+    const workerSrc = path.join(root, "apps", "livetracking-worker", "src", "index.ts");
+    if (fs.existsSync(workerDist) || fs.existsSync(workerSrc)) return root;
+  }
+
+  // Keep previous behavior as fallback for deterministic troubleshooting.
+  return path.resolve(__dirname, "../../..");
+}
+
 const liveTrackingWorkerManager = new LiveTrackingWorkerManager({
-  repoRoot: path.resolve(__dirname, "../../.."),
+  repoRoot: resolveLiveTrackingRepoRoot(),
   liveTrackingServerUrl,
+
   logger: {
     info: (obj, msg) => app.log.info(obj as any, msg),
     warn: (obj, msg) => app.log.warn(obj as any, msg),
