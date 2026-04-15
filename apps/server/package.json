@@ -21,7 +21,7 @@
     "@raceoffice/domain": "file:../../packages/domain",
     "better-sqlite3": "^12.5.0",
     "fast-json-patch": "^3.1.1",
-    "fastify": "^5.6.2",
+    "fastify": "^5.8.5",
     "fastify-sse-v2": "^4.2.1"
   },
   "devDependencies": {
