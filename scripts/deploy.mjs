@@ -47,13 +47,25 @@ async function copyFileIfExists(src, dst) {
   return true;
 }
 
+// Copy directory only when present.
+// Returns true when copied, false when source does not exist.
+async function copyDirIfExists(src, dst) {
+  if (!(await exists(src))) return false;
+  await copyDir(src, dst);
+  return true;
+}
+
+
 async function main() {
   const repoRoot = process.cwd();
 
   const deployDir = path.join(repoRoot, "deploy");
-  const serverSrcDir = path.join(repoRoot, "apps", "server");
+    const serverSrcDir = path.join(repoRoot, "apps", "server");
+  const workerSrcDir = path.join(repoRoot, "apps", "livetracking-worker");
   const domainSrcDir = path.join(repoRoot, "packages", "domain");
   const serverOutDir = path.join(deployDir, "server");
+  const workerOutDir = path.join(deployDir, "apps", "livetracking-worker");
+
 
   console.log("\n== RaceOffice deploy ==\n");
 
@@ -78,10 +90,10 @@ async function main() {
   await copyFileIfExists(path.join(domainSrcDir, "package.json"), path.join(deployDir, "packages", "domain", "package.json"));
   await copyDir(path.join(domainSrcDir, "dist"), path.join(deployDir, "packages", "domain", "dist"));
 
-  // 4) Install production dependencies into deploy/server/node_modules.
+    // 4) Install production dependencies into deploy/server/node_modules.
   // Prefer npm ci when lockfile exists for deterministic installs.
-  const lockPresent = fsSync.existsSync(path.join(serverOutDir, "package-lock.json"));
-  run(lockPresent ? "npm ci --omit=dev" : "npm install --omit=dev", { cwd: serverOutDir });
+  const serverLockPresent = fsSync.existsSync(path.join(serverOutDir, "package-lock.json"));
+  run(serverLockPresent ? "npm ci --omit=dev" : "npm install --omit=dev", { cwd: serverOutDir });
 
   // IMPORTANT (release ZIP reliability):
   // Ensure @raceoffice/domain is materialized as real files inside
@@ -91,6 +103,24 @@ async function main() {
     path.join(deployDir, "packages", "domain"),
     path.join(serverOutDir, "node_modules", "@raceoffice", "domain")
   );
+
+  // 4b) Copy livetracking-worker runtime artifacts.
+  // The server's worker manager resolves worker entry relative to repo root:
+  // deploy/apps/livetracking-worker/dist/index.js
+  await copyDir(path.join(workerSrcDir, "dist"), path.join(workerOutDir, "dist"));
+  await copyFileIfExists(path.join(workerSrcDir, "package.json"), path.join(workerOutDir, "package.json"));
+  await copyFileIfExists(path.join(workerSrcDir, "package-lock.json"), path.join(workerOutDir, "package-lock.json"));
+
+  // Install worker production dependencies as well.
+  const workerLockPresent = fsSync.existsSync(path.join(workerOutDir, "package-lock.json"));
+  run(workerLockPresent ? "npm ci --omit=dev" : "npm install --omit=dev", { cwd: workerOutDir });
+
+  // Materialize domain package for worker too (same ZIP/link safety reason).
+  await copyDir(
+    path.join(deployDir, "packages", "domain"),
+    path.join(workerOutDir, "node_modules", "@raceoffice", "domain")
+  );
+
 
   // 5) Create standard runtime folders used by service/default config.
   await fs.mkdir(path.join(serverOutDir, "logs"), { recursive: true });
@@ -112,10 +142,19 @@ async function main() {
     path.join(serverOutDir, "RaceOfficeServer.exe")
   );
 
-  const copiedWinSwXml = await copyFileIfExists(
+    const copiedWinSwXml = await copyFileIfExists(
     path.join(repoRoot, "tools", "winsw", "RaceOfficeServer.xml"),
     path.join(serverOutDir, "RaceOfficeServer.xml")
   );
+
+  // LiveTracking AMMC binaries are resolved relative to repo root in worker runtime
+  // (default: tools/ammc/<platform>/ammc-{amb|sim}).
+  // Mirror that folder into deploy/tools/ammc to keep runtime paths intact.
+  const copiedAmmcTools = await copyDirIfExists(
+    path.join(repoRoot, "tools", "ammc"),
+    path.join(deployDir, "tools", "ammc")
+  );
+
 
   // If no WinSW XML was provided, write a sane default config.
   // Default binds publicly (0.0.0.0) on port 8787 and points to ProgramData DB path.
@@ -199,8 +238,14 @@ async function main() {
       "Quick check (inside deploy/server):",
       `  node\\node.exe present: ${copiedNode}`,
       `  RaceOfficeServer.exe present: ${copiedWinSwExe}`,
-      `  RaceOfficeServer.xml present: ${copiedWinSwXml}`,
-      `  node_modules\\@raceoffice\\domain present: ${fsSync.existsSync(path.join(serverOutDir, "node_modules", "@raceoffice", "domain"))}`,
+            `  RaceOfficeServer.xml present: ${copiedWinSwXml}`,
+            `  tools\\ammc present: ${copiedAmmcTools}`,
+      `  worker dist present: ${fsSync.existsSync(path.join(workerOutDir, "dist", "index.js"))}`,
+      `  worker node_modules present: ${fsSync.existsSync(path.join(workerOutDir, "node_modules"))}`,
+      `  server node_modules\\@raceoffice\\domain present: ${fsSync.existsSync(path.join(serverOutDir, "node_modules", "@raceoffice", "domain"))}`,
+      `  worker node_modules\\@raceoffice\\domain present: ${fsSync.existsSync(path.join(workerOutDir, "node_modules", "@raceoffice", "domain"))}`,
+
+
       "",
       "First-time installation (run in elevated terminal, cwd = deploy/server):",
       "  RaceOfficeServer.exe install",

@@ -7,7 +7,7 @@ import {
   CardContent,
   CardHeader,
   Checkbox,
-  
+
   Divider,
   MenuItem,
   Stack,
@@ -35,7 +35,7 @@ import {
   validateLiveTrackingTrack,
   type LiveTrackingCommandIntent,
   type LiveTrackingMode,
-    type LiveTrackingParticipantPoolDocument,
+  type LiveTrackingParticipantPoolDocument,
   type LiveTrackingResultsDocument,
   type LiveTrackingRuntimeDocument,
   type LiveTrackingSessionDocument,
@@ -116,10 +116,10 @@ export default function LiveTrackingControlPage() {
   const runtimeDocId = useMemo(() => makeLiveTrackingRuntimeDocId(), []);
   const resultsDocId = useMemo(() => makeLiveTrackingResultsDocId(), []);
 
-    const { data: session, update: updateSession } = useRealtimeDoc<LiveTrackingSessionDocument>(sessionDocId);
+  const { data: session, update: updateSession } = useRealtimeDoc<LiveTrackingSessionDocument>(sessionDocId);
 
-    const { data: runtime, update: updateRuntime } = useRealtimeDoc<LiveTrackingRuntimeDocument>(runtimeDocId);
-    const { data: results, update: updateResults } = useRealtimeDoc<LiveTrackingResultsDocument>(resultsDocId);
+  const { data: runtime, update: updateRuntime } = useRealtimeDoc<LiveTrackingRuntimeDocument>(runtimeDocId);
+  const { data: results, update: updateResults } = useRealtimeDoc<LiveTrackingResultsDocument>(resultsDocId);
 
 
   const sessionParticipantPoolDocId = useMemo(() => {
@@ -133,7 +133,7 @@ export default function LiveTrackingControlPage() {
     sessionParticipantPoolDocId.trim() || null,
   );
 
-    const participantNameByAthleteId = useMemo(() => {
+  const participantNameByAthleteId = useMemo(() => {
     const map = new Map<string, string>();
     for (const athlete of participantPoolDoc?.athletes ?? []) {
       const fullName = `${String(athlete.firstName ?? "").trim()} ${String(athlete.lastName ?? "").trim()}`.trim();
@@ -159,14 +159,14 @@ export default function LiveTrackingControlPage() {
   }, [participantPoolDoc]);
 
 
-    
+
 
   const sessionForDebug = useMemo(
 
     () => (session ? { ...session, commandQueue: (session.commandQueue ?? []).slice(-2) } : null),
     [session],
   );
-      const sessionJson = useMemo(() => (sessionForDebug ? JSON.stringify(sessionForDebug, null, 2) : "—"), [sessionForDebug]);
+  const sessionJson = useMemo(() => (sessionForDebug ? JSON.stringify(sessionForDebug, null, 2) : "—"), [sessionForDebug]);
   const runtimeJson = useMemo(() => (runtime ? JSON.stringify(runtime, null, 2) : "—"), [runtime]);
 
 
@@ -185,17 +185,17 @@ export default function LiveTrackingControlPage() {
     participantPoolDocId: "",
   });
 
-    const setupDocId = trackingDraft.setupId.trim() ? makeLiveTrackingSetupDocId(trackingDraft.setupId.trim()) : null;
+  const setupDocId = trackingDraft.setupId.trim() ? makeLiveTrackingSetupDocId(trackingDraft.setupId.trim()) : null;
   const { data: setupDoc, update: updateSetup } = useRealtimeDoc<LiveTrackingSetupDocument>(setupDocId);
   const setupJson = useMemo(() => (setupDoc ? JSON.stringify(setupDoc, null, 2) : "—"), [setupDoc]);
 
-    const [setupDraft, setSetupDraft] = useState<SetupDraft | null>(null);
+  const [setupDraft, setSetupDraft] = useState<SetupDraft | null>(null);
   const [workerControlBusy, setWorkerControlBusy] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
 
 
-    useEffect(() => {
+  useEffect(() => {
     if (!session) return;
     const eventId = session.participantSource.eventId;
     const participantPoolDocId =
@@ -212,7 +212,7 @@ export default function LiveTrackingControlPage() {
   }, [session]);
 
 
-    useEffect(() => {
+  useEffect(() => {
     if (!setupDoc) {
       setSetupDraft(null);
       return;
@@ -226,7 +226,7 @@ export default function LiveTrackingControlPage() {
   }, []);
 
 
-    const setupIssues = useMemo(() => {
+  const setupIssues = useMemo(() => {
     if (!setupDraft) return [];
     return validateLiveTrackingTrack({
       id: setupDraft.trackId,
@@ -239,7 +239,7 @@ export default function LiveTrackingControlPage() {
   const trackingConfigDirty = useMemo(() => {
     if (!session) return false;
 
-        const expected = {
+    const expected = {
       setupId: session.setupId,
       mode: session.mode,
       eventId: session.participantSource.eventId,
@@ -301,7 +301,7 @@ export default function LiveTrackingControlPage() {
     return JSON.stringify(currentComparable) !== JSON.stringify(draftComparable);
   }, [setupDoc, setupDraft, trackingDraft]);
 
-    const timingPointLabelById = useMemo(() => {
+  const timingPointLabelById = useMemo(() => {
     const map = new Map<string, string>();
     const points = setupDraft?.timingPoints ?? (setupDoc ? normalizeTimingPoints(setupDoc.track.timingPoints) : []);
 
@@ -357,41 +357,55 @@ export default function LiveTrackingControlPage() {
     });
   }
 
-      
 
 
 
-      async function postWorkerControl(action: "start" | "stop"): Promise<boolean> {
+
+  async function postWorkerControl(action: "start" | "stop"): Promise<{ ok: boolean; message: string }> {
     try {
       const response = await fetch(`/live-tracking/worker/${action}`, {
         method: "POST",
       });
 
-      if (!response.ok) {
-        console.error(`[live-tracking] worker ${action} request failed with status ${response.status}`);
-        return false;
+      let bodyMessage = "";
+      try {
+        const body = (await response.json()) as { message?: unknown };
+        bodyMessage = String(body?.message ?? "").trim();
+      } catch {
+        // keep empty message fallback when response body is not JSON
       }
 
-      return true;
+      if (!response.ok) {
+        const message = bodyMessage || `HTTP ${response.status}`;
+        console.error(`[live-tracking] worker ${action} request failed: ${message}`);
+        return { ok: false, message };
+      }
+
+      return { ok: true, message: bodyMessage || "ok" };
     } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown request error";
       console.error(`[live-tracking] worker ${action} request failed`, error);
-      return false;
+      return { ok: false, message };
     }
   }
 
 
-    async function handleStartWorker() {
+
+  async function handleStartWorker() {
     setWorkerControlBusy(true);
     try {
-      const ok = await postWorkerControl("start");
-      if (!ok) window.alert("Start Worker failed. Check browser console and server logs.");
+      const result = await postWorkerControl("start");
+      if (!result.ok) {
+        window.alert(`Start Worker failed: ${result.message}`);
+      }
     } finally {
       setWorkerControlBusy(false);
     }
   }
 
 
-    async function handleShutdownWorker() {
+
+  async function handleShutdownWorker() {
     const shouldQueueShutdown = !!session && canIssueLiveTrackingCommand(session.state, "shutdown");
 
     setWorkerControlBusy(true);
@@ -404,7 +418,7 @@ export default function LiveTrackingControlPage() {
   }
 
 
-    async function handleReset() {
+  async function handleReset() {
     setWorkerControlBusy(true);
     try {
       if ((runtime?.workerStatus ?? "offline") !== "offline") {
@@ -463,7 +477,7 @@ export default function LiveTrackingControlPage() {
     });
   }
 
-      function toggleSimulation(index: number, checked: boolean) {
+  function toggleSimulation(index: number, checked: boolean) {
     setSetupDraft((prev) => {
       if (!prev) return prev;
 
@@ -503,7 +517,7 @@ export default function LiveTrackingControlPage() {
           {
             id: `tp-${crypto.randomUUID().slice(0, 8)}`,
             name: `TP ${order}`,
-                        decoderId: "",
+            decoderId: "",
             decoderIp: "127.0.0.1",
             websocketPortAMM: 0,
             decoderType: "amb",
@@ -531,8 +545,8 @@ export default function LiveTrackingControlPage() {
     });
   }
 
-      const workerStatus = runtime?.workerStatus ?? "offline";
-    const guards = getLiveTrackingControlGuards({
+  const workerStatus = runtime?.workerStatus ?? "offline";
+  const guards = getLiveTrackingControlGuards({
     workerStatus,
     workerHeartbeatAt: runtime?.workerHeartbeatAt,
     nowMs,
@@ -546,7 +560,7 @@ export default function LiveTrackingControlPage() {
 
     if (!setupDraft) return;
     const stableTrackId = setupDraft.trackId.trim() || `track-${crypto.randomUUID().slice(0, 8)}`;
-        const normalizedPoints = normalizeTimingPoints(setupDraft.timingPoints).map((point) => {
+    const normalizedPoints = normalizeTimingPoints(setupDraft.timingPoints).map((point) => {
       if ((point.decoderType ?? "amb") !== "sim") return point;
       return {
         ...point,
@@ -574,7 +588,7 @@ export default function LiveTrackingControlPage() {
 
   return (
     <Box sx={{ display: "grid", gap: 2 }}>
-      
+
 
       <Card variant="outlined">
         <CardHeader title="Tracking Control" />
@@ -615,31 +629,31 @@ export default function LiveTrackingControlPage() {
               />
             </Stack>
 
-                        <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+            <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
               <Button variant={trackingConfigDirty ? "contained" : "outlined"} onClick={saveSessionConfig} disabled={!trackingConfigDirty || workerControlBusy}>
                 Save Tracking Setup
               </Button>
-                            <Button variant={guards.canStartWorker ? "contained" : "outlined"} onClick={handleStartWorker} disabled={!guards.canStartWorker}>
+              <Button variant={guards.canStartWorker ? "contained" : "outlined"} onClick={handleStartWorker} disabled={!guards.canStartWorker}>
 
                 Start Worker
               </Button>
-                            <Button variant={guards.canPrepareTracking ? "contained" : "outlined"} onClick={() => queue("prepare")} disabled={!guards.canPrepareTracking}>
+              <Button variant={guards.canPrepareTracking ? "contained" : "outlined"} onClick={() => queue("prepare")} disabled={!guards.canPrepareTracking}>
 
                 Prepare Tracking
               </Button>
-                            <Button variant={guards.canStartTracking ? "contained" : "outlined"} onClick={() => queue("start")} disabled={!guards.canStartTracking}>
+              <Button variant={guards.canStartTracking ? "contained" : "outlined"} onClick={() => queue("start")} disabled={!guards.canStartTracking}>
 
                 Start Tracking
               </Button>
-                            <Button variant={guards.canStopTracking ? "contained" : "outlined"} onClick={() => queue("stop")} disabled={!guards.canStopTracking}>
+              <Button variant={guards.canStopTracking ? "contained" : "outlined"} onClick={() => queue("stop")} disabled={!guards.canStopTracking}>
 
                 Stop Tracking
               </Button>
-                            <Button color="warning" variant={guards.canShutdownWorker ? "contained" : "outlined"} onClick={handleShutdownWorker} disabled={!guards.canShutdownWorker}>
+              <Button color="warning" variant={guards.canShutdownWorker ? "contained" : "outlined"} onClick={handleShutdownWorker} disabled={!guards.canShutdownWorker}>
 
                 Shutdown Worker
               </Button>
-                            <Button color="secondary" variant={guards.canResetTracking ? "contained" : "outlined"} onClick={handleReset} disabled={!guards.canResetTracking}>
+              <Button color="secondary" variant={guards.canResetTracking ? "contained" : "outlined"} onClick={handleReset} disabled={!guards.canResetTracking}>
 
                 Reset
               </Button>
@@ -672,7 +686,7 @@ export default function LiveTrackingControlPage() {
 
               <Table size="small">
                 <TableHead>
-                                                      <TableRow>
+                  <TableRow>
                     <TableCell>#</TableCell>
                     <TableCell>Name</TableCell>
                     <TableCell>Role</TableCell>
@@ -684,8 +698,8 @@ export default function LiveTrackingControlPage() {
 
 
                 </TableHead>
-                                <TableBody>
-                                    {setupDraft.timingPoints.map((point, index) => {
+                <TableBody>
+                  {setupDraft.timingPoints.map((point, index) => {
                     const simulationEnabled = (point.decoderType ?? "amb") === "sim";
                     const simulatedPointIndex = setupDraft.timingPoints.findIndex((p) => (p.decoderType ?? "amb") === "sim");
                     const canToggleSimulation = simulatedPointIndex < 0 || simulatedPointIndex === index;
@@ -693,10 +707,10 @@ export default function LiveTrackingControlPage() {
                     const computedStartupDelay = calcSimStartupDelaySecs(point.absolutePositionM);
 
 
-                                        return (
+                    return (
                       <Fragment key={point.id}>
 
-                                                <TableRow
+                        <TableRow
                           key={`${point.id}:base`}
                           sx={{ "& > td": { borderBottom: "none" } }}
                         >
@@ -714,7 +728,7 @@ export default function LiveTrackingControlPage() {
                           <TableCell><Checkbox checked={point.enabled} onChange={(e) => patchPoint(index, { enabled: e.target.checked })} /></TableCell>
 
                           <TableCell>
-                                                        <Checkbox
+                            <Checkbox
                               checked={simulationEnabled}
                               disabled={!canToggleSimulation}
                               onChange={(e) => toggleSimulation(index, e.target.checked)}
@@ -722,9 +736,9 @@ export default function LiveTrackingControlPage() {
 
                           </TableCell>
                           <TableCell><Button size="small" color="error" onClick={() => removePoint(index)}>Delete</Button></TableCell>
-                                                </TableRow>
+                        </TableRow>
 
-                                                                        <TableRow
+                        <TableRow
                           key={`${point.id}:decoder`}
                           sx={simulationEnabled ? { "& > td": { borderBottom: "none" } } : undefined}
                         >
@@ -766,7 +780,7 @@ export default function LiveTrackingControlPage() {
                         {simulationEnabled ? (
 
                           <TableRow key={`${point.id}:sim`}>
-                                                                                                                <TableCell colSpan={7}>
+                            <TableCell colSpan={7}>
 
 
                               <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
@@ -783,7 +797,7 @@ export default function LiveTrackingControlPage() {
                             </TableCell>
                           </TableRow>
                         ) : null}
-                                            </Fragment>
+                      </Fragment>
 
                     );
                   })}
@@ -805,7 +819,7 @@ export default function LiveTrackingControlPage() {
                 </Typography>
               )}
 
-                            <Stack spacing={0.5}>
+              <Stack spacing={0.5}>
                 <Typography variant="body2" color="text.secondary">
                   Setup pools: {(setupDoc?.participantPoolIds ?? []).join(", ") || "—"}
                 </Typography>
@@ -831,11 +845,11 @@ export default function LiveTrackingControlPage() {
         </CardContent>
       </Card>
 
-            <Card variant="outlined">
+      <Card variant="outlined">
         <CardHeader title="Live Board" />
         <Divider />
         <CardContent>
-                    <LiveTrackingLiveBoard
+          <LiveTrackingLiveBoard
             athleteLiveStates={results?.athleteLiveStates ?? []}
             resolveDisplayName={resolveControlBoardDisplayName}
             variant="split-inline"
@@ -891,7 +905,7 @@ export default function LiveTrackingControlPage() {
             {sessionJson}
           </Box>
 
-                    <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>
+          <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>
             Setup Document
           </Typography>
           <Box

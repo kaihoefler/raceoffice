@@ -32,6 +32,17 @@ type LiveTrackingWorkerManagerOptions = {
   runtimeSync: RuntimeSync;
 };
 
+type ResolvedWorkerCommand =
+  | {
+    command: string;
+    args: string[];
+    cwd: string;
+  }
+  | {
+    error: string;
+  };
+
+
 /**
  * Manages the singleton LiveTracking worker process for the server.
  *
@@ -44,7 +55,7 @@ export class LiveTrackingWorkerManager {
   private child: ChildProcess | null = null;
   private stopTimeout: NodeJS.Timeout | null = null;
 
-  constructor(private readonly options: LiveTrackingWorkerManagerOptions) {}
+  constructor(private readonly options: LiveTrackingWorkerManagerOptions) { }
 
   private isRunningProcess(processRef: ChildProcess | null = this.child): processRef is ChildProcess {
     return !!processRef && processRef.exitCode === null && !processRef.killed;
@@ -56,7 +67,7 @@ export class LiveTrackingWorkerManager {
     this.stopTimeout = null;
   }
 
-  private resolveWorkerCommand(): { command: string; args: string[]; cwd: string } | null {
+  private resolveWorkerCommand(): ResolvedWorkerCommand {
     const workerDistEntry = path.join(this.options.repoRoot, "apps", "livetracking-worker", "dist", "index.js");
     if (fs.existsSync(workerDistEntry)) {
       return {
@@ -76,8 +87,16 @@ export class LiveTrackingWorkerManager {
       };
     }
 
-    return null;
+    return {
+      error:
+        "Worker start failed: no runnable worker entry found. " +
+        `Checked dist entry: ${workerDistEntry}; ` +
+        `checked dev entry: ${workerSrcEntry}; ` +
+        `checked tsx runtime: ${tsxCliEntry}. ` +
+        "Build @raceoffice/livetracking-worker and ensure deploy contains apps/livetracking-worker/dist + node_modules.",
+    };
   }
+
 
   start(): LiveTrackingWorkerControlResult {
     if (this.isRunningProcess()) {
@@ -90,14 +109,17 @@ export class LiveTrackingWorkerManager {
     }
 
     const command = this.resolveWorkerCommand();
-    if (!command) {
+    if ("error" in command) {
+      this.options.logger.warn({ scope: "livetracking-worker", reason: command.error }, "worker start rejected");
+      this.options.runtimeSync.markOffline(command.error);
       return {
         ok: false,
         running: false,
         pid: null,
-        message: "Worker entry not found. Build livetracking-worker or provide tsx runtime.",
+        message: command.error,
       };
     }
+
 
     const child = spawn(command.command, command.args, {
       cwd: command.cwd,
@@ -129,7 +151,17 @@ export class LiveTrackingWorkerManager {
       this.options.runtimeSync.markStarting(child.pid ?? null);
     });
 
+    child.once("error", (err) => {
+      if (this.child === child) this.child = null;
+      this.clearStopTimeout();
+
+      const message = `Worker process spawn error: ${err.message}`;
+      this.options.logger.warn({ scope: "livetracking-worker", pid: child.pid, error: err }, message);
+      this.options.runtimeSync.markOffline(message);
+    });
+
     child.once("exit", (code, signal) => {
+
       if (this.child === child) this.child = null;
       this.clearStopTimeout();
 
@@ -142,8 +174,9 @@ export class LiveTrackingWorkerManager {
       ok: true,
       running: true,
       pid: child.pid ?? null,
-      message: "worker start requested",
+      message: `worker start requested (cmd=${command.command}, cwd=${command.cwd})`,
     };
+
   }
 
   stop(): LiveTrackingWorkerControlResult {
