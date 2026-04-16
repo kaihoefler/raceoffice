@@ -95,10 +95,17 @@ function calcSimStartupDelaySecs(absolutePositionM: number): number {
   return Math.max(0, Math.round(safePosition / SIM_SPEED_M_PER_S));
 }
 
+function parseDecoderOffsetSecondsInput(value: string): number | null {
+  const normalized = String(value ?? "").trim().replace(",", ".");
+  if (!normalized) return 0;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 
 
 function toSetupDraft(doc: LiveTrackingSetupDocument): SetupDraft {
+
   return {
     name: doc.name,
     // Track id is a technical identifier. Keep it internal and auto-generate if missing.
@@ -189,9 +196,11 @@ export default function LiveTrackingControlPage() {
   const { data: setupDoc, update: updateSetup } = useRealtimeDoc<LiveTrackingSetupDocument>(setupDocId);
   const setupJson = useMemo(() => (setupDoc ? JSON.stringify(setupDoc, null, 2) : "—"), [setupDoc]);
 
-  const [setupDraft, setSetupDraft] = useState<SetupDraft | null>(null);
+    const [setupDraft, setSetupDraft] = useState<SetupDraft | null>(null);
   const [workerControlBusy, setWorkerControlBusy] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [decoderOffsetInputByPointId, setDecoderOffsetInputByPointId] = useState<Record<string, string>>({});
+
 
 
 
@@ -213,12 +222,23 @@ export default function LiveTrackingControlPage() {
 
 
   useEffect(() => {
-    if (!setupDoc) {
+        if (!setupDoc) {
       setSetupDraft(null);
+      setDecoderOffsetInputByPointId({});
       return;
     }
-    setSetupDraft(toSetupDraft(setupDoc));
+
+    const draft = toSetupDraft(setupDoc);
+    setSetupDraft(draft);
+    setDecoderOffsetInputByPointId(() => {
+      const next: Record<string, string> = {};
+      for (const point of draft.timingPoints) {
+        next[point.id] = String(point.decoderTimestampOffsetSecs ?? 0);
+      }
+      return next;
+    });
   }, [setupDoc]);
+
 
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 5_000);
@@ -538,12 +558,20 @@ export default function LiveTrackingControlPage() {
     });
   }
 
-  function removePoint(index: number) {
+    function removePoint(index: number) {
     setSetupDraft((prev) => {
       if (!prev) return prev;
+      const removedPointId = prev.timingPoints[index]?.id;
+      if (removedPointId) {
+        setDecoderOffsetInputByPointId((current) => {
+          const { [removedPointId]: _removed, ...rest } = current;
+          return rest;
+        });
+      }
       return { ...prev, timingPoints: normalizeTimingPoints(prev.timingPoints.filter((_, i) => i !== index)) };
     });
   }
+
 
   const workerStatus = runtime?.workerStatus ?? "offline";
   const guards = getLiveTrackingControlGuards({
@@ -766,13 +794,34 @@ export default function LiveTrackingControlPage() {
                                 value={point.websocketPortAMM}
                                 onChange={(e) => patchPoint(index, { websocketPortAMM: Number(e.target.value) })}
                               />
-                              <TextField
+                                                                                          <TextField
                                 size="small"
-                                type="number"
+                                type="text"
                                 label="Time Offset (s)"
-                                value={point.decoderTimestampOffsetSecs ?? 0}
-                                onChange={(e) => patchPoint(index, { decoderTimestampOffsetSecs: Number(e.target.value) })}
+                                value={decoderOffsetInputByPointId[point.id] ?? String(point.decoderTimestampOffsetSecs ?? 0)}
+                                inputProps={{ inputMode: "decimal", placeholder: "z. B. -1,234" }}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  if (!/^-?\d*(?:[.,]\d*)?$/.test(raw)) return;
+                                  setDecoderOffsetInputByPointId((prev) => ({ ...prev, [point.id]: raw }));
+                                }}
+                                onBlur={() => {
+                                  const raw = decoderOffsetInputByPointId[point.id] ?? String(point.decoderTimestampOffsetSecs ?? 0);
+                                  const parsed = parseDecoderOffsetSecondsInput(raw);
+                                  if (parsed === null) {
+                                    setDecoderOffsetInputByPointId((prev) => ({
+                                      ...prev,
+                                      [point.id]: String(point.decoderTimestampOffsetSecs ?? 0),
+                                    }));
+                                    return;
+                                  }
+
+                                  patchPoint(index, { decoderTimestampOffsetSecs: parsed });
+                                  setDecoderOffsetInputByPointId((prev) => ({ ...prev, [point.id]: String(parsed) }));
+                                }}
                               />
+
+
                             </Stack>
                           </TableCell>
                         </TableRow>

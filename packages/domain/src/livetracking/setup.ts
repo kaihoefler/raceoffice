@@ -137,11 +137,34 @@ function toFiniteInt(value: unknown, fallback = 0): number {
   return Math.floor(toFiniteNumber(value, fallback));
 }
 
+function toFiniteLocaleNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(",", ".");
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  return toFiniteNumber(value, fallback);
+}
+
 // Hard safety bounds to avoid accidental multi-day shifts from malformed setup data.
 const MAX_ABS_DECODER_TIMESTAMP_OFFSET_SECS = 86_400;
 
+/**
+ * Normalize decoder clock offset with millisecond precision (0.001 s).
+ *
+ * Domain decision:
+ * - keep UX-level fine-tuning (e.g. 1.234 s)
+ * - clamp to a safe absolute range to avoid accidental multi-day shifts
+ */
+function normalizeDecoderTimestampOffsetSecs(value: unknown): number {
+  const raw = toFiniteLocaleNumber(value, 0);
+  const clamped = Math.max(-MAX_ABS_DECODER_TIMESTAMP_OFFSET_SECS, Math.min(MAX_ABS_DECODER_TIMESTAMP_OFFSET_SECS, raw));
+  return Math.round(clamped * 1000) / 1000;
+}
 
 function sortTimingPointsByOrder(points: LiveTrackingTimingPoint[]): LiveTrackingTimingPoint[] {
+
   const list = Array.isArray(points) ? [...points] : [];
   list.sort((a, b) => toFiniteInt(a.order, 0) - toFiniteInt(b.order, 0));
   return list;
@@ -214,10 +237,8 @@ export function normalizeTimingPoints(points: LiveTrackingTimingPoint[]): LiveTr
         : [],
             simPassingDelay: String(point.simPassingDelay ?? "1000").trim() || "1000",
       simStartupDelaySecs: Math.max(0, toFiniteInt(point.simStartupDelaySecs, 0)),
-      decoderTimestampOffsetSecs: Math.max(
-        -MAX_ABS_DECODER_TIMESTAMP_OFFSET_SECS,
-        Math.min(MAX_ABS_DECODER_TIMESTAMP_OFFSET_SECS, toFiniteInt(point.decoderTimestampOffsetSecs, 0)),
-      ),
+            decoderTimestampOffsetSecs: normalizeDecoderTimestampOffsetSecs(point.decoderTimestampOffsetSecs),
+
       enabled: Boolean(point.enabled),
 
 
@@ -283,9 +304,9 @@ export function validateLiveTrackingTrack(track: LiveTrackingTrack): LiveTrackin
       });
     }
 
-    const rawOffsetSecs = point.decoderTimestampOffsetSecs;
+        const rawOffsetSecs = point.decoderTimestampOffsetSecs;
     if (rawOffsetSecs !== undefined) {
-      const offsetSecs = Number(rawOffsetSecs);
+      const offsetSecs = toFiniteLocaleNumber(rawOffsetSecs, Number.NaN);
       if (!Number.isFinite(offsetSecs) || Math.abs(offsetSecs) > MAX_ABS_DECODER_TIMESTAMP_OFFSET_SECS) {
         issues.push({
           code: "timing_point_decoder_time_offset_invalid",
@@ -294,6 +315,7 @@ export function validateLiveTrackingTrack(track: LiveTrackingTrack): LiveTrackin
         });
       }
     }
+
 
   }
 

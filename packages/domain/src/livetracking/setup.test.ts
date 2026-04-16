@@ -24,7 +24,9 @@ describe("livetracking/setup", () => {
         decoderId: "d1",
         decoderIp: "10.0.0.1",
         websocketPortAMM: 5010,
+        decoderTimestampOffsetSecs: 1.234,
         order: 1,
+
         distanceFromPreviousM: 50,
         absolutePositionM: 9999,
         role: "start_finish",
@@ -48,8 +50,29 @@ describe("livetracking/setup", () => {
     expect(normalized.map((x) => x.order)).toEqual([1, 2, 3]);
         expect(normalized.map((x) => x.absolutePositionM)).toEqual([0, 50, 120]);
     expect(normalized[0].distanceFromPreviousM).toBe(0);
-    expect(normalized.map((x) => x.decoderTimestampOffsetSecs)).toEqual([0, 0, 0]);
+        expect(normalized.map((x) => x.decoderTimestampOffsetSecs)).toEqual([1.234, 0, 0]);
   });
+
+  it("normalizes decoder timestamp offset to millisecond precision", () => {
+    const normalized = normalizeTimingPoints([
+      {
+        id: "tp-1",
+        name: "Start/Finish",
+        decoderId: "d1",
+        decoderIp: "10.0.0.1",
+        websocketPortAMM: 5010,
+        decoderTimestampOffsetSecs: 1.23456,
+        order: 1,
+        distanceFromPreviousM: 0,
+        absolutePositionM: 0,
+        role: "start_finish",
+        enabled: true,
+      },
+    ]);
+
+    expect(normalized[0].decoderTimestampOffsetSecs).toBe(1.235);
+  });
+
 
 
   it("validates exactly one enabled start_finish", () => {

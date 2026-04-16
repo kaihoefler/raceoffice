@@ -99,8 +99,14 @@ function calcSimStartupDelaySecs(absolutePositionM: number): number {
   return Math.max(0, Math.round(safePosition / SIM_SPEED_M_PER_S));
 }
 
+function parseDecoderOffsetSecondsInput(value: string): number {
+  const normalized = String(value ?? "").trim().replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 function workerStatusColor(status: LiveTrackingRuntimeDocument["workerStatus"] | undefined) {
+
   if (status === "running") return "success" as const;
   if (status === "ready") return "info" as const;
   if (status === "starting" || status === "stopping") return "warning" as const;
@@ -548,12 +554,18 @@ export default function LiveTrackingControlPage() {
                           <TableCell><TextField size="small" value={point.decoderIp} onChange={(e) => patchPoint(index, { decoderIp: e.target.value })} /></TableCell>
                                                     <TableCell><TextField size="small" type="number" value={point.websocketPortAMM} onChange={(e) => patchPoint(index, { websocketPortAMM: Number(e.target.value) })} /></TableCell>
                           <TableCell>
-                            <TextField
+                                                        <TextField
                               size="small"
                               type="number"
                               value={point.decoderTimestampOffsetSecs ?? 0}
-                              onChange={(e) => patchPoint(index, { decoderTimestampOffsetSecs: Number(e.target.value) })}
+                              inputProps={{ step: "0.001" }}
+                              onChange={(e) =>
+                                patchPoint(index, {
+                                  decoderTimestampOffsetSecs: parseDecoderOffsetSecondsInput(e.target.value),
+                                })
+                              }
                             />
+
                           </TableCell>
                           <TableCell><TextField size="small" type="number" value={point.distanceFromPreviousM} onChange={(e) => patchPoint(index, { distanceFromPreviousM: Number(e.target.value) })} /></TableCell>
 
