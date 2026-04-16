@@ -40,7 +40,7 @@ For realtime message formats, revision handling, and unified server error respon
 
 ### 1) Prerequisites
 
-- Node.js (current LTS recommended)
+- Node.js `20.19.0` or newer (see [`.nvmrc`](.nvmrc) and root [`package.json`](package.json) `engines`)
 - npm
 
 ### 2) Install dependencies
