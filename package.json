@@ -7,6 +7,9 @@
     "apps/*",
     "packages/*"
   ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "npm --workspace @raceoffice/frontend run dev",
     "build": "npm run build:domain && npm --workspace @raceoffice/frontend run build",
@@ -29,3 +32,4 @@
     "deploy": "node scripts/deploy.mjs"
   }
 }
+
