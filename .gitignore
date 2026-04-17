@@ -28,6 +28,8 @@ raceoffice.db
 *.sln
 *.sw?
 
+*.bin
+
 .vite
 .env
 .env.*
