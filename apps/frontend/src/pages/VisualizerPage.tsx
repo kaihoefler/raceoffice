@@ -375,10 +375,12 @@ export default function VisualizerPage() {
   const [autoPagingRunning, setAutoPagingRunning] = useState(pagingEnabledByConfig && pagingTime > 0);
   const [currentPage, setCurrentPage] = useState(0);
 
+  // Beim Rennenwechsel den manuellen Pause/Resume-Status beibehalten.
+  // Auto-Paging wird nur neu initialisiert, wenn sich die Paging-Konfiguration ändert.
   useEffect(() => {
     setAutoPagingRunning(pagingEnabledByConfig && pagingTime > 0);
     setCurrentPage(0);
-  }, [pagingEnabledByConfig, pagingTime, activeRace?.id]);
+  }, [pagingEnabledByConfig, pagingTime]);
 
   useEffect(() => {
     setCurrentPage((prev) => Math.min(prev, Math.max(0, totalPages - 1)));
@@ -455,14 +457,15 @@ export default function VisualizerPage() {
         display: "flex",
         flexDirection: "column",
         px: 6,
-        py: 4,
+        pt: 6,
+        pb: 4,
         gap: 2,
         boxSizing: "border-box",
       }}
     >
       {/* Title + dezente Seitenanzeige oben rechts */}
       <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 2 }}>
-        <Typography component="div" sx={{ fontSize: "1.6em", fontWeight: 800, color: "inherit" }}>
+        <Typography component="div" sx={{ fontSize: "1.35em", fontWeight: 800, color: "inherit" }}>
           {activeRace?.name ? activeRace.name : "No active race"}
         </Typography>
 

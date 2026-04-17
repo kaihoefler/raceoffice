@@ -58,13 +58,20 @@ export type ScoringViewModel = {
   liveLastEligibleBibs: { lastBib: number | null; secondLastBib: number | null };
 
 
-  /** Bibs that still have 0 lapsComplete in the live feed (and are not DNF/DNS/DSQ in current raceResults). */
+    /** Bibs that still have 0 lapsComplete in the live feed (and are not DNF/DNS/DSQ in current raceResults). */
   liveZeroLapBibs: number[];
 
-
+  /**
+   * Suggested DNF candidates from live feed:
+   * - only competitors with a positive lap deficit vs current live leader
+   * - grouped by equal lap deficit
+   * - we expose the smallest positive gap bucket (typically +1 lap first)
+   */
+  liveDnfSuggestedBibs: number[];
 
 
   /**
+
    * Build Athlete objects for competitors that appear in liveRace but are missing in race.raceStarters.
    * Can be used by the page to append them to the race starters list.
    */
@@ -266,8 +273,44 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
 
     const liveZeroLapBibs = Array.from(zeroLapSet).sort((a, b) => a - b);
 
+    // ---- DNF suggestions by shared positive lap gap ----
+    const lapsByBib = new Map<number, number>();
+    for (const c of competitors) {
+      const bib = bibToInt((c as any)?.number);
+      if (bib == null) continue;
+      if (blockedBibs.has(bib)) continue;
+
+      const lapsRaw = Number((c as any)?.lapsComplete);
+      if (!Number.isFinite(lapsRaw)) continue;
+      lapsByBib.set(bib, Math.max(0, Math.floor(lapsRaw)));
+    }
+
+    let liveDnfSuggestedBibs: number[] = [];
+    if (lapsByBib.size > 0) {
+      let leaderLap = 0;
+      for (const laps of lapsByBib.values()) {
+        if (laps > leaderLap) leaderLap = laps;
+      }
+
+      const byGap = new Map<number, number[]>();
+      for (const [bib, laps] of lapsByBib.entries()) {
+        const gap = leaderLap - laps;
+        if (gap < 1) continue;
+
+        const arr = byGap.get(gap) ?? [];
+        arr.push(bib);
+        byGap.set(gap, arr);
+      }
+
+      const bestGap = Array.from(byGap.keys()).sort((a, b) => a - b)[0] ?? null;
+      if (bestGap != null) {
+        liveDnfSuggestedBibs = [...(byGap.get(bestGap) ?? [])].sort((a, b) => a - b);
+      }
+    }
+
 
     // ---- Standings (Points) ----
+
     const activities = ((race as any)?.raceActivities ?? []) as RaceActivity[];
     const pointsByBib = new Map<number, number>();
 
@@ -355,10 +398,12 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
       liveLapCount,
       liveLapsToGo,
                         liveTopBibs,
-      liveLastEligibleBibs,
+            liveLastEligibleBibs,
       liveZeroLapBibs,
+      liveDnfSuggestedBibs,
 
       getMissingStarterBibsFromLive,
+
       buildStartersForBibs,
     };
   }, [

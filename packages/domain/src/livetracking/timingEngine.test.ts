@@ -148,7 +148,7 @@ describe("livetracking/timingEngine", () => {
     expect(results.invalidEvents.some((x) => x.reason === "sequence")).toBe(false);
   });
 
-  it("validates timing-point sequence", () => {
+    it("validates timing-point sequence", () => {
     const passings: LiveTrackingPassingEvent[] = [
       p("1", "2026-01-01T10:00:00.000Z", "12345", "sf"),
       p("2", "2026-01-01T10:00:05.000Z", "12345", "s2"), // wrong sequence (expect s1)
@@ -163,5 +163,46 @@ describe("livetracking/timingEngine", () => {
 
     expect(results.invalidEvents.some((x) => x.reason === "sequence")).toBe(true);
   });
+
+  it("reassigns duplicate transponder ownership to the later athlete", () => {
+    const duplicateAthletes: LiveTrackingAthlete[] = [
+      {
+        id: "a-old",
+        bib: 1,
+        firstName: "Old",
+        lastName: "Owner",
+        nation: null,
+        ageGroupId: null,
+        transponderIds: ["12345"],
+      },
+      {
+        id: "a-new",
+        bib: 2,
+        firstName: "New",
+        lastName: "Owner",
+        nation: null,
+        ageGroupId: null,
+        transponderIds: ["12345"],
+      },
+    ];
+
+    const results = buildLiveTrackingResultsProjection({
+      passings: [
+        p("1", "2026-01-01T10:00:00.000Z", "12345", "sf"),
+        p("2", "2026-01-01T10:00:20.000Z", "12345", "s1"),
+      ],
+      track,
+      athletes: duplicateAthletes,
+      generatedAt: "2026-01-01T10:00:21.000Z",
+    });
+
+    const oldState = results.athleteLiveStates.find((x) => x.athleteId === "a-old");
+    const newState = results.athleteLiveStates.find((x) => x.athleteId === "a-new");
+
+    expect(oldState?.lastPassingAt).toBeNull();
+    expect(newState?.lastPassingAt).toBe("2026-01-01T10:00:20.000Z");
+    expect(results.warnings.some((x) => x.includes("Transponder reassigned"))).toBe(true);
+  });
 });
+
 

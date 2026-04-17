@@ -47,7 +47,7 @@ export const DEFAULT_LIVE_TRACKING_TIMING_ENGINE_OPTIONS: LiveTrackingTimingEngi
   debounceMs: 1_000,
   minSectorTimeMs: 500,
   minLapTimeMs: 8_000,
-  activityWindowMs: 60_000,
+  activityWindowMs: 40_000,
   keepRecentPassings: 300,
   keepRecentLapTimes: 10,
   keepCompletedLaps: 30,
@@ -107,8 +107,61 @@ function activityStatus(lastPassingMs: number | null, generatedAtMs: number, win
 }
 
 /**
+ * Resolves duplicate transponder assignments with a simple deterministic policy:
+ * - later athlete entry wins ownership for that transponder
+ * - the transponder is removed from earlier athletes for this projection run
+ *
+ * Why this rule:
+ * - operations can reassign a chip during an event without breaking projection
+ * - from reassignment onward, new passings map to the new athlete
+ */
+function normalizeAthletesByTransponderOwnership(
+  athletes: LiveTrackingAthlete[],
+  warnings: string[],
+): LiveTrackingAthlete[] {
+  const ownerByTransponder = new Map<string, string>();
+
+  for (const athlete of athletes) {
+    for (const raw of athlete.transponderIds) {
+      const transponderId = String(raw ?? "").trim();
+      if (!transponderId) continue;
+
+      const previousOwner = ownerByTransponder.get(transponderId);
+      if (previousOwner && previousOwner !== athlete.id) {
+        warnings.push(
+          `Transponder reassigned: ${transponderId} moved from athlete ${previousOwner} to ${athlete.id}.`,
+        );
+      }
+
+      ownerByTransponder.set(transponderId, athlete.id);
+    }
+  }
+
+  return athletes.map((athlete) => {
+    const unique = new Set<string>();
+    const normalizedTransponderIds: string[] = [];
+
+    for (const raw of athlete.transponderIds) {
+      const transponderId = String(raw ?? "").trim();
+      if (!transponderId || unique.has(transponderId)) continue;
+      unique.add(transponderId);
+
+      if (ownerByTransponder.get(transponderId) === athlete.id) {
+        normalizedTransponderIds.push(transponderId);
+      }
+    }
+
+    return {
+      ...athlete,
+      transponderIds: normalizedTransponderIds,
+    };
+  });
+}
+
+/**
  * Computes a deterministic live results projection.
  */
+
 export function buildLiveTrackingResultsProjection(args: {
   passings: LiveTrackingPassingEvent[];
   track: LiveTrackingTrack;
@@ -138,21 +191,19 @@ export function buildLiveTrackingResultsProjection(args: {
     doc.warnings.push("No enabled start_finish timing point in setup track.");
   }
 
-  const athleteById = new Map<string, LiveTrackingAthlete>(args.athletes.map((athlete) => [athlete.id, athlete]));
+    const normalizedAthletes = normalizeAthletesByTransponderOwnership(args.athletes, doc.warnings);
+
+  const athleteById = new Map<string, LiveTrackingAthlete>(normalizedAthletes.map((athlete) => [athlete.id, athlete]));
   const transponderToAthlete = new Map<string, { athleteId: string; transponderId: string }>();
-  for (const athlete of args.athletes) {
+  for (const athlete of normalizedAthletes) {
     for (const raw of athlete.transponderIds) {
       const transponderId = String(raw ?? "").trim();
       if (!transponderId) continue;
 
-      if (transponderToAthlete.has(transponderId)) {
-        doc.warnings.push(`Duplicate transponder mapping detected: ${transponderId}`);
-        continue;
-      }
-
       transponderToAthlete.set(transponderId, { athleteId: athlete.id, transponderId });
     }
   }
+
 
   const stateByAthlete = new Map<string, InternalAthleteState>();
 

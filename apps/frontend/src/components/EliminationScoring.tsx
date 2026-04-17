@@ -7,6 +7,7 @@
 // Optional live-sync helpers (controlled by the page):
 // - sync lap number from live feed
 // - prefill last eligible bib(s) from live ranking (for 1- or 2-elim workflows)
+// - prefill DNF candidates that share the same positive lap gap
 // - DNS helper: insert all bibs that still have 0 laps in the live feed
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -76,6 +77,9 @@ type Props = {
 
   /** Bibs with 0 lapsComplete in live feed (typically DNS candidates). */
   liveZeroLapBibs?: number[];
+
+  /** Suggested DNF candidates from live feed (same positive lap gap bucket). */
+  liveDnfSuggestedBibs?: number[];
 };
 
 function athleteLabel(a: Athlete) {
@@ -170,6 +174,7 @@ export default function EliminationScoring({
   liveLapCount = null,
   liveLastEligibleBibs = { lastBib: null, secondLastBib: null },
   liveZeroLapBibs = [],
+  liveDnfSuggestedBibs = [],
 }: Props) {
   // ---------------------------------------------------------------------------
   // Derived data: starters + lookup maps
@@ -299,6 +304,7 @@ export default function EliminationScoring({
     // reset live-sync tracking
     prevLiveLapRef.current = null;
     autoPrefillBibsRef.current = { bib0: null, bib1: null };
+    autoPrefillDnfBibsRef.current = [];
 
     setTimeout(() => inputRefs.current[0]?.focus(), 0);
   }, [race.id, resetKey]);
@@ -339,6 +345,16 @@ export default function EliminationScoring({
   // ---------------------------------------------------------------------------
   const prevLiveLapRef = useRef<number | null>(null);
   const autoPrefillBibsRef = useRef<{ bib0: number | null; bib1: number | null }>({ bib0: null, bib1: null });
+  const autoPrefillDnfBibsRef = useRef<number[]>([]);
+
+  function areNumberArraysEqual(a: number[], b: number[]): boolean {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
 
   function setAutoPrefillBib(idx: 0 | 1, bib: number | null) {
     autoPrefillBibsRef.current = {
@@ -356,6 +372,7 @@ export default function EliminationScoring({
     if (syncEnabled) return;
     prevLiveLapRef.current = null;
     autoPrefillBibsRef.current = { bib0: null, bib1: null };
+    autoPrefillDnfBibsRef.current = [];
   }, [syncEnabled]);
 
   // If sync is enabled: always align lap with the live lap count.
@@ -428,6 +445,60 @@ export default function EliminationScoring({
     liveLastEligibleBibs?.secondLastBib,
     starterByBib,
   ]);
+
+  // Prefill DNF rows from the shared live lap-gap group (computed in ScoringViewModel).
+  // UX rule: never override manual input. We only replace rows when they are empty
+  // or still equal to the previous auto suggestion.
+  useEffect(() => {
+    if (!syncEnabled) return;
+    if (!isDnf) return;
+
+    const suggested = Array.from(
+      new Set(
+        (Array.isArray(liveDnfSuggestedBibs) ? liveDnfSuggestedBibs : [])
+          .map((b) => Math.floor(Number(b)))
+          .filter((b) => b > 0 && !isBibBlocked(b)),
+      ),
+    ).sort((a, b) => a - b);
+
+    if (!suggested.length) {
+      setRows((prev) => {
+        const currentBibs = Array.from(
+          new Set(prev.map((r) => r.sel?.bib ?? bibToInt(r.input)).filter((b): b is number => b != null)),
+        );
+
+        if (!areNumberArraysEqual(currentBibs, autoPrefillDnfBibsRef.current)) return prev;
+
+        autoPrefillDnfBibsRef.current = [];
+        return [{ sel: null, input: "" }];
+      });
+      return;
+    }
+
+    setRows((prev) => {
+      const currentBibs = Array.from(
+        new Set(prev.map((r) => r.sel?.bib ?? bibToInt(r.input)).filter((b): b is number => b != null)),
+      );
+
+      const canOverride =
+        currentBibs.length === 0 || areNumberArraysEqual(currentBibs, autoPrefillDnfBibsRef.current);
+      if (!canOverride) return prev;
+
+      const prefilled = suggested
+        .map((bib) => ({ bib, sel: resolveOrPlaceholder(String(bib)) }))
+        .filter((x): x is { bib: number; sel: Athlete } => x.sel != null)
+        .map((x) => ({ sel: x.sel, input: String(x.bib) }));
+
+      const nextBibs = prefilled.map((x) => x.sel.bib).filter((b): b is number => b != null);
+      autoPrefillDnfBibsRef.current = nextBibs;
+
+      const hasTrailingEmpty =
+        prev.length > 0 && !prev[prev.length - 1]?.sel && !String(prev[prev.length - 1]?.input ?? "").trim();
+      if (hasTrailingEmpty && areNumberArraysEqual(currentBibs, nextBibs)) return prev;
+
+      return [...prefilled, { sel: null, input: "" }];
+    });
+  }, [syncEnabled, isDnf, liveDnfSuggestedBibs, starterByBib, blockedBibs]);
 
   const selectedIds = useMemo(() => {
     const ids = new Set<string>();
@@ -762,6 +833,10 @@ export default function EliminationScoring({
       return;
     }
 
+    if (isDnf) {
+      autoPrefillDnfBibsRef.current = [];
+    }
+
     focusIndex(targetIndex + 1);
   }
 
@@ -870,6 +945,9 @@ export default function EliminationScoring({
                   if (isFixedElimMode && idx <= 1 && reason === "input") {
                     clearAutoPrefillBib(idx as 0 | 1);
                   }
+                  if (isDnf && reason === "input") {
+                    autoPrefillDnfBibsRef.current = [];
+                  }
 
                   setRows((prev) => {
                     const copy = prev.slice();
@@ -911,6 +989,9 @@ export default function EliminationScoring({
                   if (isFixedElimMode && idx <= 1) {
                     clearAutoPrefillBib(idx as 0 | 1);
                   }
+                  if (isDnf) {
+                    autoPrefillDnfBibsRef.current = [];
+                  }
 
                   setRows((prev) => {
                     const copy = prev.slice();
@@ -941,6 +1022,10 @@ export default function EliminationScoring({
                   if (isBibBlocked(bib)) {
                     setError(`Startnummer ${bib} ist nicht mehr wertbar (DNS/DSQ/DNF/ELIM)`);
                     return;
+                  }
+
+                  if (isDnf) {
+                    autoPrefillDnfBibsRef.current = [];
                   }
 
                   setRows((prev) => {
