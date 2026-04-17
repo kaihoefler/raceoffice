@@ -17,7 +17,7 @@ import {
  * - The field names intentionally keep legacy casing/wording.
  * - `Race.ID` uses the internal race UUID (string), replacing historic numeric IDs.
  */
-export type ServiceRaceType = "Point" | "Elimination" | "PointsElimination";
+export type ServiceRaceType = "Points" | "Elimination" | "PointsElimination";
 
 export type CurrentRacePointResult = {
   Place: number;
@@ -71,7 +71,7 @@ export function toServiceRaceType(race: Race): ServiceRaceType {
 
   if (isPoints && isElimination) return "PointsElimination";
   if (isElimination) return "Elimination";
-  return "Point";
+  return "Points";
 }
 
 function isPointsSprintActivity(activity: RaceActivity): activity is RaceActivityPointsSprint {

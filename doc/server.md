@@ -51,7 +51,7 @@ Resolution logic:
 
 Response shape:
 - `Race`: `{ Name, Type, ID }`
-  - `Type`: `"Point" | "Elimination" | "PointsElimination"`
+  - `Type`: `"Points" | "Elimination" | "PointsElimination"`
 - `PointResults`: ranked rows (`Place`, `Startnumber`, `FirstName`, `LastName`, `FinishOrder`, `Eliminated`, `Points`)
 - `PointsLapList`: per-lap sprint points map
 - `Eliminations`, `FinishOrder`, `EliminationResults`

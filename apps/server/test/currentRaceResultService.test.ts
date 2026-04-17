@@ -26,7 +26,7 @@ function makeRace(overrides?: Partial<Race>): Race {
 
 describe("currentRaceResultService", () => {
   it("maps race mode to service type", () => {
-    expect(toServiceRaceType(makeRace({ racemode: { isPointsRace: true, isEliminationRace: false } }))).toBe("Point");
+    expect(toServiceRaceType(makeRace({ racemode: { isPointsRace: true, isEliminationRace: false } }))).toBe("Points");
     expect(toServiceRaceType(makeRace({ racemode: { isPointsRace: false, isEliminationRace: true } }))).toBe("Elimination");
     expect(toServiceRaceType(makeRace({ racemode: { isPointsRace: true, isEliminationRace: true } }))).toBe("PointsElimination");
   });
