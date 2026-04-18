@@ -92,11 +92,11 @@ function athleteName(a: Athlete | null | undefined): string {
 }
 
 function formatDsqFooterNamePart(athlete: Athlete | null): string {
-  const rawInitial = String(athlete?.firstName ?? "").trim().charAt(0);
-  const firstInitial = rawInitial ? `${rawInitial}.` : "";
+  // Im Footer den Vornamen (max. 20 Zeichen) statt nur Initial anzeigen.
+  const firstName = String(athlete?.firstName ?? "").trim().slice(0, 20);
   const lastName = String(athlete?.lastName ?? "").trim();
 
-  return [firstInitial, lastName].filter(Boolean).join(" ").trim();
+  return [firstName, lastName].filter(Boolean).join(" ").trim();
 }
 
 function isNameColumnTitle(title: string): boolean {
@@ -107,6 +107,10 @@ function isNameColumnTitle(title: string): boolean {
 function isRankOrBibColumnTitle(title: string): boolean {
   const normalized = String(title ?? "").trim().toLowerCase();
   return normalized === "rank" || normalized === "bib";
+}
+
+function isBibColumnTitle(title: string): boolean {
+  return String(title ?? "").trim().toLowerCase() === "bib";
 }
 
 // Primitive Werte für Template-Platzhalter in String umwandeln.
@@ -350,7 +354,7 @@ export default function VisualizerPage() {
 
       // Sobald nach einem Skip-Block wieder eine sichtbare Zeile kommt,
       // wird genau eine "..."-Zeile davor eingefügt.
-      if (showSkippedRowsIndicator && skippedRunCount > 0) {
+      if (showSkippedRowsIndicator && skippedRunCount > 0 && mapped.length > 0) {
         mapped.push({ kind: "skippedIndicator", key: `skipped-rows-indicator-${mapped.length}` });
         skippedRunCount = 0;
       }
@@ -371,7 +375,7 @@ export default function VisualizerPage() {
 
     // Falls der letzte Block der sortierten Liste nur aus "skipped" besteht,
     // kommt der Indicator ans Ende (DNS wurde bereits vorher ausgeschlossen).
-    if (showSkippedRowsIndicator && skippedRunCount > 0) {
+    if (showSkippedRowsIndicator && skippedRunCount > 0 && mapped.length > 0) {
       mapped.push({ kind: "skippedIndicator", key: `skipped-rows-indicator-${mapped.length}` });
     }
 
@@ -643,8 +647,9 @@ export default function VisualizerPage() {
               // Zeilenweise Statusfarbe und optionale Zebra-Färbung vorbereiten.
               const c = statusColor(r.status.kind);
               const isStatus = Boolean(r.status.kind);
-              // Rank/Bib sollen weiterhin klar rot bleiben (auch wenn andere Felder neutral sind).
+              // Rank bleibt bei Status rot, Bib bleibt bei ELIM bewusst in Standardfarbe.
               const rankBibColor = isStatus ? theme.palette.error.main : undefined;
+              const shouldBibBeNeutral = r.status.kind === "ELIM";
 
               return (
                 <TableRow
@@ -669,7 +674,9 @@ export default function VisualizerPage() {
                           whiteSpace: "nowrap",
                           width: col.columnWidth || undefined,
                           ...(isStatus && isRankOrBibColumnTitle(col.columnTitle)
-                            ? { "&&": { color: rankBibColor } }
+                            ? isBibColumnTitle(col.columnTitle) && shouldBibBeNeutral
+                              ? { "&&": { color: "inherit" } }
+                              : { "&&": { color: rankBibColor } }
                             : isStatus && !isNameColumnTitle(col.columnTitle)
                               ? { "&&": { color: c } }
                               : {}),
@@ -682,7 +689,7 @@ export default function VisualizerPage() {
                     // Standardansicht: Rank, Bib, Nation, Name, Result/Points
                     <>
                       <TableCell sx={isStatus ? { "&&": { color: rankBibColor } } : undefined}>{r.rank > 0 ? r.rank : "-"}</TableCell>
-                      <TableCell sx={isStatus ? { "&&": { color: rankBibColor } } : undefined}>{r.bib}</TableCell>
+                      <TableCell sx={isStatus ? { "&&": { color: shouldBibBeNeutral ? "inherit" : rankBibColor } } : undefined}>{r.bib}</TableCell>
                       <TableCell align="center" sx={{ width: 70, ...(isStatus ? { "&&": { color: c } } : {}) }}>
                         {renderPlaceholderNode("athlete", "nation", r.result, r.athlete, `standard-nation-${r.key}`)}
                       </TableCell>
@@ -726,14 +733,14 @@ export default function VisualizerPage() {
               component="div"
               sx={{
                 color: "inherit",
-                fontWeight: 800,
+                fontWeight: "inherit",
                 fontSize: "0.95em",
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
               }}
             >
-              <Box component="span" sx={{ color: theme.palette.error.main }}>
+              <Box component="span" sx={{ color: theme.palette.error.main, fontWeight: 800 }}>
                 DSQ:
               </Box>{" "}
               {dsqFooterEntries.map((entry, idx) => (

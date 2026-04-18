@@ -37,6 +37,12 @@ type Props = {
   /** Bibs that are not selectable for scoring actions (DNS/DSQ/DNF/ELIM). */
   blockedBibs?: ReadonlySet<number>;
 
+  /** Live lap deficit per bib (positive values only), used for lapped indication rendering. */
+  lapDeficitByBib?: ReadonlyMap<number, number>;
+
+  /** Bibs that should be highlighted for lapped indication (typically gap >= 2 laps). */
+  lappedIndicationBibs?: ReadonlySet<number>;
+
   /** Optional status flags for starters (shown in tile view). */
   statusByBib?: ReadonlyMap<number, StarterStatus>;
 
@@ -70,6 +76,8 @@ function ScoringStarterList({
   missingInLiveBibs,
   selectedIds,
   blockedBibs,
+  lapDeficitByBib,
+  lappedIndicationBibs,
   statusByBib,
   pointsByBib,
   formatAthleteLabel,
@@ -81,6 +89,10 @@ function ScoringStarterList({
   const theme = useTheme();
 
   const labelOf = formatAthleteLabel ?? defaultAthleteLabel;
+  const lappedIndicationBackgroundColor = "#FFF9C4";
+  const lappedWithPointsBackgroundColor = "#FFE0B2";
+  const lappedIndicationTooltip = "Lapped Athlete. DNF or Elim?";
+  const lappedWithPointsTooltip = "Lapped Athlete with Points";
 
   // Keep latest callback props in refs.
   // This avoids stale closures in click handlers while still allowing memoized renders.
@@ -235,11 +247,16 @@ function ScoringStarterList({
             const st = bib != null ? statusMetaByBib.get(bib) ?? null : null;
             const c = st?.kind ? statusColor(st.kind) : undefined;
             const blocked = bib != null && (blockedBibs?.has(bib) ?? false);
+            const isLappedIndication = bib != null && (lappedIndicationBibs?.has(bib) ?? false);
+            const lapDeficit = bib != null ? Math.max(0, Math.floor(Number(lapDeficitByBib?.get(bib) ?? 0))) : 0;
+            const lapDeficitText = isLappedIndication && lapDeficit > 0 ? `+${lapDeficit} Laps` : "";
 
             const pts = bib != null ? (pointsByBib?.get(bib) ?? 0) : 0;
             const ptsText = pts ? pointsLabel(pts, "long") : "";
+            const isLappedWithPoints = isLappedIndication && pts > 0;
+            const lappedTooltipText = isLappedWithPoints ? lappedWithPointsTooltip : lappedIndicationTooltip;
 
-            return (
+            const rowNode = (
               <ListItem
                 key={a.id}
                 onClick={() => {
@@ -251,7 +268,13 @@ function ScoringStarterList({
                   borderRadius: 1,
                   border: missing ? "2px solid" : undefined,
                   borderColor: missing ? "error.main" : undefined,
-                  bgcolor: isSelected ? "action.selected" : "transparent",
+                  bgcolor: isSelected
+                    ? "action.selected"
+                    : isLappedWithPoints
+                      ? lappedWithPointsBackgroundColor
+                      : isLappedIndication
+                        ? lappedIndicationBackgroundColor
+                        : "transparent",
                   display: "flex",
                   alignItems: "center",
                   gap: 1,
@@ -289,7 +312,19 @@ function ScoringStarterList({
                   />
                 ) : null}
 
-                {ptsText ? (
+                {lapDeficitText ? (
+                  <Chip
+                    size="small"
+                    label={lapDeficitText}
+                    sx={{
+                      height: 22,
+                      fontWeight: 700,
+                      bgcolor: isLappedWithPoints ? lappedWithPointsBackgroundColor : lappedIndicationBackgroundColor,
+                      color: isLappedWithPoints ? "warning.dark" : "warning.dark",
+                      "& .MuiChip-label": { px: 0.75 },
+                    }}
+                  />
+                ) : ptsText ? (
                   <Chip
                     size="small"
                     label={ptsText}
@@ -321,6 +356,12 @@ function ScoringStarterList({
                 ) : null}
               </ListItem>
             );
+
+            return isLappedIndication ? (
+              <Tooltip key={a.id} title={lappedTooltipText} arrow>
+                {rowNode}
+              </Tooltip>
+            ) : rowNode;
           })}
         </List>
       ) : (
@@ -342,13 +383,17 @@ function ScoringStarterList({
             const st = bib != null ? statusMetaByBib.get(bib) ?? null : null;
             const c = st?.kind ? statusColor(st.kind) : null;
             const blocked = bib != null && (blockedBibs?.has(bib) ?? false);
+            const isLappedIndication = bib != null && (lappedIndicationBibs?.has(bib) ?? false);
+            const lapDeficit = bib != null ? Math.max(0, Math.floor(Number(lapDeficitByBib?.get(bib) ?? 0))) : 0;
+            const lapDeficitText = isLappedIndication && lapDeficit > 0 ? `+${lapDeficit} Laps` : "";
 
             const pts = bib != null ? (pointsByBib?.get(bib) ?? 0) : 0;
             const ptsText = pts ? pointsLabel(pts, "short") : "";
+            const isLappedWithPoints = isLappedIndication && pts > 0;
+            const lappedTooltipText = isLappedWithPoints ? lappedWithPointsTooltip : lappedIndicationTooltip;
 
-            return (
+            const tileNode = (
               <Box
-                key={a.id}
                 title={labelOf(a)}
                 onClick={() => {
                   if (blocked) return;
@@ -361,7 +406,13 @@ function ScoringStarterList({
                   borderWidth: missing ? 2 : 1,
                   // Frame color: match Scoreboard.tsx statusColor
                   borderColor: missing ? theme.palette.error.main : c ? c : "divider",
-                  bgcolor: isSelected ? "action.selected" : "background.paper",
+                  bgcolor: isSelected
+                    ? "action.selected"
+                    : isLappedWithPoints
+                      ? lappedWithPointsBackgroundColor
+                      : isLappedIndication
+                        ? lappedIndicationBackgroundColor
+                        : "background.paper",
                   minHeight: 44,
                   display: "flex",
                   flexDirection: "column",
@@ -406,7 +457,14 @@ function ScoringStarterList({
                   ) : null}
                 </Box>
 
-                {st?.label ? (
+                {lapDeficitText ? (
+                  <Typography
+                    variant="caption"
+                    sx={{ lineHeight: 1, color: isLappedWithPoints ? "warning.dark" : "warning.dark", fontWeight: 700 }}
+                  >
+                    {lapDeficitText}
+                  </Typography>
+                ) : st?.label ? (
                   <Typography variant="caption" sx={{ lineHeight: 1, color: c ?? "text.secondary", fontWeight: 700 }}>
                     {st.label}
                   </Typography>
@@ -419,6 +477,14 @@ function ScoringStarterList({
                   <Box sx={{ height: 10 }} />
                 )}
               </Box>
+            );
+
+            return isLappedIndication ? (
+              <Tooltip key={a.id} title={lappedTooltipText} arrow>
+                {tileNode}
+              </Tooltip>
+            ) : (
+              <Box key={a.id}>{tileNode}</Box>
             );
           })}
         </Box>
@@ -485,6 +551,8 @@ function arePropsEqual(prev: Props, next: Props) {
     areSetsEqual(prev.missingInLiveBibs, next.missingInLiveBibs) &&
     areSetsEqual(prev.selectedIds, next.selectedIds) &&
     areSetsEqual(prev.blockedBibs, next.blockedBibs) &&
+    areMapsEqual(prev.lapDeficitByBib, next.lapDeficitByBib) &&
+    areSetsEqual(prev.lappedIndicationBibs, next.lappedIndicationBibs) &&
     areMapsEqual(prev.statusByBib, next.statusByBib) &&
     areMapsEqual(prev.pointsByBib, next.pointsByBib) &&
     prev.formatAthleteLabel === next.formatAthleteLabel &&

@@ -313,17 +313,22 @@ export default function ScoringPage() {
     return (
         <Box sx={{ width: "100%", maxWidth: "none" }}>
             <Card variant="outlined" sx={{ width: "100%" }}>
-                <CardHeader
+                                <CardHeader
+                    sx={{
+                        backgroundColor: isActiveRace ? "rgba(76, 175, 80, 0.12)" : undefined,
+                    }}
                     title={
+
                         <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: "wrap" }}>
                             <Typography variant="h6" component="span" sx={{ minWidth: 0 }}>
                                 {`Scoring • ${race.name}`}
                             </Typography>
 
-                            {/* Active status direkt hinter dem Race-Namen */}
+                                                        {/* Active status direkt hinter dem Race-Namen */}
                             {isActiveRace ? (
-                                <Chip size="small" label="Active" color="success" variant="outlined" />
+                                <Chip size="small" label="Active" color="success" variant="filled" />
                             ) : null}
+
 
                             {/* Activate / Deactivate direkt hinter dem Race-Namen */}
                             <Button

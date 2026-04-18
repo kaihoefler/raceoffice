@@ -72,13 +72,20 @@ type Props = {
   /** Live laps to go (typically RaceStatusRace.lapsToGo). */
   liveLapsToGo?: number | null;
 
-  /** Top bibs by live position (p1..p3). Used for auto-prefill when sync is enabled. */
+    /** Top bibs by live position (p1..p3). Used for auto-prefill when sync is enabled. */
   liveTopBibs?: {
     p1Bib: number | null;
     p2Bib: number | null;
     p3Bib: number | null;
   };
+
+  /** Live lap deficit per bib (positive values only), used for lapped indication in starter list. */
+  lappedIndicationByBib?: ReadonlyMap<number, number>;
+
+  /** Bibs that are >= 2 laps behind in live feed, used for lapped indication highlighting. */
+  lappedIndicationBibs?: ReadonlySet<number>;
 };
+
 
 function athleteLabel(a: Athlete) {
   return `${a.bib ?? ""} - ${(a.lastName ?? "").trim()} ${(a.firstName ?? "").trim()}`.trim();
@@ -150,10 +157,13 @@ export default function PointsScoring({
 
 
   syncEnabled = false,
-  liveLapCount = null,
+    liveLapCount = null,
   liveLapsToGo = null,
   liveTopBibs = DEFAULT_LIVE_TOP_BIBS,
+  lappedIndicationByBib,
+  lappedIndicationBibs,
 }: Props) {
+
   // ---------------------------------------------------------------------------
   // Derived data: starters + lookup maps
   // ---------------------------------------------------------------------------
@@ -1084,10 +1094,13 @@ export default function PointsScoring({
         statusByBib={statusByBib}
         pointsByBib={pointsByBib}
         formatAthleteLabel={athleteLabel}
-        onDeleteStarter={onDeleteStarter}
+                onDeleteStarter={onDeleteStarter}
                 onStarterClick={handleStarterClick}
         blockedBibs={blockedBibs}
+        lapDeficitByBib={lappedIndicationByBib}
+        lappedIndicationBibs={lappedIndicationBibs}
       />
+
 
 
 

@@ -80,6 +80,12 @@ type Props = {
 
   /** Suggested DNF candidates from live feed (same positive lap gap bucket). */
   liveDnfSuggestedBibs?: number[];
+
+  /** Live lap deficit per bib (positive values only), used for lapped indication in starter list. */
+  lappedIndicationByBib?: ReadonlyMap<number, number>;
+
+  /** Bibs that are >= 2 laps behind in live feed, used for lapped indication highlighting. */
+  lappedIndicationBibs?: ReadonlySet<number>;
 };
 
 function athleteLabel(a: Athlete) {
@@ -175,6 +181,8 @@ export default function EliminationScoring({
   liveLastEligibleBibs = { lastBib: null, secondLastBib: null },
   liveZeroLapBibs = [],
   liveDnfSuggestedBibs = [],
+  lappedIndicationByBib,
+  lappedIndicationBibs,
 }: Props) {
   // ---------------------------------------------------------------------------
   // Derived data: starters + lookup maps
@@ -1091,6 +1099,8 @@ export default function EliminationScoring({
         onDeleteStarter={onDeleteStarter}
         onStarterClick={handleStarterClick}
         blockedBibs={blockedBibs}
+        lapDeficitByBib={lappedIndicationByBib}
+        lappedIndicationBibs={lappedIndicationBibs}
       />
 
       <Dialog

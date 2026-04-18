@@ -61,7 +61,7 @@ export type ScoringViewModel = {
     /** Bibs that still have 0 lapsComplete in the live feed (and are not DNF/DNS/DSQ in current raceResults). */
   liveZeroLapBibs: number[];
 
-  /**
+    /**
    * Suggested DNF candidates from live feed:
    * - only competitors with a positive lap deficit vs current live leader
    * - grouped by equal lap deficit
@@ -69,8 +69,22 @@ export type ScoringViewModel = {
    */
   liveDnfSuggestedBibs: number[];
 
+  /**
+   * Lapped indication map from live feed:
+   * - value is the positive lap deficit to the current live leader
+   * - only includes non-blocked bibs
+   */
+  lappedIndicationByBib: ReadonlyMap<number, number>;
 
   /**
+   * Bibs that are at least 2 laps behind in the live feed (non-blocked only).
+   * Used by scoring starter lists to highlight riders that likely require DNF/ELIM handling.
+   */
+  lappedIndicationBibs: ReadonlySet<number>;
+
+
+  /**
+
 
    * Build Athlete objects for competitors that appear in liveRace but are missing in race.raceStarters.
    * Can be used by the page to append them to the race starters list.
@@ -285,7 +299,10 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
       lapsByBib.set(bib, Math.max(0, Math.floor(lapsRaw)));
     }
 
-    let liveDnfSuggestedBibs: number[] = [];
+        let liveDnfSuggestedBibs: number[] = [];
+    const lappedIndicationByBib = new Map<number, number>();
+    const lappedIndicationBibs = new Set<number>();
+
     if (lapsByBib.size > 0) {
       let leaderLap = 0;
       for (const laps of lapsByBib.values()) {
@@ -296,6 +313,11 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
       for (const [bib, laps] of lapsByBib.entries()) {
         const gap = leaderLap - laps;
         if (gap < 1) continue;
+
+        lappedIndicationByBib.set(bib, gap);
+        if (gap >= 2) {
+          lappedIndicationBibs.add(bib);
+        }
 
         const arr = byGap.get(gap) ?? [];
         arr.push(bib);
@@ -310,6 +332,7 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
 
 
     // ---- Standings (Points) ----
+
 
     const activities = ((race as any)?.raceActivities ?? []) as RaceActivity[];
     const pointsByBib = new Map<number, number>();
@@ -399,12 +422,15 @@ export function useScoringViewModel(race: Race | null, syncEnabled: boolean): Sc
       liveLapsToGo,
                         liveTopBibs,
             liveLastEligibleBibs,
-      liveZeroLapBibs,
+            liveZeroLapBibs,
       liveDnfSuggestedBibs,
+      lappedIndicationByBib,
+      lappedIndicationBibs,
 
       getMissingStarterBibsFromLive,
 
       buildStartersForBibs,
+
     };
   }, [
         race?.raceStarters,

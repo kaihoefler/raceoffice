@@ -54,6 +54,10 @@ type Props = {
   onDeleteStarter?: (starter: Athlete) => void;
   missingInLiveBibs?: Set<number>;
   blockedBibs?: ReadonlySet<number>;
+  /** Live lap deficit per bib (positive values only), used for lapped indication in starter list. */
+  lappedIndicationByBib?: ReadonlyMap<number, number>;
+  /** Bibs that are >= 2 laps behind in live feed, used for lapped indication highlighting. */
+  lappedIndicationBibs?: ReadonlySet<number>;
 };
 
 /**
@@ -178,6 +182,8 @@ export default function FinishLineScoring({
   onDeleteStarter,
   missingInLiveBibs,
   blockedBibs,
+  lappedIndicationByBib,
+  lappedIndicationBibs,
 }: Props) {
   /**
    * Starterliste sortieren:
@@ -1085,6 +1091,8 @@ export default function FinishLineScoring({
         onDeleteStarter={onDeleteStarter}
         onStarterClick={handleStarterClick}
         blockedBibs={blockedBibs}
+        lapDeficitByBib={lappedIndicationByBib}
+        lappedIndicationBibs={lappedIndicationBibs}
       />
 
       {/* Dialog: clear all finish entries */}

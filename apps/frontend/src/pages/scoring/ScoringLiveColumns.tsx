@@ -89,6 +89,8 @@ export default function ScoringLiveColumns({
               liveLapCount={vm.liveLapCount}
               liveLapsToGo={vm.liveLapsToGo}
               liveTopBibs={vm.liveTopBibs}
+              lappedIndicationByBib={vm.lappedIndicationByBib}
+              lappedIndicationBibs={vm.lappedIndicationBibs}
             />
           ) : col1Tab === "finish" ? (
             <FinishLineScoring
@@ -99,6 +101,8 @@ export default function ScoringLiveColumns({
               onDeleteStarter={onDeleteStarter}
               missingInLiveBibs={vm.missingInLiveBibs}
               blockedBibs={vm.blockedBibs}
+              lappedIndicationByBib={vm.lappedIndicationByBib}
+              lappedIndicationBibs={vm.lappedIndicationBibs}
             />
           ) : (
             <EliminationScoring
@@ -115,6 +119,8 @@ export default function ScoringLiveColumns({
               liveLastEligibleBibs={vm.liveLastEligibleBibs}
               liveZeroLapBibs={vm.liveZeroLapBibs}
               liveDnfSuggestedBibs={vm.liveDnfSuggestedBibs}
+              lappedIndicationByBib={vm.lappedIndicationByBib}
+              lappedIndicationBibs={vm.lappedIndicationBibs}
             />
           )}
         </Box>

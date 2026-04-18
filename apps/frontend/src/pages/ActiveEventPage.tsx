@@ -81,11 +81,13 @@ export default function ActiveEventPage() {
     fullEvent,
     status,
     error,
-    saveRace: saveRaceAction,
+        saveRace: saveRaceAction,
     deleteRace: deleteRaceAction,
-    setActiveRace: setActiveRaceAction,
+    toggleActiveRace: toggleActiveRaceAction,
     makeNextRaceTemplate,
+
   } = useEventsActions(activeEventId);
+
 
   // IMPORTANT: Hooks must not be called conditionally.
   // So we call navigation + local state hooks before doing any early returns.
@@ -199,9 +201,10 @@ export default function ActiveEventPage() {
    * Wird im Table als "Active" hervorgehoben und kann später z.B. als Default-Navigation dienen.
    */
         
-    function setActiveRace(raceId: string) {
-    setActiveRaceAction(raceId);
+      function toggleActiveRace(raceId: string) {
+    toggleActiveRaceAction(raceId);
   }
+
 
   // -----------------------
 
@@ -332,7 +335,21 @@ export default function ActiveEventPage() {
     });
   }, [fullEvent.ageGroups]);
 
+  // Header-Shortcut: springt zur Scoring-Seite des aktiven Rennens.
+  // Falls kein aktives Rennen gesetzt ist, verwenden wir das erste Rennen der aktuell angezeigten Liste.
+  // Falls die Filterliste leer ist, nutzen wir als Fallback das erste vorhandene Rennen im Event.
+  const scoringHeaderTargetRaceId =
+    (fullEvent.activeRaceId && fullEvent.races.some((r) => r.id === fullEvent.activeRaceId)
+      ? fullEvent.activeRaceId
+      : null) ?? filteredRaces[0]?.id ?? fullEvent.races[0]?.id ?? null;
+
+  function openHeaderScoring() {
+    if (!scoringHeaderTargetRaceId) return;
+    navigate(`/races/${scoringHeaderTargetRaceId}/scoring`);
+  }
+
     /**
+
    * Render:
    * - Card: Event Header + Live-Status (useRealtimeDoc status/error)
    * - Filterzeile: AgeGroup/Stage/Mode Filter + Count Chip
@@ -349,7 +366,7 @@ export default function ActiveEventPage() {
     <Box>
       <Card variant="outlined">
         {/* Kopfbereich: zeigt Eventnamen und Realtime-Status */}
-        <CardHeader
+                <CardHeader
           title={`Active Event: ${activeEvent?.name ?? activeEventId}`}
           subheader={
             <Typography variant="caption" color={error ? "error" : "text.secondary"}>
@@ -358,7 +375,22 @@ export default function ActiveEventPage() {
               {error ? ` (${error})` : ""}
             </Typography>
           }
+          action={
+            <Tooltip title="Go to scoring (active race or first race)" arrow>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={openHeaderScoring}
+                  aria-label="Go to scoring"
+                  disabled={!scoringHeaderTargetRaceId}
+                >
+                  <EmojiEventsIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+          }
         />
+
         <Divider />
         <CardContent>
           {/* Titelzeile + Action “New race” */}
@@ -482,32 +514,20 @@ export default function ActiveEventPage() {
 
                     <TableCell align="right">{athletesCount}</TableCell>
 
-                    {/* Activate / Active:
-                        - Klick setzt fullEvent.activeRaceId
-                        - Wenn aktiv: Button disabled, aber optisch weiterhin “success” (grün)
-                          => MUI macht disabled normalerweise grau, daher SX Override */}
+                                        {/* Activate / Deactivate:
+                        - Klick toggelt fullEvent.activeRaceId
+                        - aktives Rennen kann damit direkt wieder deaktiviert werden */}
                     <TableCell align="center">
                       <Button
                         size="small"
-                        onClick={() => setActiveRace(r.id)}
-                        disabled={isActiveRace}
+                        onClick={() => toggleActiveRace(r.id)}
                         variant="outlined"
-                        color={isActiveRace ? "success" : "primary"}
-                        sx={
-                          isActiveRace
-                            ? {
-                                "&.Mui-disabled": {
-                                  color: "success.main",
-                                  borderColor: "success.main",
-                                  opacity: 1,
-                                },
-                              }
-                            : undefined
-                        }
+                        color={isActiveRace ? "warning" : "primary"}
                       >
-                        {isActiveRace ? "Active" : "Activate"}
+                        {isActiveRace ? "Deactivate" : "Activate"}
                       </Button>
                     </TableCell>
+
 
                     {/* Actions:
                         - Next race: kopiert Race + stage_value+1 (Editor öffnet mit Template)
