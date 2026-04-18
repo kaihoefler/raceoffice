@@ -354,8 +354,13 @@ export default function VisualizerPage() {
 
       // Sobald nach einem Skip-Block wieder eine sichtbare Zeile kommt,
       // wird genau eine "..."-Zeile davor eingefügt.
-      if (showSkippedRowsIndicator && skippedRunCount > 0 && mapped.length > 0) {
-        mapped.push({ kind: "skippedIndicator", key: `skipped-rows-indicator-${mapped.length}` });
+      // Ausnahme: vor der ERSTEN sichtbaren Zeile niemals "..." rendern,
+      // den Skip-Zähler aber trotzdem zurücksetzen, damit er nicht
+      // fälschlich zwischen zwei sichtbaren Zeilen erscheint.
+      if (showSkippedRowsIndicator && skippedRunCount > 0) {
+        if (mapped.length > 0) {
+          mapped.push({ kind: "skippedIndicator", key: `skipped-rows-indicator-${mapped.length}` });
+        }
         skippedRunCount = 0;
       }
 
@@ -370,7 +375,7 @@ export default function VisualizerPage() {
         points: result.points,
         status: getStatus(result),
         name: athleteName(athlete),
-    });
+      });
     }
 
     // Falls der letzte Block der sortierten Liste nur aus "skipped" besteht,
@@ -610,10 +615,10 @@ export default function VisualizerPage() {
                     sx={
                       rowBg
                         ? {
-                            "& .MuiTableCell-root": {
-                              backgroundColor: rowBg,
-                            },
-                          }
+                          "& .MuiTableCell-root": {
+                            backgroundColor: rowBg,
+                          },
+                        }
                         : undefined
                     }
                   >
@@ -657,10 +662,10 @@ export default function VisualizerPage() {
                   sx={{
                     ...(rowBg
                       ? {
-                          "& .MuiTableCell-root": {
-                            backgroundColor: rowBg,
-                          },
-                        }
+                        "& .MuiTableCell-root": {
+                          backgroundColor: rowBg,
+                        },
+                      }
                       : {}),
                   }}
                 >

@@ -41,6 +41,8 @@ import HomeIcon from "@mui/icons-material/Home";
 import GroupsIcon from "@mui/icons-material/Groups";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import HistoryIcon from "@mui/icons-material/History";
+import MyLocationIcon from "@mui/icons-material/MyLocation";
+
 
 
 import { useEventList } from "../providers/EventListProvider";
@@ -249,7 +251,7 @@ export default function ScoringPage() {
         downloadTextFile(filename, csv, "text/csv;charset=utf-8");
     }
 
-        function handleExportRaceResultsLegacyPointsOnly() {
+    function handleExportRaceResultsLegacyPointsOnly() {
         if (!race) return;
 
         const legacy = buildRaceResultsPointsOnlyLegacy(race.raceResults ?? []);
@@ -309,11 +311,21 @@ export default function ScoringPage() {
 
     const ageGroupLabel = raceAgeGroup ? `${raceAgeGroup.name} (${raceAgeGroup.gender})` : race.ageGroupId;
     const isActiveRace = fullEvent.activeRaceId === race.id;
+    const activeRaceTargetId =
+        fullEvent.activeRaceId && fullEvent.races.some((r) => r.id === fullEvent.activeRaceId)
+            ? fullEvent.activeRaceId
+            : null;
+
+    function openActiveRaceScoring() {
+        if (!activeRaceTargetId) return;
+        navigate(`/races/${activeRaceTargetId}/scoring`);
+    }
 
     return (
+
         <Box sx={{ width: "100%", maxWidth: "none" }}>
             <Card variant="outlined" sx={{ width: "100%" }}>
-                                <CardHeader
+                <CardHeader
                     sx={{
                         backgroundColor: isActiveRace ? "rgba(76, 175, 80, 0.12)" : undefined,
                     }}
@@ -324,7 +336,7 @@ export default function ScoringPage() {
                                 {`Scoring • ${race.name}`}
                             </Typography>
 
-                                                        {/* Active status direkt hinter dem Race-Namen */}
+                            {/* Active status direkt hinter dem Race-Namen */}
                             {isActiveRace ? (
                                 <Chip size="small" label="Active" color="success" variant="filled" />
                             ) : null}
@@ -366,7 +378,21 @@ export default function ScoringPage() {
                                 activeRaceId={fullEvent.activeRaceId}
                             />
 
-                                                        <Tooltip title="Export results as CSV" arrow>
+                            <Tooltip title="Go to active race" arrow>
+                                <span>
+                                    <IconButton
+                                        size="small"
+                                        onClick={openActiveRaceScoring}
+                                        disabled={!activeRaceTargetId}
+                                        aria-label="Go to active race"
+                                    >
+                                        <MyLocationIcon />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+
+                            <Tooltip title="Export results as CSV" arrow>
+
                                 <span>
                                     <IconButton
                                         size="small"
@@ -466,7 +492,7 @@ export default function ScoringPage() {
                                 onRecalculateResults={handleRecalculateResults}
                             />
                         </Box>
-                  </Box>
+                    </Box>
                 </CardContent>
             </Card>
         </Box>
