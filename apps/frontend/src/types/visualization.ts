@@ -59,12 +59,32 @@ export type FullVisualization = Visualization & {
   /** Default font weight for the visualization (e.g. "400", "700", "normal" or "bold"). */
   fontWeight: string;
 
-  /** Default font color for the visualization (e.g. "#ffffff" or "white"). */
+    /** Default font color for the visualization (e.g. "#ffffff" or "white"). */
   fontColor: string;
+
+  /** Enables the fixed footer area at the bottom of the visualizer page. */
+  showFooter: boolean;
+
+    /** Background color of the fixed footer area (e.g. "#111111"). */
+  footerBackgroundColor: string;
+
+  /** Top page margin in px for display calibration (TV overscan compensation). */
+  pageMarginTop: number;
+
+  /** Right page margin in px for display calibration (TV overscan compensation). */
+  pageMarginRight: number;
+
+  /** Bottom page margin in px for display calibration (TV overscan compensation). */
+  pageMarginBottom: number;
+
+  /** Left page margin in px for display calibration (TV overscan compensation). */
+  pageMarginLeft: number;
 
   /** Column configuration for the result table on the visualization page. */
   columns: VisualizationColumn[];
 };
+
+
 
 
 

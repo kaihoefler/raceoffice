@@ -94,6 +94,24 @@ function normalizeFullVisualization(raw: unknown, visualizationId: string, listE
     fontSize: typeof obj.fontSize === "string" ? obj.fontSize : "16px",
     fontWeight: typeof obj.fontWeight === "string" ? obj.fontWeight : "400",
     fontColor: typeof obj.fontColor === "string" ? obj.fontColor : "#ffffff",
+    showFooter: typeof obj.showFooter === "boolean" ? obj.showFooter : false,
+    footerBackgroundColor: typeof obj.footerBackgroundColor === "string" ? obj.footerBackgroundColor : "#111111",
+    pageMarginTop:
+      typeof obj.pageMarginTop === "number" && Number.isFinite(obj.pageMarginTop)
+        ? Math.max(0, Math.floor(obj.pageMarginTop))
+        : 48,
+    pageMarginRight:
+      typeof obj.pageMarginRight === "number" && Number.isFinite(obj.pageMarginRight)
+        ? Math.max(0, Math.floor(obj.pageMarginRight))
+        : 48,
+    pageMarginBottom:
+      typeof obj.pageMarginBottom === "number" && Number.isFinite(obj.pageMarginBottom)
+        ? Math.max(0, Math.floor(obj.pageMarginBottom))
+        : 32,
+    pageMarginLeft:
+      typeof obj.pageMarginLeft === "number" && Number.isFinite(obj.pageMarginLeft)
+        ? Math.max(0, Math.floor(obj.pageMarginLeft))
+        : 48,
     columns,
   };
 }

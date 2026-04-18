@@ -91,6 +91,24 @@ function athleteName(a: Athlete | null | undefined): string {
   return `${String(a.lastName ?? "").trim()} ${String(a.firstName ?? "").trim()}`.trim();
 }
 
+function formatDsqFooterNamePart(athlete: Athlete | null): string {
+  const rawInitial = String(athlete?.firstName ?? "").trim().charAt(0);
+  const firstInitial = rawInitial ? `${rawInitial}.` : "";
+  const lastName = String(athlete?.lastName ?? "").trim();
+
+  return [firstInitial, lastName].filter(Boolean).join(" ").trim();
+}
+
+function isNameColumnTitle(title: string): boolean {
+  const normalized = String(title ?? "").trim().toLowerCase();
+  return normalized === "name";
+}
+
+function isRankOrBibColumnTitle(title: string): boolean {
+  const normalized = String(title ?? "").trim().toLowerCase();
+  return normalized === "rank" || normalized === "bib";
+}
+
 // Primitive Werte für Template-Platzhalter in String umwandeln.
 function templateValueToString(value: unknown): string {
   if (value == null) return "";
@@ -260,6 +278,15 @@ export default function VisualizerPage() {
   const fontColor = visualization?.fontColor ?? "#ffffff";
   // Optionales UI-Feature: zeigt "..." für ausgelassene Fahrer ohne Resultat.
   const showSkippedRowsIndicator = Boolean(visualization?.showSkippedRowsIndicator);
+  // Optionaler, fixierter Footer-Bereich am unteren Browserrand.
+  const showFooter = Boolean(visualization?.showFooter);
+  const footerBackgroundColor = String(visualization?.footerBackgroundColor ?? "#111111").trim() || "#111111";
+
+  // Konfigurierbare Safe-Area-Margins für individuelle Displays/TV-Overscan.
+  const pageMarginTop = Math.max(0, Math.floor(Number(visualization?.pageMarginTop ?? 48) || 0));
+  const pageMarginRight = Math.max(0, Math.floor(Number(visualization?.pageMarginRight ?? 48) || 0));
+  const pageMarginBottom = Math.max(0, Math.floor(Number(visualization?.pageMarginBottom ?? 32) || 0));
+  const pageMarginLeft = Math.max(0, Math.floor(Number(visualization?.pageMarginLeft ?? 48) || 0));
 
   // Aktives Rennen aus dem aktuell geladenen Event bestimmen.
   const activeRace: Race | null = useMemo(() => {
@@ -430,6 +457,33 @@ export default function VisualizerPage() {
     return rows.slice(start, start + pagingLines);
   }, [pagingEnabledByConfig, rows, currentPage, pagingLines]);
 
+  // Footer-Anzeige: DSQ-Liste im Format
+  // "DSQ: <Bib> <1. Buchstabe Vorname>. <Nachname>, ..."
+  // Farbregel:
+  // - Bibs rot
+  // - Namen in Standard-Fontfarbe
+  const dsqFooterEntries = useMemo(() => {
+    const results = Array.isArray(activeRace?.raceResults) ? activeRace.raceResults : [];
+    const seen = new Set<number>();
+    const entries: Array<{ bib: number; namePart: string }> = [];
+
+    for (const r of results) {
+      if (!r?.dsq) continue;
+      const bib = Number(r?.bib);
+      if (!Number.isFinite(bib)) continue;
+      const bibInt = Math.floor(bib);
+      if (bibInt <= 0 || seen.has(bibInt)) continue;
+
+      seen.add(bibInt);
+      entries.push({
+        bib: bibInt,
+        namePart: formatDsqFooterNamePart(starterByBib.get(bibInt) ?? null),
+      });
+    }
+
+    return entries;
+  }, [activeRace?.raceResults, starterByBib]);
+
   // Farbwahl für Status-Zeilen.
   function statusColor(kind: StatusKind): string {
     switch (kind) {
@@ -456,9 +510,10 @@ export default function VisualizerPage() {
         fontWeight,
         display: "flex",
         flexDirection: "column",
-        px: 6,
-        pt: 6,
-        pb: 4,
+        pt: `${pageMarginTop}px`,
+        pr: `${pageMarginRight}px`,
+        pb: `${pageMarginBottom}px`,
+        pl: `${pageMarginLeft}px`,
         gap: 2,
         boxSizing: "border-box",
       }}
@@ -588,16 +643,17 @@ export default function VisualizerPage() {
               // Zeilenweise Statusfarbe und optionale Zebra-Färbung vorbereiten.
               const c = statusColor(r.status.kind);
               const isStatus = Boolean(r.status.kind);
+              // Rank/Bib sollen weiterhin klar rot bleiben (auch wenn andere Felder neutral sind).
+              const rankBibColor = isStatus ? theme.palette.error.main : undefined;
 
               return (
                 <TableRow
                   key={r.key}
                   sx={{
-                    ...(rowBg || isStatus
+                    ...(rowBg
                       ? {
                           "& .MuiTableCell-root": {
-                            ...(rowBg ? { backgroundColor: rowBg } : {}),
-                            ...(isStatus ? { color: c } : {}),
+                            backgroundColor: rowBg,
                           },
                         }
                       : {}),
@@ -609,7 +665,15 @@ export default function VisualizerPage() {
                       <TableCell
                         key={`${r.key}-${colIdx}`}
                         align={col.columnAlign}
-                        sx={{ whiteSpace: "nowrap", width: col.columnWidth || undefined }}
+                        sx={{
+                          whiteSpace: "nowrap",
+                          width: col.columnWidth || undefined,
+                          ...(isStatus && isRankOrBibColumnTitle(col.columnTitle)
+                            ? { "&&": { color: rankBibColor } }
+                            : isStatus && !isNameColumnTitle(col.columnTitle)
+                              ? { "&&": { color: c } }
+                              : {}),
+                        }}
                       >
                         {resolveColumnNode(col, r.result, r.athlete, isPointsRace, c)}
                       </TableCell>
@@ -617,14 +681,14 @@ export default function VisualizerPage() {
                   ) : (
                     // Standardansicht: Rank, Bib, Nation, Name, Result/Points
                     <>
-                      <TableCell>{r.rank > 0 ? r.rank : "-"}</TableCell>
-                      <TableCell>{r.bib}</TableCell>
-                      <TableCell align="center" sx={{ width: 70 }}>
+                      <TableCell sx={isStatus ? { "&&": { color: rankBibColor } } : undefined}>{r.rank > 0 ? r.rank : "-"}</TableCell>
+                      <TableCell sx={isStatus ? { "&&": { color: rankBibColor } } : undefined}>{r.bib}</TableCell>
+                      <TableCell align="center" sx={{ width: 70, ...(isStatus ? { "&&": { color: c } } : {}) }}>
                         {renderPlaceholderNode("athlete", "nation", r.result, r.athlete, `standard-nation-${r.key}`)}
                       </TableCell>
-                      <TableCell sx={{ whiteSpace: "nowrap" }}>{r.name}</TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap", color: "inherit" }}>{r.name}</TableCell>
 
-                      <TableCell align="right">
+                      <TableCell align="right" sx={isStatus ? { "&&": { color: c } } : undefined}>
                         {renderDynamicResultNode(r.result, isPointsRace, c)}
                       </TableCell>
                     </>
@@ -646,6 +710,45 @@ export default function VisualizerPage() {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {showFooter ? (
+        <Box
+          sx={{
+            flexShrink: 0,
+            mt: 2,
+            px: 2,
+            py: 1.25,
+            bgcolor: footerBackgroundColor,
+          }}
+        >
+          {dsqFooterEntries.length > 0 ? (
+            <Typography
+              component="div"
+              sx={{
+                color: "inherit",
+                fontWeight: 800,
+                fontSize: "0.95em",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              <Box component="span" sx={{ color: theme.palette.error.main }}>
+                DSQ:
+              </Box>{" "}
+              {dsqFooterEntries.map((entry, idx) => (
+                <Box component="span" key={`${entry.bib}-${idx}`}>
+                  <Box component="span" sx={{ color: theme.palette.error.main }}>
+                    {entry.bib}
+                  </Box>
+                  {entry.namePart ? <Box component="span"> {entry.namePart}</Box> : null}
+                  {idx < dsqFooterEntries.length - 1 ? ", " : ""}
+                </Box>
+              ))}
+            </Typography>
+          ) : null}
+        </Box>
+      ) : null}
     </Box>
   );
 }

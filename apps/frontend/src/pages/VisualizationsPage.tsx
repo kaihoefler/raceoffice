@@ -70,6 +70,12 @@ function normalizeImportedFullVisualization(raw: unknown, fallback: { id: string
     fontSize: typeof obj.fontSize === "string" ? obj.fontSize : "16px",
     fontWeight: typeof obj.fontWeight === "string" ? obj.fontWeight : "400",
     fontColor: typeof obj.fontColor === "string" ? obj.fontColor : "#ffffff",
+    showFooter: Boolean(obj.showFooter),
+    footerBackgroundColor: typeof obj.footerBackgroundColor === "string" ? obj.footerBackgroundColor : "#111111",
+    pageMarginTop: Number.isFinite(Number(obj.pageMarginTop)) ? Math.max(0, Math.floor(Number(obj.pageMarginTop))) : 48,
+    pageMarginRight: Number.isFinite(Number(obj.pageMarginRight)) ? Math.max(0, Math.floor(Number(obj.pageMarginRight))) : 48,
+    pageMarginBottom: Number.isFinite(Number(obj.pageMarginBottom)) ? Math.max(0, Math.floor(Number(obj.pageMarginBottom))) : 32,
+    pageMarginLeft: Number.isFinite(Number(obj.pageMarginLeft)) ? Math.max(0, Math.floor(Number(obj.pageMarginLeft))) : 48,
     columns: Array.isArray(obj.columns) ? obj.columns : [],
   };
 }

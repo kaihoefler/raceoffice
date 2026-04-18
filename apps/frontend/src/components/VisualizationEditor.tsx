@@ -54,6 +54,12 @@ export type VisualizationDraft = {
   fontSize: string;
   fontWeight: string;
   fontColor: string;
+  showFooter: boolean;
+  footerBackgroundColor: string;
+  pageMarginTop: number;
+  pageMarginRight: number;
+  pageMarginBottom: number;
+  pageMarginLeft: number;
   columns: VisualizationColumn[];
 };
 
@@ -134,6 +140,12 @@ function normalizeFullVisualization(raw: unknown, visualizationId: string): Full
     fontSize: typeof obj.fontSize === "string" ? obj.fontSize : "16px",
     fontWeight: typeof obj.fontWeight === "string" ? obj.fontWeight : "400",
     fontColor: typeof obj.fontColor === "string" ? obj.fontColor : "#ffffff",
+    showFooter: typeof obj.showFooter === "boolean" ? obj.showFooter : false,
+    footerBackgroundColor: typeof obj.footerBackgroundColor === "string" ? obj.footerBackgroundColor : "#111111",
+    pageMarginTop: normalizeNonNegativeInteger(obj.pageMarginTop, 48),
+    pageMarginRight: normalizeNonNegativeInteger(obj.pageMarginRight, 48),
+    pageMarginBottom: normalizeNonNegativeInteger(obj.pageMarginBottom, 32),
+    pageMarginLeft: normalizeNonNegativeInteger(obj.pageMarginLeft, 48),
     columns: normalizeColumns(obj.columns),
   };
 }
@@ -212,6 +224,12 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
   const [fontSize, setFontSize] = useState("16px");
   const [fontWeight, setFontWeight] = useState("400");
   const [fontColor, setFontColor] = useState("#ffffff");
+  const [showFooter, setShowFooter] = useState(false);
+  const [footerBackgroundColor, setFooterBackgroundColor] = useState("#111111");
+  const [pageMarginTop, setPageMarginTop] = useState("48");
+  const [pageMarginRight, setPageMarginRight] = useState("48");
+  const [pageMarginBottom, setPageMarginBottom] = useState("32");
+  const [pageMarginLeft, setPageMarginLeft] = useState("48");
   const [columns, setColumns] = useState<VisualizationColumn[]>([]);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -232,6 +250,12 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
       fontSize: "16px",
       fontWeight: "400",
       fontColor: "#ffffff",
+      showFooter: false,
+      footerBackgroundColor: "#111111",
+      pageMarginTop: 48,
+      pageMarginRight: 48,
+      pageMarginBottom: 32,
+      pageMarginLeft: 48,
       columns: [],
     }),
   );
@@ -248,9 +272,15 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
       fontSize: fontSize.trim(),
       fontWeight: fontWeight.trim(),
       fontColor: fontColor.trim(),
+      showFooter,
+      footerBackgroundColor: footerBackgroundColor.trim(),
+      pageMarginTop: normalizeNonNegativeInteger(pageMarginTop, 48),
+      pageMarginRight: normalizeNonNegativeInteger(pageMarginRight, 48),
+      pageMarginBottom: normalizeNonNegativeInteger(pageMarginBottom, 32),
+      pageMarginLeft: normalizeNonNegativeInteger(pageMarginLeft, 48),
       columns: normalizeEditableColumns(columns),
     });
-  }, [name, backgroundColor, alternateRowBackgroundColor, usePaging, showSkippedRowsIndicator, pagingLines, pagingTime, fontSize, fontWeight, fontColor, columns]);
+  }, [name, backgroundColor, alternateRowBackgroundColor, usePaging, showSkippedRowsIndicator, pagingLines, pagingTime, fontSize, fontWeight, fontColor, showFooter, footerBackgroundColor, pageMarginTop, pageMarginRight, pageMarginBottom, pageMarginLeft, columns]);
 
   const isDirty = draftJson !== baseJson;
 
@@ -274,6 +304,12 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
     const sourceFontSize = String(normalized?.fontSize ?? "16px");
     const sourceFontWeight = String(normalized?.fontWeight ?? "400");
     const sourceFontColor = String(normalized?.fontColor ?? "#ffffff");
+    const sourceShowFooter = Boolean(normalized?.showFooter ?? false);
+    const sourceFooterBackgroundColor = String(normalized?.footerBackgroundColor ?? "#111111");
+    const sourcePageMarginTop = String(normalized?.pageMarginTop ?? 48);
+    const sourcePageMarginRight = String(normalized?.pageMarginRight ?? 48);
+    const sourcePageMarginBottom = String(normalized?.pageMarginBottom ?? 32);
+    const sourcePageMarginLeft = String(normalized?.pageMarginLeft ?? 48);
     const sourceColumns = normalizeEditableColumns(normalized?.columns ?? []);
 
     setName(sourceName);
@@ -286,6 +322,12 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
     setFontSize(sourceFontSize);
     setFontWeight(sourceFontWeight);
     setFontColor(sourceFontColor);
+    setShowFooter(sourceShowFooter);
+    setFooterBackgroundColor(sourceFooterBackgroundColor);
+    setPageMarginTop(sourcePageMarginTop);
+    setPageMarginRight(sourcePageMarginRight);
+    setPageMarginBottom(sourcePageMarginBottom);
+    setPageMarginLeft(sourcePageMarginLeft);
     setColumns(sourceColumns);
 
     setBaseJson(
@@ -300,6 +342,12 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
         fontSize: sourceFontSize.trim(),
         fontWeight: sourceFontWeight.trim(),
         fontColor: sourceFontColor.trim(),
+        showFooter: sourceShowFooter,
+        footerBackgroundColor: sourceFooterBackgroundColor.trim(),
+        pageMarginTop: normalizeNonNegativeInteger(sourcePageMarginTop, 48),
+        pageMarginRight: normalizeNonNegativeInteger(sourcePageMarginRight, 48),
+        pageMarginBottom: normalizeNonNegativeInteger(sourcePageMarginBottom, 32),
+        pageMarginLeft: normalizeNonNegativeInteger(sourcePageMarginLeft, 48),
         columns: sourceColumns,
       }),
     );
@@ -317,6 +365,12 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
     normalized?.fontSize,
     normalized?.fontWeight,
     normalized?.fontColor,
+    normalized?.showFooter,
+    normalized?.footerBackgroundColor,
+    normalized?.pageMarginTop,
+    normalized?.pageMarginRight,
+    normalized?.pageMarginBottom,
+    normalized?.pageMarginLeft,
     normalized?.columns,
     isDirty,
   ]);
@@ -402,6 +456,12 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
         fontSize: String(fontSize ?? "").trim() || "16px",
         fontWeight: String(fontWeight ?? "").trim() || "400",
         fontColor: String(fontColor ?? "").trim() || "#ffffff",
+        showFooter,
+        footerBackgroundColor: String(footerBackgroundColor ?? "").trim() || "#111111",
+        pageMarginTop: normalizeNonNegativeInteger(pageMarginTop, 48),
+        pageMarginRight: normalizeNonNegativeInteger(pageMarginRight, 48),
+        pageMarginBottom: normalizeNonNegativeInteger(pageMarginBottom, 32),
+        pageMarginLeft: normalizeNonNegativeInteger(pageMarginLeft, 48),
         columns: normalizeEditableColumns(columns),
       };
 
@@ -526,6 +586,60 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
               onChange={(e) => setPagingTime(e.target.value)}
               fullWidth
               helperText='Seconds before auto page switch. Use "0" for no auto switch.'
+            />
+
+            <TextField
+              select
+              label="Show footer"
+              value={showFooter ? "true" : "false"}
+              onChange={(e) => setShowFooter(e.target.value === "true")}
+              fullWidth
+              helperText="Enable a fixed footer area at the bottom of the visualizer."
+            >
+              <MenuItem value="false">No</MenuItem>
+              <MenuItem value="true">Yes</MenuItem>
+            </TextField>
+
+            <ColorField
+              label="Footer background color"
+              value={footerBackgroundColor}
+              onChange={setFooterBackgroundColor}
+              helperText='Hex, e.g. "#111111"'
+              pickerFallback="#111111"
+            />
+          </Stack>
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={3} sx={{ mb: 3 }}>
+            <TextField
+              label="Page margin top (px)"
+              value={pageMarginTop}
+              onChange={(e) => setPageMarginTop(e.target.value)}
+              fullWidth
+              helperText='Safe area inset from top edge, e.g. "48".'
+            />
+
+            <TextField
+              label="Page margin right (px)"
+              value={pageMarginRight}
+              onChange={(e) => setPageMarginRight(e.target.value)}
+              fullWidth
+              helperText='Safe area inset from right edge, e.g. "48".'
+            />
+
+            <TextField
+              label="Page margin bottom (px)"
+              value={pageMarginBottom}
+              onChange={(e) => setPageMarginBottom(e.target.value)}
+              fullWidth
+              helperText='Safe area inset from bottom edge, e.g. "32".'
+            />
+
+            <TextField
+              label="Page margin left (px)"
+              value={pageMarginLeft}
+              onChange={(e) => setPageMarginLeft(e.target.value)}
+              fullWidth
+              helperText='Safe area inset from left edge, e.g. "48".'
             />
           </Stack>
 
