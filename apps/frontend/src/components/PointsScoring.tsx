@@ -1071,24 +1071,8 @@ export default function PointsScoring({
             />
           </PointsRow>
 
-          {mode === "lap" ? (
-            <Box sx={{ display: "flex", justifyContent: "flex-end", mt: -0.25 }}>
-              <Tooltip title="Swap 2P and 1P" arrow>
-                <span>
-                  <IconButton
-                    size="small"
-                    onClick={swapLapPoints}
-                    disabled={!canSwapLapPoints}
-                    aria-label="Swap 2P and 1P"
-                  >
-                    <SwapVertIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            </Box>
-          ) : null}
-
           <PointsRow label="1 P">
+
 
             <PointsBibField
               value={sel1P}
@@ -1137,21 +1121,42 @@ export default function PointsScoring({
             />
           </PointsRow>
 
-          <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 0.5 }}>
-            <Button
-              ref={saveButtonRef}
-              size="small"
-              variant="contained"
-              onClick={() => void saveAsync()}
-              disabled={!canSave}
-            >
-              Save
-            </Button>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, mt: 0.5 }}>
+            <Box sx={{ minWidth: 44, display: "flex", justifyContent: "flex-start" }}>
+              {mode === "lap" ? (
+                <Tooltip title="Swap 2P and 1P" arrow>
+                  <span>
+                    <IconButton
+                      size="small"
+                      onClick={swapLapPoints}
+                      disabled={!canSwapLapPoints}
+                      aria-label="Swap 2P and 1P"
+                      tabIndex={-1}
+                    >
+                      <SwapVertIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              ) : null}
+            </Box>
 
-            <Button size="small" variant="outlined" onClick={clearNow}>
-              Clear
-            </Button>
+            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
+              <Button
+                ref={saveButtonRef}
+                size="small"
+                variant="contained"
+                onClick={() => void saveAsync()}
+                disabled={!canSave}
+              >
+                Save
+              </Button>
+
+              <Button size="small" variant="outlined" onClick={clearNow}>
+                Clear
+              </Button>
+            </Box>
           </Box>
+
 
           <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
             Tip a bib number and select a starter (keyboard). Press Enter in the last field to save.
