@@ -58,7 +58,7 @@ type StatusKind = "DSQ" | "DNS" | "DNF" | "ELIM" | null;
  * - sonst => null
  */
 function getStatus(r: RaceResult): { kind: StatusKind; label: string | null } {
-    if (r.dsq) return { kind: "DSQ", label: "DSQ" };
+  if (r.dsq) return { kind: "DSQ", label: "DSQ" };
   if (r.dns) return { kind: "DNS", label: "DNS" };
   if (r.dnf === "elimination") return { kind: "ELIM", label: `Elim (${r.dnfLap ?? 0})` };
   if (r.dnf === "dnf") return { kind: "DNF", label: `DNF (${r.dnfLap ?? 0})` };
@@ -157,7 +157,7 @@ export default function Scoreboard({
         return theme.palette.text.secondary;
       case "DSQ":
         return theme.palette.error.dark;
-            case "DNF":
+      case "DNF":
       case "ELIM":
         return theme.palette.error.main;
       default:
@@ -168,7 +168,7 @@ export default function Scoreboard({
   return (
     <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1, minWidth: 0 }}>
       {/* Header: Titel + Mode-Umschalter + Count */}
-            <Box sx={{ display: "flex", alignItems: "center", mb: 1, gap: 0.5, flexWrap: "wrap" }}>
+      <Box sx={{ display: "flex", alignItems: "center", mb: 1, gap: 0.5, flexWrap: "wrap" }}>
         <Typography variant="subtitle2" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
           {title}
         </Typography>
@@ -240,7 +240,7 @@ export default function Scoreboard({
             size="small"
             stickyHeader
             aria-label="scoreboard"
-                        sx={{
+            sx={{
               // More compact cell padding (important for smaller screens)
               "& th, & td": {
                 px: { xs: 0.5, sm: 1 },
@@ -275,8 +275,8 @@ export default function Scoreboard({
                       // Bei Statuszeilen färben wir die komplette Zeile ein
                       st.kind
                         ? {
-                            "& td": { color: c },
-                          }
+                          "& td": { color: c },
+                        }
                         : undefined
                     }
                   >

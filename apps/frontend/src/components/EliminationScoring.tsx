@@ -180,7 +180,7 @@ export default function EliminationScoring({
   liveLapCount = null,
   liveLastEligibleBibs = { lastBib: null, secondLastBib: null },
   liveZeroLapBibs = [],
-  liveDnfSuggestedBibs = [],
+  liveDnfSuggestedBibs: _liveDnfSuggestedBibs = [],
   lappedIndicationByBib,
   lappedIndicationBibs,
 }: Props) {
@@ -227,6 +227,10 @@ export default function EliminationScoring({
   const [rows, setRows] = useState<Array<{ sel: Athlete | null; input: string }>>([{ sel: null, input: "" }]);
   const [error, setError] = useState<string | null>(null);
 
+  // DNF bibs saved in this session are temporarily suppressed from live DNF prefill
+  // until the backend roundtrip marks them as blocked in raceResults.
+  const [suppressedDnfBibs, setSuppressedDnfBibs] = useState<Set<number>>(new Set());
+
   // Beim Wechsel auf DNF/DNS/DSQ Eingaben immer leeren.
   useEffect(() => {
     if (mode !== "DNF" && mode !== "DNS" && mode !== "DSQ") return;
@@ -263,6 +267,49 @@ export default function EliminationScoring({
 
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const saveButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  // Forces live-sync effects to re-run when sync is resumed manually (Clear/Save),
+  // even if live values did not change.
+  const [syncResumeNonce, setSyncResumeNonce] = useState(0);
+
+  // Manual override gate for live sync:
+  // once the user edits lap or bib inputs while sync is enabled, we stop applying
+  // live lap/prefill updates until the user presses Clear or Save.
+  const syncOverwriteBlockedRef = useRef(false);
+
+  const isSyncManuallyBlocked = syncEnabled && syncOverwriteBlockedRef.current;
+
+  function markManualSyncOverride() {
+    if (!syncEnabled) return;
+    syncOverwriteBlockedRef.current = true;
+  }
+
+  function requestSyncResume() {
+    if (!syncEnabled) return;
+    syncOverwriteBlockedRef.current = false;
+    autoPrefillBibsRef.current = { bib0: null, bib1: null };
+    autoPrefillDnfBibsRef.current = [];
+    setSyncResumeNonce((n) => n + 1);
+  }
+
+  // Once backend roundtrip marks bibs as blocked, remove them from temporary suppression.
+  useEffect(() => {
+    setSuppressedDnfBibs((prev) => {
+      if (prev.size === 0) return prev;
+
+      let changed = false;
+      const next = new Set<number>();
+      for (const bib of prev) {
+        if (blockedBibs?.has(bib)) {
+          changed = true;
+          continue;
+        }
+        next.add(bib);
+      }
+
+      return changed ? next : prev;
+    });
+  }, [blockedBibs]);
 
   // ---------------------------------------------------------------------------
   // Dialog: missing starters (non-optimistic flow)
@@ -304,6 +351,7 @@ export default function EliminationScoring({
     setLap(1);
     setRows([{ sel: null, input: "" }]);
     setError(null);
+    setSuppressedDnfBibs(new Set());
 
     closeMissingStartersDialog();
     pendingSaveRef.current = null;
@@ -311,6 +359,7 @@ export default function EliminationScoring({
 
     // reset live-sync tracking
     prevLiveLapRef.current = null;
+    syncOverwriteBlockedRef.current = false;
     autoPrefillBibsRef.current = { bib0: null, bib1: null };
     autoPrefillDnfBibsRef.current = [];
 
@@ -348,6 +397,32 @@ export default function EliminationScoring({
     return parsedBibs.length > 0;
   }, [mode, parsedBibs.length, hasBlockedSelection]);
 
+  // DNF suggestions are derived from live lap deficits directly:
+  // - bibs: all riders with the greatest positive lap deficit (+x laps)
+  // - deficit: that exact shared +laps value for this proposed group
+  //
+  // This keeps lap prefill and bib prefill coupled to the same group.
+  const suggestedMostBehindDnfGroup = useMemo(() => {
+    const entries = Array.from(lappedIndicationByBib?.entries?.() ?? []).filter(([bib, deficit]) => {
+      return bib > 0 && Number.isFinite(deficit) && deficit > 0 && !isBibBlocked(bib) && !suppressedDnfBibs.has(bib);
+    });
+
+    if (!entries.length) return { bibs: [] as number[], deficit: null as number | null };
+
+    const maxDeficit = entries.reduce((max, [, deficit]) => (deficit > max ? deficit : max), 0);
+    if (maxDeficit <= 0) return { bibs: [] as number[], deficit: null as number | null };
+
+    const bibs = entries
+      .filter(([, deficit]) => deficit === maxDeficit)
+      .map(([bib]) => bib)
+      .sort((a, b) => a - b);
+
+    return {
+      bibs,
+      deficit: bibs.length ? maxDeficit : null,
+    };
+  }, [lappedIndicationByBib, blockedBibs, suppressedDnfBibs]);
+
   // ---------------------------------------------------------------------------
   // Live sync handling (lap + prefill)
   // ---------------------------------------------------------------------------
@@ -379,6 +454,7 @@ export default function EliminationScoring({
   useEffect(() => {
     if (syncEnabled) return;
     prevLiveLapRef.current = null;
+    syncOverwriteBlockedRef.current = false;
     autoPrefillBibsRef.current = { bib0: null, bib1: null };
     autoPrefillDnfBibsRef.current = [];
   }, [syncEnabled]);
@@ -390,15 +466,17 @@ export default function EliminationScoring({
   // - whenever the live lap count changes
   useEffect(() => {
     if (!syncEnabled) return;
+    if (syncOverwriteBlockedRef.current) return;
+    if (isDnf) return;
     if (liveLapCount == null) return;
 
     const liveLapInt = Math.max(1, Math.floor(Number(liveLapCount)));
 
-    if (prevLiveLapRef.current !== liveLapInt) {
+    if (prevLiveLapRef.current !== liveLapInt || lap !== liveLapInt) {
       prevLiveLapRef.current = liveLapInt;
       setLap(liveLapInt);
     }
-  }, [syncEnabled, liveLapCount]);
+  }, [syncEnabled, isDnf, liveLapCount, lap, syncResumeNonce]);
 
   // Prefill Elim bib(s) with the last eligible live bib(s) when sync is enabled.
   // - elim1: prefill `lastBib`
@@ -406,6 +484,7 @@ export default function EliminationScoring({
   // UX rule: never override manual user input.
   useEffect(() => {
     if (!syncEnabled) return;
+    if (syncOverwriteBlockedRef.current) return;
     if (!isFixedElimMode) return;
 
     const t0 = liveLastEligibleBibs?.lastBib ?? null;
@@ -452,22 +531,56 @@ export default function EliminationScoring({
     liveLastEligibleBibs?.lastBib,
     liveLastEligibleBibs?.secondLastBib,
     starterByBib,
+    syncResumeNonce,
   ]);
+
+  // In DNF sync mode, derive the DNF lap from live race lap and shared lap deficit:
+  // lap = currentLiveLap - deficit
+  // Example: live lap 30 and riders are +2 laps behind => DNF lap 28.
+  // This only applies while sync is active and not manually overridden.
+  useEffect(() => {
+    if (!syncEnabled) return;
+    if (syncOverwriteBlockedRef.current) return;
+    if (!isDnf) return;
+    if (liveLapCount == null) return;
+
+    const liveLapInt = Math.max(1, Math.floor(Number(liveLapCount)));
+
+    // Couple lap calculation to the actually proposed group.
+    // Primary source: current computed suggestion group.
+    // Fallback source: last auto-prefilled DNF bib group currently shown in inputs
+    // (useful during transient backend/sync gaps).
+    const sourceBibs = suggestedMostBehindDnfGroup.bibs.length
+      ? suggestedMostBehindDnfGroup.bibs
+      : autoPrefillDnfBibsRef.current;
+
+    if (!sourceBibs.length) return;
+
+    const deficits = Array.from(
+      new Set(
+        sourceBibs
+          .map((bib) => Math.floor(Number(lappedIndicationByBib?.get(bib) ?? 0)))
+          .filter((d) => Number.isFinite(d) && d > 0),
+      ),
+    );
+
+    // Domain rule: suggested group must share one +laps value.
+    if (deficits.length !== 1) return;
+
+    const sharedDeficit = deficits[0];
+    const dnfLap = Math.max(1, liveLapInt - sharedDeficit);
+    setLap((prev) => (prev === dnfLap ? prev : dnfLap));
+  }, [syncEnabled, isDnf, liveLapCount, suggestedMostBehindDnfGroup, lappedIndicationByBib, syncResumeNonce]);
 
   // Prefill DNF rows from the shared live lap-gap group (computed in ScoringViewModel).
   // UX rule: never override manual input. We only replace rows when they are empty
   // or still equal to the previous auto suggestion.
   useEffect(() => {
     if (!syncEnabled) return;
+    if (syncOverwriteBlockedRef.current) return;
     if (!isDnf) return;
 
-    const suggested = Array.from(
-      new Set(
-        (Array.isArray(liveDnfSuggestedBibs) ? liveDnfSuggestedBibs : [])
-          .map((b) => Math.floor(Number(b)))
-          .filter((b) => b > 0 && !isBibBlocked(b)),
-      ),
-    ).sort((a, b) => a - b);
+    const suggested = suggestedMostBehindDnfGroup.bibs;
 
     if (!suggested.length) {
       setRows((prev) => {
@@ -506,7 +619,7 @@ export default function EliminationScoring({
 
       return [...prefilled, { sel: null, input: "" }];
     });
-  }, [syncEnabled, isDnf, liveDnfSuggestedBibs, starterByBib, blockedBibs]);
+  }, [syncEnabled, isDnf, suggestedMostBehindDnfGroup, starterByBib, blockedBibs, syncResumeNonce]);
 
   const selectedIds = useMemo(() => {
     const ids = new Set<string>();
@@ -648,6 +761,8 @@ export default function EliminationScoring({
   }
 
   function clearNow() {
+    requestSyncResume();
+    setSuppressedDnfBibs(new Set());
     setError(null);
     resetRows();
   }
@@ -696,6 +811,8 @@ export default function EliminationScoring({
     const bibs = parsedBibs;
     if (!bibs.length) return;
 
+    requestSyncResume();
+
     if (isFixedElimMode) {
       // Defensive: should already be enforced via canSave.
       if (bibs.length !== elimBibCount) return;
@@ -719,6 +836,13 @@ export default function EliminationScoring({
     if (mode === "DNF") {
       const lapNum = Math.max(1, Math.floor(Number(lap)));
       onAddRaceActivity(toDnfActivity(lapNum, bibs));
+
+      // Prevent immediate re-prefill of just-saved bibs before raceResults/blockedBibs update arrives.
+      setSuppressedDnfBibs((prev) => {
+        const next = new Set(prev);
+        for (const bib of bibs) next.add(bib);
+        return next;
+      });
 
       setError(null);
       resetRows();
@@ -798,6 +922,8 @@ export default function EliminationScoring({
   }
 
   function handleStarterClick(starter: Athlete) {
+    markManualSyncOverride();
+
     const bib = starter.bib;
     if (bib == null || isBibBlocked(bib)) return;
     if (parsedBibs.includes(bib)) return;
@@ -808,9 +934,9 @@ export default function EliminationScoring({
     const targetIndex = isFixedElimMode
       ? rows.slice(0, elimBibCount).findIndex((r) => !r.sel && !String(r.input ?? "").trim())
       : (() => {
-          const i = rows.findIndex((r) => !r.sel && !String(r.input ?? "").trim());
-          return i >= 0 ? i : rows.length;
-        })();
+        const i = rows.findIndex((r) => !r.sel && !String(r.input ?? "").trim());
+        return i >= 0 ? i : rows.length;
+      })();
 
     if (isFixedElimMode && (targetIndex < 0 || targetIndex >= elimBibCount)) return;
 
@@ -860,7 +986,10 @@ export default function EliminationScoring({
             size="small"
             label="Lap"
             value={lap}
-            onChange={(e) => setLap(Number((e.target as HTMLInputElement).value))}
+            onChange={(e) => {
+              markManualSyncOverride();
+              setLap(Number((e.target as HTMLInputElement).value));
+            }}
             type="number"
             disabled={!(isFixedElimMode || isDnf)}
             slotProps={{ htmlInput: { min: 1, step: 1 } }}
@@ -868,20 +997,20 @@ export default function EliminationScoring({
               width: 110,
               ...(syncEnabled && {
                 "& .MuiOutlinedInput-root fieldset": {
-                  borderColor: "success.main",
+                  borderColor: isSyncManuallyBlocked ? "warning.main" : "success.main",
                   borderWidth: 2,
                 },
                 "& .MuiOutlinedInput-root:hover fieldset": {
-                  borderColor: "success.main",
+                  borderColor: isSyncManuallyBlocked ? "warning.main" : "success.main",
                 },
                 "& .MuiOutlinedInput-root.Mui-focused fieldset": {
-                  borderColor: "success.main",
+                  borderColor: isSyncManuallyBlocked ? "warning.main" : "success.main",
                 },
                 "& .MuiInputLabel-root": {
-                  color: "success.main",
+                  color: isSyncManuallyBlocked ? "warning.main" : "success.main",
                 },
                 "& .MuiInputLabel-root.Mui-focused": {
-                  color: "success.main",
+                  color: isSyncManuallyBlocked ? "warning.main" : "success.main",
                 },
               }),
             }}
@@ -936,122 +1065,132 @@ export default function EliminationScoring({
             <Box key={idx} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Box sx={{ width: 220 }}>
                 <PointsBibField
-                value={row.sel}
-                inputValue={row.input}
-                highlight={isAutoHighlighted(row, idx)}
-                invalid={rowIsBlocked}
-                inputRef={(el) => {
-                  inputRefs.current[idx] = el;
-                }}
-                options={optionsForRow(idx)}
-                filterOptions={filterOptions}
-                formatOption={athleteLabel}
-                resolveByBib={resolveOrPlaceholder}
-                placeholder={idx === 0 ? "Bib" : `Bib ${idx + 1}`}
-                nameAdornmentMaxWidth={180}
-                onInputValueChange={(v, reason) => {
-                  if (isFixedElimMode && idx <= 1 && reason === "input") {
-                    clearAutoPrefillBib(idx as 0 | 1);
-                  }
-                  if (isDnf && reason === "input") {
-                    autoPrefillDnfBibsRef.current = [];
-                  }
-
-                  setRows((prev) => {
-                    const copy = prev.slice();
-                    const isLastField = idx === prev.length - 1;
-
+                  value={row.sel}
+                  inputValue={row.input}
+                  highlight={isAutoHighlighted(row, idx)}
+                  syncBlocked={isSyncManuallyBlocked}
+                  invalid={rowIsBlocked}
+                  inputRef={(el) => {
+                    inputRefs.current[idx] = el;
+                  }}
+                  options={optionsForRow(idx)}
+                  filterOptions={filterOptions}
+                  formatOption={athleteLabel}
+                  resolveByBib={resolveOrPlaceholder}
+                  placeholder={idx === 0 ? "Bib" : `Bib ${idx + 1}`}
+                  nameAdornmentMaxWidth={180}
+                  onInputValueChange={(v, reason) => {
                     if (reason === "input") {
-                      copy[idx] = { sel: null, input: v };
-                      if (allowAutoGrow && isLastField && String(v).trim()) copy.push({ sel: null, input: "" });
-                    } else {
-                      copy[idx] = { ...copy[idx], input: v };
+                      markManualSyncOverride();
                     }
 
-                    return copy;
-                  });
+                    if (isFixedElimMode && idx <= 1 && reason === "input") {
+                      clearAutoPrefillBib(idx as 0 | 1);
+                    }
+                    if (isDnf && reason === "input") {
+                      autoPrefillDnfBibsRef.current = [];
+                    }
 
-                  setError(null);
+                    setRows((prev) => {
+                      const copy = prev.slice();
+                      const isLastField = idx === prev.length - 1;
 
-                  if (reason !== "input") return;
+                      if (reason === "input") {
+                        copy[idx] = { sel: null, input: v };
+                        if (allowAutoGrow && isLastField && String(v).trim()) copy.push({ sel: null, input: "" });
+                      } else {
+                        copy[idx] = { ...copy[idx], input: v };
+                      }
 
-                  const pick = tryAutoPickUniqueBib(v, candidatesForRow(idx));
-                  if (!pick) return;
+                      return copy;
+                    });
 
-                  setRows((prev) => {
-                    const copy = prev.slice();
-                    const isLastField = idx === prev.length - 1;
-                    copy[idx] = { sel: pick, input: pick.bib != null ? String(pick.bib) : "" };
-                    if (allowAutoGrow && isLastField) copy.push({ sel: null, input: "" });
-                    return copy;
-                  });
+                    setError(null);
 
-                  if (allowAutoGrow) {
-                    ensureRow(idx + 1);
-                    focusIndex(idx + 1);
-                  } else if (idx + 1 < elimBibCount) {
-                    focusIndex(idx + 1);
-                  }
-                }}
-                onSelect={(next) => {
-                  if (isFixedElimMode && idx <= 1) {
-                    clearAutoPrefillBib(idx as 0 | 1);
-                  }
-                  if (isDnf) {
-                    autoPrefillDnfBibsRef.current = [];
-                  }
+                    if (reason !== "input") return;
 
-                  setRows((prev) => {
-                    const copy = prev.slice();
-                    const isLastField = idx === prev.length - 1;
-                    copy[idx] = { sel: next, input: next?.bib != null ? String(next.bib) : "" };
-                    if (allowAutoGrow && isLastField && next) copy.push({ sel: null, input: "" });
-                    return copy;
-                  });
+                    const pick = tryAutoPickUniqueBib(v, candidatesForRow(idx));
+                    if (!pick) return;
 
-                  setError(null);
+                    setRows((prev) => {
+                      const copy = prev.slice();
+                      const isLastField = idx === prev.length - 1;
+                      copy[idx] = { sel: pick, input: pick.bib != null ? String(pick.bib) : "" };
+                      if (allowAutoGrow && isLastField) copy.push({ sel: null, input: "" });
+                      return copy;
+                    });
 
-                  if (next) {
-                    ensureRow(idx + 1);
-                    focusIndex(idx + 1);
-                  }
-                }}
-                onEnter={() => {
-                  const isEmptyRow = !row.sel && !String(row.input ?? "").trim();
-                  if (isEmptyRow) {
-                    saveIfPossible();
-                    return;
-                  }
+                    if (allowAutoGrow) {
+                      ensureRow(idx + 1);
+                      focusIndex(idx + 1);
+                    } else if (idx + 1 < elimBibCount) {
+                      focusIndex(idx + 1);
+                    }
+                  }}
+                  onSelect={(next) => {
+                    markManualSyncOverride();
 
-                  const m = resolveOrPlaceholder(row.input);
-                  if (!m) return;
+                    if (isFixedElimMode && idx <= 1) {
+                      clearAutoPrefillBib(idx as 0 | 1);
+                    }
+                    if (isDnf) {
+                      autoPrefillDnfBibsRef.current = [];
+                    }
 
-                  const bib = m.bib;
-                  if (isBibBlocked(bib)) {
-                    setError(`Startnummer ${bib} ist nicht mehr wertbar (DNS/DSQ/DNF/ELIM)`);
-                    return;
-                  }
+                    setRows((prev) => {
+                      const copy = prev.slice();
+                      const isLastField = idx === prev.length - 1;
+                      copy[idx] = { sel: next, input: next?.bib != null ? String(next.bib) : "" };
+                      if (allowAutoGrow && isLastField && next) copy.push({ sel: null, input: "" });
+                      return copy;
+                    });
 
-                  if (isDnf) {
-                    autoPrefillDnfBibsRef.current = [];
-                  }
+                    setError(null);
 
-                  setRows((prev) => {
-                    const copy = prev.slice();
-                    const isLastField = idx === prev.length - 1;
-                    copy[idx] = { sel: m, input: m.bib != null ? String(m.bib) : "" };
-                    if (allowAutoGrow && isLastField) copy.push({ sel: null, input: "" });
-                    return copy;
-                  });
+                    if (next) {
+                      ensureRow(idx + 1);
+                      focusIndex(idx + 1);
+                    }
+                  }}
+                  onEnter={() => {
+                    const isEmptyRow = !row.sel && !String(row.input ?? "").trim();
+                    if (!isEmptyRow) {
+                      markManualSyncOverride();
+                    }
+                    if (isEmptyRow) {
+                      saveIfPossible();
+                      return;
+                    }
 
-                  if (allowAutoGrow) {
-                    ensureRow(idx + 1);
-                    focusIndex(idx + 1);
-                  } else if (idx + 1 < elimBibCount) {
-                    focusIndex(idx + 1);
-                  }
-                }}
-              />
+                    const m = resolveOrPlaceholder(row.input);
+                    if (!m) return;
+
+                    const bib = m.bib;
+                    if (isBibBlocked(bib)) {
+                      setError(`Startnummer ${bib} ist nicht mehr wertbar (DNS/DSQ/DNF/ELIM)`);
+                      return;
+                    }
+
+                    if (isDnf) {
+                      autoPrefillDnfBibsRef.current = [];
+                    }
+
+                    setRows((prev) => {
+                      const copy = prev.slice();
+                      const isLastField = idx === prev.length - 1;
+                      copy[idx] = { sel: m, input: m.bib != null ? String(m.bib) : "" };
+                      if (allowAutoGrow && isLastField) copy.push({ sel: null, input: "" });
+                      return copy;
+                    });
+
+                    if (allowAutoGrow) {
+                      ensureRow(idx + 1);
+                      focusIndex(idx + 1);
+                    } else if (idx + 1 < elimBibCount) {
+                      focusIndex(idx + 1);
+                    }
+                  }}
+                />
               </Box>
 
               {showInsertZeroLapButton ? (

@@ -107,8 +107,8 @@ function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
     ageGroups: Array.isArray(obj.ageGroups) ? obj.ageGroups : [],
     races: races.map((r: any) => ({
       ...r,
-            // Defensive: Nested arrays normalisieren
-            raceResults: normalizeRaceResultsForRead(r?.raceResults),
+      // Defensive: Nested arrays normalisieren
+      raceResults: normalizeRaceResultsForRead(r?.raceResults),
       raceStarters: Array.isArray(r?.raceStarters) ? r.raceStarters : [],
       raceActivities: normalizeRaceActivitiesForRead(r?.raceActivities),
     })),

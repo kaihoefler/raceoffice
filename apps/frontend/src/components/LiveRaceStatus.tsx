@@ -213,7 +213,7 @@ export default function LiveRaceStatus({
 
   unknownLiveBibs?: Set<number>;
   onCreateStarters?: () => void;
-    /** If enabled, the page can sync PointsScoring with Live status. */
+  /** If enabled, the page can sync PointsScoring with Live status. */
   syncEnabled?: boolean;
   onSyncEnabledChange?: (next: boolean) => void;
 
@@ -239,7 +239,7 @@ export default function LiveRaceStatus({
    * - paused: Polling pausiert?
    * - setUrl/setPollIntervalMs/setPaused: Settings ändern
    */
-    const theme = useTheme();
+  const theme = useTheme();
 
   const {
     status,
@@ -306,7 +306,7 @@ export default function LiveRaceStatus({
   // Wir normalisieren Flag in uppercase, um Vergleiche robust zu machen
   const flagKey = flagTrim.toUpperCase();
 
-    // Sync ist nur erlaubt bei GREEN oder PURPLE (Business-Rule)
+  // Sync ist nur erlaubt bei GREEN oder PURPLE (Business-Rule)
   const canSync = flagKey === "GREEN" || flagKey === "PURPLE";
 
   // Zeige elapsedTime im Header nur bei GREEN (Anforderung).
@@ -351,7 +351,7 @@ export default function LiveRaceStatus({
           ? { bgcolor: "common.black", color: "common.white" }
           : undefined;
 
-    // Wie viele Bibs fehlen in unserer Starterliste (vom Parent geliefert)?
+  // Wie viele Bibs fehlen in unserer Starterliste (vom Parent geliefert)?
   const unknownCount = unknownLiveBibs?.size ?? 0;
 
   function statusColor(kind: StatusKind): string {
@@ -360,7 +360,7 @@ export default function LiveRaceStatus({
         return theme.palette.text.secondary;
       case "DSQ":
         return theme.palette.error.dark;
-            case "DNF":
+      case "DNF":
       case "ELIM":
         return theme.palette.error.main;
       default:
@@ -376,7 +376,7 @@ export default function LiveRaceStatus({
       const bib = Number((r as any)?.bib);
       if (!Number.isFinite(bib) || bib <= 0) continue;
 
-            const dsq = Boolean((r as any)?.dsq);
+      const dsq = Boolean((r as any)?.dsq);
       const dns = Boolean((r as any)?.dns);
       const dnfRaw = (r as any)?.dnf;
       const dnf = dnfRaw === "dnf" || dnfRaw === "elimination" ? dnfRaw : false;
@@ -585,7 +585,7 @@ export default function LiveRaceStatus({
             </Box>
           </Box>
 
-                    <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
             {showElapsedTime ? (
               <Typography variant="caption" sx={{ fontWeight: 700 }}>
                 {elapsedTimeText}
@@ -713,16 +713,16 @@ export default function LiveRaceStatus({
           </Box>
         </Box>
 
-                {/* Rechts im Header: optional elapsedTime (nur GREEN) + Flag-Status (farbiger Chip) */}
+        {/* Rechts im Header: optional elapsedTime (nur GREEN) + Flag-Status (farbiger Chip) */}
 
-                  <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-            {showElapsedTime ? (
-              <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                {elapsedTimeText}
-              </Typography>
-            ) : null}
-            <Chip size="small" label={flagTrim || "—"} variant={flagChipVariant} sx={flagChipSx} />
-          </Box>
+        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+          {showElapsedTime ? (
+            <Typography variant="caption" sx={{ fontWeight: 700 }}>
+              {elapsedTimeText}
+            </Typography>
+          ) : null}
+          <Chip size="small" label={flagTrim || "—"} variant={flagChipVariant} sx={flagChipSx} />
+        </Box>
 
       </Box>
 
@@ -793,7 +793,7 @@ export default function LiveRaceStatus({
           alignItems: "baseline",
           mb: 1,
           gap: 1,
-                    minWidth: 0,
+          minWidth: 0,
         }}
       >
         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, minWidth: 0 }}>
@@ -909,7 +909,7 @@ export default function LiveRaceStatus({
               Activate Sync
             </ToggleButton>
           </span>
-                </Tooltip>
+        </Tooltip>
 
         {/* Wenn Live-Liste Bibs enthält, die wir nicht in unseren Startern kennen:
             zeige Action-Button, um diese Starter anzulegen (parent callback). */}
@@ -931,7 +931,7 @@ export default function LiveRaceStatus({
         ) : null}
       </Box>
 
-            {/* Tabelle der aktuellen Live-Positionen */}
+      {/* Tabelle der aktuellen Live-Positionen */}
       <Table
         size="small"
         stickyHeader
@@ -968,7 +968,7 @@ export default function LiveRaceStatus({
                 return <TableCell sx={isUnknown ? { color: "error.main", fontWeight: 700 } : undefined}>{r.bib}</TableCell>;
               })()}
 
-                            {/* Name: nowrap, um Zeilenhöhe stabil zu halten */}
+              {/* Name: nowrap, um Zeilenhöhe stabil zu halten */}
               <TableCell sx={{ whiteSpace: "nowrap" }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
                   <Box sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</Box>

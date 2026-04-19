@@ -22,14 +22,20 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  IconButton,
   Stack,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from "@mui/material";
 
+
+import SwapVertIcon from "@mui/icons-material/SwapVert";
+
 import { createFilterOptions } from "@mui/material/useAutocomplete";
+
 
 import PointsBibField, { type AthleteFilterOptions } from "./PointsBibField";
 import PointsRemovalDialog from "./PointsRemovalDialog";
@@ -56,9 +62,9 @@ type Props = {
   race: Race;
   /** Use e.g. race.id so the component resets when switching races */
   resetKey?: string;
-    /** Add a new race activity to the race (pointsSprint / pointsRemoval). */
+  /** Add a new race activity to the race (pointsSprint / pointsRemoval). */
   onAddRaceActivity: (activity: RaceActivity) => void;
-    onCreateStarters?: (bibs: number[]) => Promise<void> | void;
+  onCreateStarters?: (bibs: number[]) => Promise<void> | void;
   onDeleteStarter?: (starter: Athlete) => void;
   missingInLiveBibs?: Set<number>;
   blockedBibs?: ReadonlySet<number>;
@@ -72,7 +78,7 @@ type Props = {
   /** Live laps to go (typically RaceStatusRace.lapsToGo). */
   liveLapsToGo?: number | null;
 
-    /** Top bibs by live position (p1..p3). Used for auto-prefill when sync is enabled. */
+  /** Top bibs by live position (p1..p3). Used for auto-prefill when sync is enabled. */
   liveTopBibs?: {
     p1Bib: number | null;
     p2Bib: number | null;
@@ -150,14 +156,14 @@ export default function PointsScoring({
   race,
   resetKey,
   onAddRaceActivity,
-    onCreateStarters,
+  onCreateStarters,
   onDeleteStarter,
   missingInLiveBibs,
   blockedBibs,
 
 
   syncEnabled = false,
-    liveLapCount = null,
+  liveLapCount = null,
   liveLapsToGo = null,
   liveTopBibs = DEFAULT_LIVE_TOP_BIBS,
   lappedIndicationByBib,
@@ -198,7 +204,7 @@ export default function PointsScoring({
   const [sel2P, setSel2P] = useState<Athlete | null>(null);
   const [sel1P, setSel1P] = useState<Athlete | null>(null);
 
-    const [in3P, setIn3P] = useState("");
+  const [in3P, setIn3P] = useState("");
   const [in2P, setIn2P] = useState("");
   const [in1P, setIn1P] = useState("");
 
@@ -213,9 +219,10 @@ export default function PointsScoring({
   const saveButtonRef = useRef<HTMLButtonElement>(null);
   const focusSaveAfterSyncSaveRef = useRef(false);
 
-  // Once the user manually edits any points field while sync is enabled, we stop
-  // overwriting points fields from live data until the user presses "Clear".
+  // Once the user manually edits lap or any points field while sync is enabled, we stop
+  // overwriting lap/points from live data until the user presses "Clear" or "Save".
   const syncOverwriteBlockedRef = useRef(false);
+
 
   // Tracks which bibs currently come from live prefill so they can stay highlighted
   // and may still be replaced by newer live values.
@@ -225,6 +232,9 @@ export default function PointsScoring({
 
   // Used to ensure saving only happens after Enter in the last field.
   const enterRequestedRef = useRef(false);
+
+  const isSyncManuallyBlocked = syncEnabled && syncOverwriteBlockedRef.current;
+
 
   function clearAutoPrefillRefs() {
     auto3PBibRef.current = null;
@@ -246,7 +256,7 @@ export default function PointsScoring({
     return Number.isFinite(bib) && bib > 0 ? bib : null;
   }
 
-    function isBibBlocked(bib: number | null | undefined): boolean {
+  function isBibBlocked(bib: number | null | undefined): boolean {
     return bib != null && (blockedBibs?.has(bib) ?? false);
   }
 
@@ -259,6 +269,11 @@ export default function PointsScoring({
     syncOverwriteBlockedRef.current = true;
     autoRef.current = null;
   }
+
+  function markManualLapOverride() {
+    syncOverwriteBlockedRef.current = true;
+  }
+
 
   function queueFocus(ref: RefObject<HTMLInputElement | null>) {
     setTimeout(() => ref.current?.focus(), 0);
@@ -277,7 +292,7 @@ export default function PointsScoring({
   ) {
     markManualOverride(autoRef);
 
-        const resolved = resolveOrPlaceholder(input);
+    const resolved = resolveOrPlaceholder(input);
     if (!resolved) return null;
     if (isBibBlocked(resolved.bib)) return null;
 
@@ -354,11 +369,17 @@ export default function PointsScoring({
   const [lap, setLap] = useState<number>(defaultLap);
 
   // Reset lap when switching races (or when parent forces a reset).
-  // IMPORTANT (live sync): never overwrite the live-driven lap while sync is enabled.
+  // IMPORTANT:
+  // - while sync is enabled, lap is controlled by liveLapCount (see sync effect below)
+  // - while sync is disabled, we intentionally do NOT react to defaultLap changes,
+  //   so the field does not keep auto-updating in the background.
   useEffect(() => {
     if (syncEnabled) return;
     setLap(defaultLap);
-  }, [resetKey, race.id, defaultLap, syncEnabled]);
+    // Intentionally omit defaultLap from deps: only reset on race/reset boundary or sync toggle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey, race.id, syncEnabled]);
+
 
 
 
@@ -384,18 +405,18 @@ export default function PointsScoring({
   // mount, when sync is enabled, and whenever the live lap count changes.
   useEffect(() => {
     if (!syncEnabled) return;
+    if (syncOverwriteBlockedRef.current) return;
     if (liveLapCount == null) return;
 
     const liveLapInt = Math.max(1, Math.floor(Number(liveLapCount)));
 
     // Fix (tab switch / transient null liveLapCount): ensure lap is aligned even if
-
     // prevLiveLapRef already equals liveLapInt but local state was reset in between.
-    if (prevLiveLapRef.current !== liveLapInt || lap !== liveLapInt) {
-      prevLiveLapRef.current = liveLapInt;
-      setLap(liveLapInt);
-    }
-  }, [syncEnabled, liveLapCount, lap]);
+    prevLiveLapRef.current = liveLapInt;
+    setLap((prev) => (prev === liveLapInt ? prev : liveLapInt));
+  }, [syncEnabled, liveLapCount]);
+
+
 
 
 
@@ -403,6 +424,7 @@ export default function PointsScoring({
   // auto-switch back to lap mode.
   useEffect(() => {
     if (!syncEnabled) return;
+    if (syncOverwriteBlockedRef.current) return;
     if (liveLapsToGo == null) return;
 
     const n = Math.floor(Number(liveLapsToGo));
@@ -410,6 +432,7 @@ export default function PointsScoring({
       setMode("finish");
     }
   }, [syncEnabled, liveLapsToGo, mode]);
+
 
   // ---------------------------------------------------------------------------
   // Live sync: prefill bibs from live positions
@@ -547,7 +570,7 @@ export default function PointsScoring({
     return m;
   }, [race]);
 
-    const optionsFor = (exclude: Set<string>) => starters.filter((a) => !exclude.has(a.id) && !isBibBlocked(a.bib));
+  const optionsFor = (exclude: Set<string>) => starters.filter((a) => !exclude.has(a.id) && !isBibBlocked(a.bib));
 
 
   function resetInputs(focus: "2P" | "3P" | "none" = "2P") {
@@ -615,7 +638,7 @@ export default function PointsScoring({
 
   function candidatesFor(excludeIds: Array<string | null | undefined>): Athlete[] {
     const exclude = new Set(excludeIds.filter(Boolean) as string[]);
-        return starters.filter((a) => !exclude.has(a.id) && !isBibBlocked(a.bib));
+    return starters.filter((a) => !exclude.has(a.id) && !isBibBlocked(a.bib));
 
   }
 
@@ -625,7 +648,7 @@ export default function PointsScoring({
   // ---------------------------------------------------------------------------
   // Save flow (with confirmation dialog for missing starters)
   // ---------------------------------------------------------------------------
-    const canSave = useMemo(() => {
+  const canSave = useMemo(() => {
     if (mode === "finish") {
       return (
         sel3P?.bib != null &&
@@ -736,7 +759,7 @@ export default function PointsScoring({
     setPendingSaveBibs(null);
   }
 
-    function clearNow() {
+  function clearNow() {
     enterRequestedRef.current = false;
     requestSyncPrefill();
     resetInputs(mode === "finish" ? "3P" : "2P");
@@ -754,6 +777,27 @@ export default function PointsScoring({
     if (!enterRequestedRef.current) return;
     void saveAsync();
   }
+
+  const canSwapLapPoints = syncEnabled && mode === "lap" && bib2P != null && bib1P != null;
+
+  function swapLapPoints() {
+    if (!canSwapLapPoints) return;
+
+    // Manual user action: stop live overwrites until Clear/Save.
+    markManualOverride(auto2PBibRef);
+    auto1PBibRef.current = null;
+
+    const nextSel2P = sel1P;
+    const nextSel1P = sel2P;
+    const nextIn2P = in1P;
+    const nextIn1P = in2P;
+
+    setSel2P(nextSel2P);
+    setSel1P(nextSel1P);
+    setIn2P(nextIn2P);
+    setIn1P(nextIn1P);
+  }
+
 
   // ---------------------------------------------------------------------------
   // Placeholder handling: allow selecting bibs that are not (yet) in race starters
@@ -799,8 +843,8 @@ export default function PointsScoring({
    * Quick-pick from starter list (bottom panel):
    * fills the next free points slot and moves focus forward.
    */
-    const handleStarterClick = useCallback((starter: Athlete) => {
-        const bib = starter.bib;
+  const handleStarterClick = useCallback((starter: Athlete) => {
+    const bib = starter.bib;
     if (bib == null || isBibBlocked(bib)) return;
 
 
@@ -861,13 +905,17 @@ export default function PointsScoring({
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, minWidth: 0 }}>
           <Typography variant="subtitle2">Points</Typography>
         </Box>
-                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, mb: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, mb: 1 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
             <TextField
               size="small"
               label="Lap"
               value={lap}
-              onChange={(e) => setLap(Number((e.target as HTMLInputElement).value))}
+              onChange={(e) => {
+                if (syncEnabled) markManualLapOverride();
+                setLap(Number((e.target as HTMLInputElement).value));
+              }}
+
               type="number"
               slotProps={{ htmlInput: { min: 1, step: 1 } }}
               sx={{
@@ -875,22 +923,23 @@ export default function PointsScoring({
 
                 ...(syncEnabled && {
                   "& .MuiOutlinedInput-root fieldset": {
-                    borderColor: "success.main",
+                    borderColor: isSyncManuallyBlocked ? "warning.main" : "success.main",
                     borderWidth: 2,
                   },
                   "& .MuiOutlinedInput-root:hover fieldset": {
-                    borderColor: "success.main",
+                    borderColor: isSyncManuallyBlocked ? "warning.main" : "success.main",
                   },
                   "& .MuiOutlinedInput-root.Mui-focused fieldset": {
-                    borderColor: "success.main",
+                    borderColor: isSyncManuallyBlocked ? "warning.main" : "success.main",
                   },
                   "& .MuiInputLabel-root": {
-                    color: "success.main",
+                    color: isSyncManuallyBlocked ? "warning.main" : "success.main",
                   },
                   "& .MuiInputLabel-root.Mui-focused": {
-                    color: "success.main",
+                    color: isSyncManuallyBlocked ? "warning.main" : "success.main",
                   },
                 }),
+
               }}
             />
 
@@ -912,7 +961,7 @@ export default function PointsScoring({
             </ToggleButtonGroup>
           </Box>
 
-                    <Button
+          <Button
             size="small"
             variant="outlined"
             color="warning"
@@ -940,7 +989,9 @@ export default function PointsScoring({
                 inputValue={in3P}
                 inputRef={ref3P}
                 highlight={isAutoHighlighted(sel3P, auto3PBibRef.current)}
+                syncBlocked={isSyncManuallyBlocked}
                 invalid={isBibBlocked(bib3P)}
+
 
                 options={optionsFor(new Set([sel2P?.id, sel1P?.id].filter(Boolean) as string[]))}
                 filterOptions={filterOptions}
@@ -980,7 +1031,9 @@ export default function PointsScoring({
               inputValue={in2P}
               inputRef={ref2P}
               highlight={isAutoHighlighted(sel2P, auto2PBibRef.current)}
+              syncBlocked={isSyncManuallyBlocked}
               invalid={isBibBlocked(bib2P)}
+
 
               options={
                 mode === "finish"
@@ -1018,13 +1071,33 @@ export default function PointsScoring({
             />
           </PointsRow>
 
+          {mode === "lap" ? (
+            <Box sx={{ display: "flex", justifyContent: "flex-end", mt: -0.25 }}>
+              <Tooltip title="Swap 2P and 1P" arrow>
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={swapLapPoints}
+                    disabled={!canSwapLapPoints}
+                    aria-label="Swap 2P and 1P"
+                  >
+                    <SwapVertIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Box>
+          ) : null}
+
           <PointsRow label="1 P">
+
             <PointsBibField
               value={sel1P}
               inputValue={in1P}
               inputRef={ref1P}
               highlight={isAutoHighlighted(sel1P, auto1PBibRef.current)}
+              syncBlocked={isSyncManuallyBlocked}
               invalid={isBibBlocked(bib1P)}
+
 
               options={optionsFor(new Set([sel3P?.id, sel2P?.id].filter(Boolean) as string[]))}
               filterOptions={filterOptions}
@@ -1094,8 +1167,8 @@ export default function PointsScoring({
         statusByBib={statusByBib}
         pointsByBib={pointsByBib}
         formatAthleteLabel={athleteLabel}
-                onDeleteStarter={onDeleteStarter}
-                onStarterClick={handleStarterClick}
+        onDeleteStarter={onDeleteStarter}
+        onStarterClick={handleStarterClick}
         blockedBibs={blockedBibs}
         lapDeficitByBib={lappedIndicationByBib}
         lappedIndicationBibs={lappedIndicationBibs}
@@ -1106,7 +1179,7 @@ export default function PointsScoring({
 
 
 
-            <PointsRemovalDialog
+      <PointsRemovalDialog
         open={pointsRemovalOpen}
         initialLap={lap}
         starters={starters}

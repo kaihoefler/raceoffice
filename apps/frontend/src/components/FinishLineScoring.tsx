@@ -630,7 +630,7 @@ export default function FinishLineScoring({
     requestAddBibFromText(String(bib), rankInput);
   }
 
-    /** Dialog: Starter anlegen (async) */
+  /** Dialog: Starter anlegen (async) */
   async function handleDialogCreateAndAdd() {
     // Wenn das Feature nicht aktiv ist, gibt es nichts zu tun.
     if (!onCreateStarters) return;

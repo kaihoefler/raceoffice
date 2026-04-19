@@ -19,6 +19,8 @@ type Props = {
 
   /** If true, render the field with a green "synced" outline. */
   highlight?: boolean;
+  /** If true, render the field with a yellow "sync paused by manual override" outline. */
+  syncBlocked?: boolean;
   /** If true, render the field in an error style (e.g. blocked bib). */
   invalid?: boolean;
 
@@ -48,6 +50,7 @@ export default function PointsBibField({
   options,
   inputRef,
   highlight = false,
+  syncBlocked = false,
   invalid = false,
   filterOptions,
   formatOption,
@@ -104,19 +107,32 @@ export default function PointsBibField({
             sx={
               invalid
                 ? {
+                  "& .MuiOutlinedInput-root fieldset": {
+                    borderColor: "error.main",
+                    borderWidth: 2,
+                  },
+                  "& .MuiOutlinedInput-root:hover fieldset": {
+                    borderColor: "error.main",
+                  },
+                  "& .MuiOutlinedInput-root.Mui-focused fieldset": {
+                    borderColor: "error.main",
+                  },
+                }
+                : syncBlocked
+                  ? {
                     "& .MuiOutlinedInput-root fieldset": {
-                      borderColor: "error.main",
+                      borderColor: "warning.main",
                       borderWidth: 2,
                     },
                     "& .MuiOutlinedInput-root:hover fieldset": {
-                      borderColor: "error.main",
+                      borderColor: "warning.main",
                     },
                     "& .MuiOutlinedInput-root.Mui-focused fieldset": {
-                      borderColor: "error.main",
+                      borderColor: "warning.main",
                     },
                   }
-                : highlight
-                  ? {
+                  : highlight
+                    ? {
                       "& .MuiOutlinedInput-root fieldset": {
                         borderColor: "success.main",
                         borderWidth: 2,
@@ -128,7 +144,7 @@ export default function PointsBibField({
                         borderColor: "success.main",
                       },
                     }
-                  : undefined
+                    : undefined
             }
             slotProps={{
               input: {
