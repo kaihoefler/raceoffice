@@ -89,9 +89,29 @@ function formatCommand(binaryPath: string, args: string[]): string {
 
 function normalizeSimTranCodes(point: LiveTrackingTimingPoint): string[] {
   const raw = Array.isArray(point.simTranCodes) ? point.simTranCodes : [];
-  const cleaned = raw.map((x) => String(x ?? "").trim()).filter(Boolean);
+
+  // Be conservative when parsing user-provided lists:
+  // - accept both "," and ";" as input separators
+  // - always emit comma-separated output for ammc-sim
+  const cleaned = raw
+    .flatMap((value) => String(value ?? "").split(/[;,]/g))
+    .map((x) => x.trim())
+    .filter(Boolean);
+
   return cleaned.length > 0 ? cleaned : ["SIM-0001"];
 }
+
+function normalizeSimDecoderId(rawValue: unknown): { value: string; changed: boolean } {
+  const raw = String(rawValue ?? "");
+  const upper = raw.toUpperCase();
+  const hexOnly = upper.replace(/[^0-9A-F]/g, "");
+
+  // ammc-sim expects exactly 6 hex chars for --decoder-id.
+  // We keep this deterministic and transparent (with warning when changed).
+  const value = hexOnly.slice(0, 6).padEnd(6, "0");
+  return { value, changed: value !== raw };
+}
+
 
 /**
  * ammc-sim expects passing-delay as range: "from-to" (ms).
@@ -124,23 +144,28 @@ function normalizeSimPassingDelayRange(rawValue: unknown): string {
 /**
  * Expands AMMC argument template placeholders with timing-point specific values.
  */
-function buildArgs(point: LiveTrackingTimingPoint, template: string[]): string[] {
+function buildArgs(
+  point: LiveTrackingTimingPoint,
+  template: string[],
+  options?: { decoderId?: string },
+): string[] {
   const tranCodesCsv = normalizeSimTranCodes(point).join(",");
   const passingDelay = normalizeSimPassingDelayRange(point.simPassingDelay);
   const startupDelaySecs = String(Math.max(0, Number(point.simStartupDelaySecs ?? 0) || 0));
-
+  const decoderId = options?.decoderId ?? point.decoderId;
 
   return template.map((token) =>
     token
       .replaceAll("{wsPort}", String(point.websocketPortAMM))
       .replaceAll("{decoderIp}", point.decoderIp)
-      .replaceAll("{decoderId}", point.decoderId)
+      .replaceAll("{decoderId}", decoderId)
       .replaceAll("{timingPointId}", point.id)
       .replaceAll("{tranCodesCsv}", tranCodesCsv)
       .replaceAll("{passingDelay}", passingDelay)
       .replaceAll("{startupDelaySecs}", startupDelaySecs),
   );
 }
+
 
 
 /**
@@ -151,6 +176,18 @@ function isLikelyErrorLogLine(line: string): boolean {
   const normalized = line.toLowerCase();
   return normalized.includes("error") || normalized.includes("failed") || normalized.includes("fatal") || normalized.includes("panic");
 }
+
+/**
+ * AMMC writes parsed passings as informational log lines, e.g.:
+ *   [INFO common] >>> {"msg":"PASSING", ...}
+ *
+ * Those events are already ingested via AMMC websocket and stored in `recentPassings`.
+ * To avoid duplicate operator noise, we suppress only this specific log class from runtime warnings.
+ */
+function isAmmPassingInfoLine(line: string): boolean {
+  return /"msg"\s*:\s*"PASSING"/i.test(line);
+}
+
 
 /**
  * Manages AMM converter child processes per timing point.
@@ -361,10 +398,14 @@ export class AmmcProcessManager {
     };
 
     const wireChild = (kind: DecoderExecutableKind, child: ChildProcess) => {
-      child.stdout?.on("data", (chunk: Buffer) => {
+            child.stdout?.on("data", (chunk: Buffer) => {
         const line = chunk.toString("utf8").trim();
-        if (line && this.onWarning) this.onWarning(`[ammc:${kind}:${point.id}] ${line}`);
+        if (!line) return;
+        if (isAmmPassingInfoLine(line)) return;
+
+        if (this.onWarning) this.onWarning(`[ammc:${kind}:${point.id}] ${line}`);
       });
+
 
       child.stderr?.on("data", (chunk: Buffer) => {
         const line = chunk.toString("utf8").trim();
@@ -376,21 +417,30 @@ export class AmmcProcessManager {
           return;
         }
 
-        console.warn(`[livetracking-worker] AMMC ${kind} stderr (info) for timingPoint=${point.id}: ${line}`);
-        if (this.onWarning) this.onWarning(`[ammc:${kind}:${point.id}] ${line}`);
+                console.warn(`[livetracking-worker] AMMC ${kind} stderr (info) for timingPoint=${point.id}: ${line}`);
+        if (!isAmmPassingInfoLine(line) && this.onWarning) this.onWarning(`[ammc:${kind}:${point.id}] ${line}`);
+
       });
 
       child.on("error", (err) => handleChildError(kind, err));
       child.on("exit", (code, signal) => handleChildExit(kind, code, signal));
     };
 
-    let simChild: ChildProcess | null = null;
+        let simChild: ChildProcess | null = null;
     if (needsSimulator) {
-      const simArgs = buildArgs(point, this.simArgsTemplate);
+      const normalizedSimDecoderId = normalizeSimDecoderId(point.decoderId);
+      if (normalizedSimDecoderId.changed) {
+        this.onWarning?.(
+          `[ammc:${point.id}] normalized sim decoder-id from ${JSON.stringify(point.decoderId)} to ${JSON.stringify(normalizedSimDecoderId.value)} (required: 6 hex chars 0-9/A-F)`,
+        );
+      }
+
+      const simArgs = buildArgs(point, this.simArgsTemplate, { decoderId: normalizedSimDecoderId.value });
       console.log(
         `[livetracking-worker] starting AMMC (sim) for timingPoint=${point.id}: ${formatCommand(this.simBinaryPath, simArgs)}`,
       );
       simChild = spawn(this.simBinaryPath, simArgs, {
+
         cwd: resolveWorkspaceRoot(),
         windowsHide: true,
         stdio: ["ignore", "pipe", "pipe"],
