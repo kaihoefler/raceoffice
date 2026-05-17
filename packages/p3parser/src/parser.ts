@@ -5,9 +5,11 @@ import {
   P3Header,
   P3ParserOptions,
   P3PassingRecord,
-  P3Record,
+    P3Record,
+  P3ResendRecord,
   P3SessionRecord,
   P3StatusRecord,
+
   P3TlvField,
   P3_TOR,
   P3UnknownRecord,
@@ -53,6 +55,13 @@ const SESSION_FIELD = {
   REQUEST_ID: 0x85,
 } as const;
 
+const RESEND_FIELD = {
+  FROM_PASSING_NUMBER: 0x01,
+  TO_PASSING_NUMBER: 0x02,
+  DECODER_ID: 0x81,
+} as const;
+
+
 const VERSION_FIELD = {
   DECODER_TYPE: 0x02,
   FIRMWARE: 0x03,
@@ -79,10 +88,14 @@ export class P3Parser {
     }
 
     const header = parseHeader(frame);
-    const body = frame.slice(9, frame.length - 1);
-    const tlvs = parseTlvs(body, this.strict);
-    const computedCrc = this.calcCrc16(frame);
+    // Body starts after full 10-byte header (including 2-byte TOR), then ends before END.
+    // The Pascal implementation slices payload from hex position 21 (= byte offset 10).
+    const body = frame.slice(10, frame.length - 1);
+
+        const tlvs = parseTlvs(body, this.strict);
+    const computedCrc = calcHeaderCrc(frame, this.calcCrc16.bind(this));
     const crcValid = computedCrc === header.crc;
+
 
     if (this.rejectOnCrcMismatch && !crcValid) {
       throw new Error(
@@ -114,9 +127,12 @@ export class P3Parser {
         return this.parseVersionDecoder(base, parsed.tlvs);
       case P3_TOR.GET_TIME:
         return this.parseGetTime(base, parsed.tlvs);
-      case P3_TOR.SESSION:
+            case P3_TOR.SESSION:
         return this.parseSession(base, parsed.tlvs);
+      case P3_TOR.RESEND:
+        return this.parseResend(base, parsed.tlvs);
       default:
+
         return {
           ...base,
           kind: "unknown",
@@ -157,11 +173,12 @@ export class P3Parser {
           consumeUnknown(unknownFields, tlv);
           break;
         }
-        case PASSING_FIELD.TRANSPONDER_ID_TYPE_PROCHIPFLEXCHIP:
+                case PASSING_FIELD.TRANSPONDER_ID_TYPE_PROCHIPFLEXCHIP:
           record.transponderType = "prochip-flexchip";
-          record.transponderId = decodePascalReversedAscii(tlv);
+          record.transponderId = decodeProchipFlexchipId(tlv);
           consumeUnknown(unknownFields, tlv);
           break;
+
         case PASSING_FIELD.RTC_TIME:
           if (!record.passingTime) {
             record.passingTime = decodeP3Timestamp(tlv);
@@ -302,7 +319,7 @@ export class P3Parser {
     return record;
   }
 
-  private parseSession(base: ReturnType<typeof createBaseRecord>, tlvs: P3TlvField[]): P3SessionRecord {
+    private parseSession(base: ReturnType<typeof createBaseRecord>, tlvs: P3TlvField[]): P3SessionRecord {
     const unknownFields = [...tlvs];
     const record: P3SessionRecord = {
       ...base,
@@ -317,7 +334,43 @@ export class P3Parser {
           record.lastPassingIndex = numericLe(tlv);
           consumeUnknown(unknownFields, tlv);
           break;
-        case SESSION_FIELD.DECODER_ID:
+                case SESSION_FIELD.DECODER_ID:
+          record.decoderId = decodeDecoderIdPascalStyle(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case SESSION_FIELD.REQUEST_ID:
+          record.requestId = readBigUIntLe(tlv.raw).toString(10);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        default:
+
+          break;
+      }
+    }
+
+    return record;
+  }
+
+  private parseResend(base: ReturnType<typeof createBaseRecord>, tlvs: P3TlvField[]): P3ResendRecord {
+    const unknownFields = [...tlvs];
+    const record: P3ResendRecord = {
+      ...base,
+      kind: "resend",
+      tor: P3_TOR.RESEND,
+      unknownFields,
+    };
+
+    for (const tlv of tlvs) {
+      switch (tlv.type) {
+        case RESEND_FIELD.FROM_PASSING_NUMBER:
+          record.fromPassingNumber = numericLe(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case RESEND_FIELD.TO_PASSING_NUMBER:
+          record.toPassingNumber = numericLe(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case RESEND_FIELD.DECODER_ID:
           record.decoderId = decodeDecoderIdPascalStyle(tlv);
           consumeUnknown(unknownFields, tlv);
           break;
@@ -329,6 +382,7 @@ export class P3Parser {
     return record;
   }
 }
+
 
 function parseHeader(frame: Uint8Array): P3Header {
   if (frame[0] !== P3_CONTROL.START) {
@@ -481,7 +535,29 @@ export function decodePascalReversedAscii(tlv: P3TlvField): string {
   return decodeAscii(Uint8Array.from([...tlv.raw].reverse()));
 }
 
+/**
+ * ProChip/FlexChip ids have been observed in both byte orders in the wild.
+ *
+ * Preference rule:
+ * - choose the candidate that looks like the canonical chip code shape (AA-12345)
+ * - otherwise keep Pascal-compatible reversed decoding as fallback
+ */
+function decodeProchipFlexchipId(tlv: P3TlvField): string {
+  const raw = decodeAscii(tlv.raw).trim();
+  const reversed = decodePascalReversedAscii(tlv).trim();
+
+  const canonicalChipPattern = /^[A-Z]{2}-\d+$/i;
+  const rawLooksCanonical = canonicalChipPattern.test(raw);
+  const reversedLooksCanonical = canonicalChipPattern.test(reversed);
+
+  if (rawLooksCanonical && !reversedLooksCanonical) return raw;
+  if (reversedLooksCanonical && !rawLooksCanonical) return reversed;
+
+  return reversed || raw;
+}
+
 export function decodeAscii(bytes: Uint8Array): string {
+
   return new TextDecoder("ascii").decode(bytes);
 }
 
@@ -492,6 +568,25 @@ export function bytesToHex(bytes: Uint8Array, sep = ""): string {
 export function toHex(value: number, width: number): string {
   return value.toString(16).padStart(width, "0").toUpperCase();
 }
+
+/**
+ * Header CRC is calculated with the CRC field bytes set to 0x00 0x00.
+ *
+ * Evidence: request builders in the Pascal source write zero CRC bytes, calculate
+ * CRC over that frame, then write the computed CRC back into header positions.
+ */
+export function calcHeaderCrc(
+  frame: Uint8Array,
+  calcCrc16Fn: (input: Uint8Array | string) => number,
+): number {
+  if (frame.length < 6) return calcCrc16Fn(frame);
+
+  const crcInput = Uint8Array.from(frame);
+  crcInput[4] = 0x00;
+  crcInput[5] = 0x00;
+  return calcCrc16Fn(crcInput);
+}
+
 
 function readU16Le(bytes: Uint8Array, offset: number): number {
   return bytes[offset] | (bytes[offset + 1] << 8);

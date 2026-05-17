@@ -1,17 +1,23 @@
+// src/main.tsx
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { CssBaseline, ThemeProvider } from "@mui/material";
-import App from "./App";
-import { theme } from "./theme";
+import { RouterProvider } from "react-router-dom";
+import { router } from "./router";
+import { LiveTrackingVisualizationListProvider } from "./providers/LiveTrackingVisualizationListProvider";
 import { RealtimeConnectionProvider } from "./realtime/RealtimeConnectionProvider";
+import { theme } from "./theme";
+
 
 type CryptoWithOptionalRandomUUID = Crypto & {
   randomUUID?: () => string;
 };
 
 /**
- * Ensure `crypto.randomUUID()` exists on browsers / contexts where it is missing
- * (e.g. plain HTTP on LAN), so UI id generation stays stable.
+ * `crypto.randomUUID()` is not available in all HTTP/non-secure contexts.
+ *
+ * We install a lightweight RFC4122-v4 compatible fallback so existing UI code
+ * can keep using `crypto.randomUUID()` without per-call guards.
  */
 function installRandomUuidPolyfill() {
   const cryptoObj = globalThis.crypto as CryptoWithOptionalRandomUUID | undefined;
@@ -28,6 +34,7 @@ function installRandomUuidPolyfill() {
       }
     }
 
+    // RFC4122 version + variant bits.
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
@@ -39,13 +46,15 @@ function installRandomUuidPolyfill() {
 installRandomUuidPolyfill();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-
   <React.StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <RealtimeConnectionProvider>
-        <App />
+        <LiveTrackingVisualizationListProvider>
+          <RouterProvider router={router} />
+        </LiveTrackingVisualizationListProvider>
       </RealtimeConnectionProvider>
     </ThemeProvider>
-  </React.StrictMode>,
+  </React.StrictMode>
 );
+

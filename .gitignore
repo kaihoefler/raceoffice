@@ -35,3 +35,5 @@ raceoffice.db
 .env.*
 .DS_Store
 
+examples/53_rec1.bin
+examples/58_rec2.bin

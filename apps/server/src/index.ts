@@ -44,6 +44,12 @@ import {
   LIVE_TRACKING_WORKER_SERVICE_ENDPOINTS,
   registerLiveTrackingWorkerRoutes,
 } from "./services/liveTrackingWorkerRoutes.js";
+import {
+  P3_TEST_CLIENT_SERVICE_ENDPOINTS,
+  registerP3TestClientRoutes,
+} from "./services/p3TestClientRoutes.js";
+import { P3TestClientService } from "./services/p3TestClientService.js";
+
 
 
 
@@ -123,6 +129,11 @@ await app.register(cors, {
 });
 
 const publicDir = path.resolve(__dirname, "../public");
+const p3TestUiIndex = path.join(publicDir, "p3test", "index.html");
+const liveTrackingUiIndex = path.join(publicDir, "livetracking", "index.html");
+
+
+
 
 await app.register(fastifyStatic, {
   root: publicDir,
@@ -314,8 +325,13 @@ const liveTrackingWorkerManager = new LiveTrackingWorkerManager({
   },
 });
 
+const p3TestClientService = new P3TestClientService({
+  info: (obj, msg) => app.log.info(obj as any, msg),
+  warn: (obj, msg) => app.log.warn(obj as any, msg),
+});
 
 // --- In-memory subscriber registries (per docId)
+
 
 // SSE keeps Fastify reply handles, WS keeps raw socket handles.
 type SSEClient = { id: string; reply: any };
@@ -395,8 +411,21 @@ const publicServiceEndpoints = [
     path: "/current_race_result",
     description: "Current active race result export",
   },
+    {
+    path: "/p3test",
+    description: "Standalone P3 parser test frontend",
+  },
+  {
+    path: "/livetracking",
+    description: "Standalone LiveTracking frontend",
+  },
+
   ...LIVE_TRACKING_WORKER_SERVICE_ENDPOINTS,
+  ...P3_TEST_CLIENT_SERVICE_ENDPOINTS,
 ] as const;
+
+
+
 
 
 
@@ -417,12 +446,79 @@ app.get("/health", async () => ({ ok: true }));
 // --- LiveTracking worker process lifecycle
 registerLiveTrackingWorkerRoutes(app, liveTrackingWorkerManager);
 
+// --- P3 protocol test client control routes
+registerP3TestClientRoutes(app, p3TestClientService);
+
+// --- Standalone P3 test UI (separate from race result management shell)
+// Important URL behavior:
+// - Vite build uses relative asset paths (./assets/...)
+// - Therefore the canonical URL must end with a trailing slash so browsers resolve
+//   assets under /p3test/assets instead of /assets.
+app.get("/p3test", async (_req, reply) => {
+  return reply.redirect("/p3test/", 308);
+});
+
+
+app.get("/p3test/", async (_req, reply) => {
+  if (!fs.existsSync(p3TestUiIndex)) {
+    return reply.code(404).send({
+      error: "p3test_ui_not_built",
+      message: "P3 test frontend not built. Run npm run build:p3test-frontend.",
+    });
+  }
+
+  return reply.type("text/html; charset=utf-8").send(fs.readFileSync(p3TestUiIndex, "utf8"));
+});
+
+// --- Standalone LiveTracking UI
+app.get("/livetracking", async (_req, reply) => {
+  return reply.redirect("/livetracking/", 308);
+});
+
+app.get("/livetracking/", async (_req, reply) => {
+  if (!fs.existsSync(liveTrackingUiIndex)) {
+    return reply.code(404).send({
+      error: "livetracking_ui_not_built",
+      message: "LiveTracking frontend not built. Run npm run build:livetracking-frontend.",
+    });
+  }
+
+  return reply.type("text/html; charset=utf-8").send(fs.readFileSync(liveTrackingUiIndex, "utf8"));
+});
+
+// Browser-router fallback for standalone LiveTracking frontend routes.
+// Important: keep this scoped to the client route namespace only.
+// Do NOT use a broad /livetracking/* matcher, otherwise JS/CSS asset requests under
+// /livetracking/assets/* would receive HTML and fail MIME checks.
+app.get("/livetracking/live-tracking", async (_req, reply) => {
+  if (!fs.existsSync(liveTrackingUiIndex)) {
+    return reply.code(404).send({
+      error: "livetracking_ui_not_built",
+      message: "LiveTracking frontend not built. Run npm run build:livetracking-frontend.",
+    });
+  }
+
+  return reply.type("text/html; charset=utf-8").send(fs.readFileSync(liveTrackingUiIndex, "utf8"));
+});
+
+app.get("/livetracking/live-tracking/*", async (_req, reply) => {
+  if (!fs.existsSync(liveTrackingUiIndex)) {
+    return reply.code(404).send({
+      error: "livetracking_ui_not_built",
+      message: "LiveTracking frontend not built. Run npm run build:livetracking-frontend.",
+    });
+  }
+
+  return reply.type("text/html; charset=utf-8").send(fs.readFileSync(liveTrackingUiIndex, "utf8"));
+});
+
+
 
 // --- Current race status export for external systems/integrations
+
 app.get("/current_race_result", async (_req, reply) => {
-
-
   const ctx = resolveCurrentRaceContext(loadDoc);
+
 
   if (!ctx) {
     return reply.code(404).send({
@@ -594,7 +690,9 @@ function noteSnapshot(socket: any, docId: string) {
 
 app.addHook("onClose", async () => {
   liveTrackingWorkerManager.stop();
+  p3TestClientService.disconnect("server shutting down");
 });
+
 
 await app.listen({ port, host });
 

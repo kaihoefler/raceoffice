@@ -6,11 +6,9 @@ import AboutPage from "./pages/AboutPage";
 import EventsPage from "./pages/EventsPage";
 import LiveTrackingControlPage from "./pages/livetracking/LiveTrackingControlPage";
 import LiveTrackingParticipantsPage from "./pages/livetracking/LiveTrackingParticipantsPage";
-import LiveTrackingVisualizationsPage from "./pages/livetracking/LiveTrackingVisualizationsPage";
 import LiveTrackingSimpleVisualizationPage from "./pages/livetracking/LiveTrackingSimpleVisualizationPage";
+import LiveTrackingVisualizationsPage from "./pages/livetracking/LiveTrackingVisualizationsPage";
 import LiveTrackingVisualizerPage from "./pages/livetracking/LiveTrackingVisualizerPage";
-
-
 import RaceStartersPage from "./pages/RaceStartersPage";
 import ScoringPage from "./pages/ScoringPage";
 import VisualizationsPage from "./pages/VisualizationsPage";
@@ -27,7 +25,6 @@ export const router = createBrowserRouter([
       { path: "/events", element: <EventsPage /> },
       { path: "/visualizations", element: <VisualizationsPage /> },
       { path: "/about", element: <AboutPage /> },
-
       // race sub-pages
       { path: "/races/:raceId/starters", element: <RaceStartersPage /> },
       { path: "/races/:raceId/scoring", element: <ScoringPage /> },
@@ -39,12 +36,11 @@ export const router = createBrowserRouter([
       { path: "/live-tracking", element: <Navigate to="/live-tracking/setup" replace /> },
       { path: "/live-tracking/setup", element: <LiveTrackingControlPage /> },
       { path: "/live-tracking/participants", element: <LiveTrackingParticipantsPage /> },
-            { path: "/live-tracking/visualization", element: <LiveTrackingVisualizationsPage /> },
+      { path: "/live-tracking/visualization", element: <LiveTrackingVisualizationsPage /> },
       { path: "/live-tracking/board", element: <LiveTrackingSimpleVisualizationPage /> },
-
     ],
   },
-    // Fullscreen visualization (video wall)
+  // Fullscreen visualization (video wall)
   {
     element: <VisualizationLayout />,
     children: [

@@ -19,6 +19,7 @@
     "@fastify/static": "^9.0.0",
     "@fastify/websocket": "^11.2.0",
     "@raceoffice/domain": "file:../../packages/domain",
+    "@raceoffice/p3parser": "file:../../packages/p3parser",
     "better-sqlite3": "^12.5.0",
     "fast-json-patch": "^3.1.1",
     "fastify": "^5.6.2",

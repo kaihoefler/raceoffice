@@ -89,7 +89,13 @@ export interface P3BaseRecord {
   tlvs: P3TlvField[];
   /** TLVs not promoted into typed properties. */
   unknownFields: P3TlvField[];
+  /**
+   * Optional parse error message when strict parsing failed and stream-level
+   * best-effort recovery output was used instead.
+   */
+  parseError?: string;
 }
+
 
 export interface P3PassingRecord extends P3BaseRecord {
   kind: "passing";
@@ -137,9 +143,29 @@ export interface P3SessionRecord extends P3BaseRecord {
   tor: typeof P3_TOR.SESSION;
   lastPassingIndex?: number;
   decoderId?: string;
+  /** Optional request identifier (field 0x85), kept as decimal string for 64-bit safety. */
+  requestId?: string;
+}
+
+
+/**
+ * RESEND command/echo payload.
+ *
+ * Observed wire shape mirrors the outgoing request fields:
+ * - 0x01: from passing number (u32 LE)
+ * - 0x02: to passing number (u32 LE)
+ * - 0x81: decoder id (Pascal-style reversed byte text)
+ */
+export interface P3ResendRecord extends P3BaseRecord {
+  kind: "resend";
+  tor: typeof P3_TOR.RESEND;
+  fromPassingNumber?: number;
+  toPassingNumber?: number;
+  decoderId?: string;
 }
 
 export interface P3UnknownRecord extends P3BaseRecord {
+
   kind: "unknown";
 }
 
@@ -149,7 +175,9 @@ export type P3Record =
   | P3VersionDecoderRecord
   | P3GetTimeRecord
   | P3SessionRecord
+  | P3ResendRecord
   | P3UnknownRecord;
+
 
 export interface P3ParserOptions {
   /**

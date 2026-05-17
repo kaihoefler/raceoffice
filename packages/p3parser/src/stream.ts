@@ -1,5 +1,6 @@
-import { P3_CONTROL, P3Record, P3StreamChunkResult } from "./types.js";
-import { P3Parser, bytesToHex } from "./parser.js";
+import { P3_CONTROL, P3Header, P3Record, P3StreamChunkResult, P3_TOR } from "./types.js";
+import { P3Parser, bytesToHex, calcHeaderCrc, deEscapeMessage } from "./parser.js";
+
 
 /**
  * Stateful decoder for a TCP byte stream carrying P3 frames.
@@ -9,10 +10,14 @@ import { P3Parser, bytesToHex } from "./parser.js";
  */
 export class P3StreamDecoder {
   private readonly parser: P3Parser;
+  private readonly recoveryParser: P3Parser;
   private buffer: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
 
   constructor(parser = new P3Parser()) {
     this.parser = parser;
+    // Recovery parser intentionally runs in best-effort mode so stream diagnostics
+    // can still expose determinable TOR/header/TLV information after strict parse failures.
+    this.recoveryParser = new P3Parser({ strict: false, rejectOnCrcMismatch: false });
   }
 
   push(chunk: Uint8Array): P3StreamChunkResult {
@@ -40,28 +45,9 @@ export class P3StreamDecoder {
       try {
         records.push(this.parser.parseRecord(frame));
       } catch (error) {
-        records.push({
-          kind: "unknown",
-          tor: -1,
-          torName: "STREAM_PARSE_ERROR",
-          header: {
-            start: frame[0] ?? -1,
-            version: frame[1] ?? -1,
-            length: -1,
-            crc: -1,
-            flags: -1,
-            tor: -1,
-            end: frame[frame.length - 1] ?? -1,
-          },
-          crcValid: false,
-          computedCrc: -1,
-          bodyHex: "",
-          rawFrameHex: bytesToHex(frame),
-          frameHex: bytesToHex(frame),
-          tlvs: [],
-          unknownFields: [],
-        });
-        void error;
+        const parseError = toErrorMessage(error);
+        const recovered = this.tryRecoverRecord(frame, parseError);
+        records.push(recovered);
       }
     }
 
@@ -74,6 +60,17 @@ export class P3StreamDecoder {
   reset(): void {
     this.buffer = new Uint8Array(0);
   }
+
+  private tryRecoverRecord(frame: Uint8Array<ArrayBufferLike>, parseError: string): P3Record {
+    try {
+      return {
+        ...this.recoveryParser.parseRecord(frame),
+        parseError,
+      };
+    } catch {
+      return createStreamParseErrorRecord(frame, this.recoveryParser, parseError);
+    }
+  }
 }
 
 function concat(a: Uint8Array<ArrayBufferLike>, b: Uint8Array<ArrayBufferLike>): Uint8Array<ArrayBufferLike> {
@@ -81,6 +78,76 @@ function concat(a: Uint8Array<ArrayBufferLike>, b: Uint8Array<ArrayBufferLike>):
   out.set(a, 0);
   out.set(b, a.length);
   return out;
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  return String(error);
+}
+
+function createStreamParseErrorRecord(
+  escapedFrame: Uint8Array<ArrayBufferLike>,
+  parser: P3Parser,
+  parseError: string,
+): P3Record {
+  let frame = escapedFrame;
+  let deEscapeError: string | null = null;
+
+  try {
+    frame = deEscapeMessage(escapedFrame);
+  } catch (error) {
+    deEscapeError = toErrorMessage(error);
+  }
+
+  const header = readHeaderBestEffort(frame);
+  const body = header.length >= 0 && frame.length >= 11 ? frame.slice(10, frame.length - 1) : new Uint8Array(0);
+
+    let computedCrc = -1;
+  try {
+    computedCrc = calcHeaderCrc(frame, parser.calcCrc16.bind(parser));
+  } catch {
+    computedCrc = -1;
+  }
+
+
+  const crcValid = header.crc >= 0 && computedCrc >= 0 ? header.crc === computedCrc : false;
+
+  return {
+    kind: "unknown",
+    tor: header.tor,
+    torName: header.tor >= 0 ? torName(header.tor) : "STREAM_PARSE_ERROR",
+    header,
+    crcValid,
+    computedCrc,
+    bodyHex: bytesToHex(body),
+    rawFrameHex: bytesToHex(escapedFrame),
+    frameHex: bytesToHex(frame),
+    tlvs: [],
+    unknownFields: [],
+    parseError: deEscapeError ? `${parseError}; deEscapeError: ${deEscapeError}` : parseError,
+  };
+}
+
+function readHeaderBestEffort(frame: Uint8Array<ArrayBufferLike>): P3Header {
+  return {
+    start: frame[0] ?? -1,
+    version: frame[1] ?? -1,
+    length: readU16LeSafe(frame, 2),
+    crc: readU16LeSafe(frame, 4),
+    flags: readU16LeSafe(frame, 6),
+    tor: readU16LeSafe(frame, 8),
+    end: frame[frame.length - 1] ?? -1,
+  };
+}
+
+function readU16LeSafe(bytes: Uint8Array<ArrayBufferLike>, offset: number): number {
+  if (offset + 1 >= bytes.length) return -1;
+  return bytes[offset]! | (bytes[offset + 1]! << 8);
+}
+
+function torName(tor: number): string {
+  const entry = Object.entries(P3_TOR).find(([, value]) => value === tor);
+  return entry?.[0] ?? `UNKNOWN_0x${tor.toString(16).padStart(4, "0").toUpperCase()}`;
 }
 
 /**
@@ -96,3 +163,4 @@ function findFrameEnd(bytes: Uint8Array<ArrayBufferLike>, fromIndex: number): nu
     return idx;
   }
 }
+

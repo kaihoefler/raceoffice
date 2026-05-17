@@ -25,6 +25,8 @@ RaceOffice consists of:
 - Build & deploy guide (including WinSW): [`doc/build-and-deploy.md`](doc/build-and-deploy.md)
 - Visualization skipped-row indicator: [`doc/visualization.md`](doc/visualization.md)
 - Server API/protocol and error handling: [`doc/server.md`](doc/server.md)
+- P3 test client notes (decoder-id byte order, session/resend behavior): [`doc/p3test-client-notes.md`](doc/p3test-client-notes.md)
+
 
 ---
 

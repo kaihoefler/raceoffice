@@ -16,14 +16,15 @@ Diese TORs werden durch den Pascal-Code tatsächlich geparst und sind hier typis
 - `0x0001` PASSING
 - `0x0002` STATUS
 - `0x0003` VERSION_DECODER
+- `0x0004` RESEND
 - `0x0015` SESSION
 - `0x0024` GET_TIME
 
 Diese TORs sind im Pascal-Code zwar benannt, aber dort nicht wirklich inhaltlich dekodiert. Sie werden deshalb hier **nicht erfunden**, sondern als `kind: "unknown"` mit TLV-Rohdaten zurückgegeben:
 
-- `0x0004` RESEND
 - `0x002D` SIGNALS
 - weitere definierte, aber nicht implementierte TORs
+
 
 ## Architektur
 
@@ -94,6 +95,8 @@ Wichtig:
 - `P3VersionDecoderRecord`
 - `P3GetTimeRecord`
 - `P3SessionRecord`
+- `P3ResendRecord`
+
 
 ### Unbekannter Record
 
@@ -120,7 +123,8 @@ Mehrbyteige numerische Werte werden im Pascal-Code little endian gelesen. Diese 
 
 ### Decoder-ID
 
-Im Pascal-Code wird die Decoder-ID bei mehreren TORs in umgekehrter Byte-Reihenfolge als `AA-BB-CC-DD` ausgegeben. Diese Implementierung reproduziert genau dieses Verhalten für PASSING, STATUS, GET_TIME und SESSION.
+Im Pascal-Code wird die Decoder-ID bei mehreren TORs in umgekehrter Byte-Reihenfolge als `AA-BB-CC-DD` ausgegeben. Diese Implementierung reproduziert genau dieses Verhalten für PASSING, STATUS, GET_TIME, SESSION und RESEND.
+
 
 Bei `VERSION_DECODER` liest der Pascal-Code die Bytes dagegen **in der ursprünglichen Reihenfolge** aus dem Feld. Auch das wird hier genauso abgebildet.
 
@@ -158,9 +162,9 @@ socket.on("data", (chunk) => {
 Diese Implementierung absichtlich **nicht**:
 
 - SIGNALS semantisch dekodieren
-- RESEND-Antworten fachlich interpretieren
 - STATUS-Felder typisieren, die im Pascal-Code zwar als Konstanten existieren, aber nicht wirklich geparst werden
 - Header-Längenfelder über strengere Plausibilitätsregeln validieren, die im Quellcode nicht belegt sind
+
 
 ## Outbound Requests / Query-Builder
 
