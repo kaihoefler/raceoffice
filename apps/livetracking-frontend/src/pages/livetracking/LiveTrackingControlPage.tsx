@@ -95,6 +95,13 @@ function calcSimStartupDelaySecs(absolutePositionM: number): number {
   return Math.max(0, Math.round(safePosition / SIM_SPEED_M_PER_S));
 }
 
+function parseDecoderOffsetSecondsInput(value: string): number | null {
+  const normalized = String(value ?? "").trim().replace(",", ".");
+  if (!normalized) return 0;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 
 
 
@@ -192,6 +199,7 @@ export default function LiveTrackingControlPage() {
   const [setupDraft, setSetupDraft] = useState<SetupDraft | null>(null);
   const [workerControlBusy, setWorkerControlBusy] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [decoderOffsetInputByPointId, setDecoderOffsetInputByPointId] = useState<Record<string, string>>({});
 
 
 
@@ -215,9 +223,19 @@ export default function LiveTrackingControlPage() {
   useEffect(() => {
     if (!setupDoc) {
       setSetupDraft(null);
+      setDecoderOffsetInputByPointId({});
       return;
     }
-    setSetupDraft(toSetupDraft(setupDoc));
+
+    const draft = toSetupDraft(setupDoc);
+    setSetupDraft(draft);
+    setDecoderOffsetInputByPointId(() => {
+      const next: Record<string, string> = {};
+      for (const point of draft.timingPoints) {
+        next[point.id] = String(point.decoderTimestampOffsetSecs ?? 0);
+      }
+      return next;
+    });
   }, [setupDoc]);
 
   useEffect(() => {
@@ -541,6 +559,13 @@ export default function LiveTrackingControlPage() {
   function removePoint(index: number) {
     setSetupDraft((prev) => {
       if (!prev) return prev;
+      const removedPointId = prev.timingPoints[index]?.id;
+      if (removedPointId) {
+        setDecoderOffsetInputByPointId((current) => {
+          const { [removedPointId]: _removed, ...rest } = current;
+          return rest;
+        });
+      }
       return { ...prev, timingPoints: normalizeTimingPoints(prev.timingPoints.filter((_, i) => i !== index)) };
     });
   }
@@ -768,10 +793,28 @@ export default function LiveTrackingControlPage() {
                               />
                               <TextField
                                 size="small"
-                                type="number"
+                                type="text"
                                 label="Time Offset (s)"
-                                value={point.decoderTimestampOffsetSecs ?? 0}
-                                onChange={(e) => patchPoint(index, { decoderTimestampOffsetSecs: Number(e.target.value) })}
+                                value={decoderOffsetInputByPointId[point.id] ?? String(point.decoderTimestampOffsetSecs ?? 0)}
+                                inputProps={{ inputMode: "decimal", placeholder: "z. B. -1,234" }}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  if (!/^-?\d*(?:[.,]\d*)?$/.test(raw)) return;
+                                  setDecoderOffsetInputByPointId((prev) => ({ ...prev, [point.id]: raw }));
+                                }}
+                                onBlur={() => {
+                                  const raw = decoderOffsetInputByPointId[point.id] ?? String(point.decoderTimestampOffsetSecs ?? 0);
+                                  const parsed = parseDecoderOffsetSecondsInput(raw);
+                                  if (parsed === null) {
+                                    setDecoderOffsetInputByPointId((prev) => ({
+                                      ...prev,
+                                      [point.id]: String(point.decoderTimestampOffsetSecs ?? 0),
+                                    }));
+                                    return;
+                                  }
+                                  patchPoint(index, { decoderTimestampOffsetSecs: parsed });
+                                  setDecoderOffsetInputByPointId((prev) => ({ ...prev, [point.id]: String(parsed) }));
+                                }}
                               />
                             </Stack>
                           </TableCell>

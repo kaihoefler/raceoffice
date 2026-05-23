@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import { alpha } from "@mui/material/styles";
 import { Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from "@mui/material";
@@ -38,6 +38,11 @@ const flagByNation = Object.fromEntries(
 function formatMs(ms: number | null): string {
   if (ms == null) return "—";
   return `${Math.floor(ms / 1000)}.${String(ms % 1000).padStart(3, "0")}s`;
+}
+
+function formatLapMsCompact(ms: number | null): string {
+  if (ms == null) return "—";
+  return `${(ms / 1000).toFixed(2)}s`;
 }
 
 function normalizeFullLiveTrackingVisualization(raw: unknown, visualizationId: string): FullLiveTrackingVisualization {
@@ -167,6 +172,8 @@ export default function LiveTrackingVisualizerPage() {
   const orderedSplitPoints = useMemo(() => {
     return normalizeTimingPoints(setupDoc?.track.timingPoints ?? []).filter((point) => point.role !== "start_finish");
   }, [setupDoc]);
+
+  const hasCurrentSplitColumn = orderedSplitPoints.length > 0;
 
   const liveStateByAthleteId = useMemo(() => {
     const map = new Map<string, LiveTrackingAthleteLiveState>();
@@ -308,6 +315,7 @@ export default function LiveTrackingVisualizerPage() {
   const headerFontSize = visualization?.headerFontSize ?? "1.1em";
   const activeStatusColor = visualization?.activeStatusColor ?? "#22c55e";
   const inactiveStatusColor = visualization?.inactiveStatusColor ?? "#ef4444";
+  const trainingColumnCount = 5 + (hasCurrentSplitColumn ? 1 : 0) + 1 + orderedSplitPoints.length;
 
   return (
     <Box
@@ -322,7 +330,7 @@ export default function LiveTrackingVisualizerPage() {
         boxSizing: "border-box",
       }}
     >
-      <Typography sx={{ mb: 2, fontSize: headerFontSize, fontWeight: 800 }}>
+      <Typography sx={{ mb: 4, fontSize: headerFontSize, fontWeight: 800, lineHeight: 1.25 }}>
         {visualization?.name ?? "Live Tracking"}
       </Typography>
 
@@ -347,6 +355,8 @@ export default function LiveTrackingVisualizerPage() {
                   "& th": {
                     fontSize: headerFontSize,
                     fontWeight: 800,
+                    lineHeight: 1.25,
+                    py: 1.25,
                   },
                 }}
               >
@@ -437,6 +447,8 @@ export default function LiveTrackingVisualizerPage() {
                   "& th": {
                     fontSize: headerFontSize,
                     fontWeight: 800,
+                    lineHeight: 1.25,
+                    py: 1.25,
                   },
                 }}
               >
@@ -517,6 +529,8 @@ export default function LiveTrackingVisualizerPage() {
                   "& th": {
                     fontSize: headerFontSize,
                     fontWeight: 800,
+                    lineHeight: 1.25,
+                    py: 1.25,
                   },
 
             }}
@@ -527,6 +541,7 @@ export default function LiveTrackingVisualizerPage() {
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Laps</TableCell>
                 <TableCell align="right">Best lap</TableCell>
+                {hasCurrentSplitColumn ? <TableCell align="right">Split (current)</TableCell> : null}
                 <TableCell align="right">Last lap</TableCell>
                 {orderedSplitPoints.map((point) => (
                   <TableCell key={point.id} align="right">
@@ -541,48 +556,91 @@ export default function LiveTrackingVisualizerPage() {
                 const rowBg = alternateRowBackgroundColor && index % 2 === 1 ? alternateRowBackgroundColor : undefined;
                 const splitByTimingPointId = new Map(row.currentLapSplits.map((split) => [split.timingPointId, split.splitTimeMs]));
                 const isActive = row.activityStatus === "active";
+                const latestCurrentSplit = row.currentLapSplits.length > 0
+                  ? row.currentLapSplits[row.currentLapSplits.length - 1]
+                  : null;
+
+                const recentLapTimesNewestFirst = [...(row.recentLapTimesMs ?? [])].slice(-8).reverse();
+                const latestLapTime = recentLapTimesNewestFirst[0] ?? null;
+                const previousLapTimes = recentLapTimesNewestFirst.slice(1);
 
                 return (
-                  <TableRow
-                    key={row.athleteId}
-                    sx={
-                      rowBg
-                        ? {
-                            "& .MuiTableCell-root": {
-                              backgroundColor: rowBg,
-                            },
-                          }
-                        : undefined
-                    }
-                  >
-                    <TableCell>{getDisplayName(row)}</TableCell>
-                    <TableCell>
-                      <Box
-                        component="span"
-                        sx={{
-                          display: "inline-block",
-                          width: "0.8em",
-                          height: "0.8em",
-                          borderRadius: "50%",
-                          bgcolor: isActive ? activeStatusColor : inactiveStatusColor,
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell align="right">{row.lapsCompleted}</TableCell>
-                    <TableCell align="right">{formatMs(row.bestLapTimeMs)}</TableCell>
-                    <TableCell align="right">{formatMs(row.lastLapTimeMs)}</TableCell>
-                    {orderedSplitPoints.map((point) => (
-                      <TableCell key={`${row.athleteId}:${point.id}`} align="right">
-                        {formatMs(splitByTimingPointId.get(point.id) ?? null)}
+                  <Fragment key={row.athleteId}>
+                    <TableRow
+                      sx={
+                        rowBg
+                          ? {
+                              "& .MuiTableCell-root": {
+                                backgroundColor: rowBg,
+                              },
+                            }
+                          : undefined
+                      }
+                    >
+                      <TableCell>{getDisplayName(row)}</TableCell>
+                      <TableCell>
+                        <Box
+                          component="span"
+                          sx={{
+                            display: "inline-block",
+                            width: "0.8em",
+                            height: "0.8em",
+                            borderRadius: "50%",
+                            bgcolor: isActive ? activeStatusColor : inactiveStatusColor,
+                          }}
+                        />
                       </TableCell>
-                    ))}
-                  </TableRow>
+                      <TableCell align="right">{row.lapsCompleted}</TableCell>
+                      <TableCell align="right">{formatMs(row.bestLapTimeMs)}</TableCell>
+                      {hasCurrentSplitColumn ? (
+                        <TableCell align="right">{formatMs(latestCurrentSplit?.splitTimeMs ?? null)}</TableCell>
+                      ) : null}
+                      <TableCell align="right">{formatMs(row.lastLapTimeMs)}</TableCell>
+                      {orderedSplitPoints.map((point) => (
+                        <TableCell key={`${row.athleteId}:${point.id}`} align="right">
+                          {formatMs(splitByTimingPointId.get(point.id) ?? null)}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+
+                    <TableRow
+                      sx={
+                        rowBg
+                          ? {
+                              "& .MuiTableCell-root": {
+                                backgroundColor: rowBg,
+                              },
+                            }
+                          : undefined
+                      }
+                    >
+                      <TableCell colSpan={trainingColumnCount} sx={{ pt: 0, pb: 1 }}>
+                        <Box sx={{ display: "flex", gap: 2.5, alignItems: "center", flexWrap: "wrap" }}>
+                          <Typography component="span" sx={{ fontSize: "1em", opacity: 0.9 }}>
+                            Laps:
+                          </Typography>
+                          <Typography component="span" sx={{ fontSize: "1em", fontWeight: 800 }}>
+                            {formatLapMsCompact(latestLapTime)}
+                          </Typography>
+                          {previousLapTimes.map((lapTimeMs, lapIndex) => (
+                            <Typography
+                              key={`${row.athleteId}:recent:${lapIndex}`}
+                              component="span"
+                              sx={{ fontSize: "1em", opacity: 0.85 }}
+                            >
+                              {formatLapMsCompact(lapTimeMs)}
+                            </Typography>
+                          ))}
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  </Fragment>
                 );
               })}
 
               {sortedAthleteLiveStates.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5 + orderedSplitPoints.length}>
+                  <TableCell colSpan={trainingColumnCount}>
                     <Typography color="inherit">No live athletes yet.</Typography>
                   </TableCell>
                 </TableRow>
