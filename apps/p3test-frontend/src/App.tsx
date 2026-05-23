@@ -14,11 +14,17 @@ import {
   Container,
   Divider,
   FormControlLabel,
-  Stack,
+    Stack,
   Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from "@mui/material";
+
 
 type P3Event = {
   id: number;
@@ -27,7 +33,34 @@ type P3Event = {
   payload: unknown;
 };
 
+type P3DiscoveredDecoder = {
+  key: string;
+  host: string;
+  port: number;
+  decoderId: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  responseCount: number;
+  torNames: string[];
+  lastRecordKind: string;
+  decoderType: string | null;
+  firmwareVersion: string | null;
+  timelineName: string | null;
+  networkIps: string[];
+};
+
+type P3DiscoveryState = {
+  status: "idle" | "running" | "completed" | "error";
+  startedAt: string | null;
+  finishedAt: string | null;
+  timeoutMs: number;
+  lastError: string | null;
+  responsesReceived: number;
+  decoders: P3DiscoveredDecoder[];
+};
+
 type P3ClientState = {
+
   connection: {
     status: "disconnected" | "connecting" | "connected" | "error";
     host: string | null;
@@ -41,11 +74,13 @@ type P3ClientState = {
     bytesSent: number;
     bufferedHex: string;
   };
-  history: {
+    history: {
     nextEventId: number;
     events: P3Event[];
   };
+  discovery: P3DiscoveryState;
 };
+
 
 type ApiStateResponse = {
   ok: boolean;
@@ -168,10 +203,14 @@ async function postJson(path: string, body: unknown): Promise<ApiResult> {
 export default function App() {
   const [host, setHost] = useState("127.0.0.1");
   const [port, setPort] = useState("5403");
-  const [decoderId, setDecoderId] = useState("40-24-04-00");
+    const [decoderId, setDecoderId] = useState("40-24-04-00");
   const [decoderIdManuallyEdited, setDecoderIdManuallyEdited] = useState(false);
   const [resendFrom, setResendFrom] = useState("0");
   const [resendTo, setResendTo] = useState("10");
+  const [resendLastNValue, setResendLastNValue] = useState("10");
+  const [discoveryTimeoutMs, setDiscoveryTimeoutMs] = useState("4000");
+
+
 
   const [state, setState] = useState<P3ClientState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -250,7 +289,7 @@ export default function App() {
     }
   }, [detectedDecoderId, decoderIdManuallyEdited, decoderId]);
 
-  async function runAction(path: string, body: unknown) {
+    async function runAction(path: string, body: unknown) {
     setBusy(true);
     setFeedback(null);
 
@@ -266,7 +305,28 @@ export default function App() {
     }
   }
 
-  function sendRequest(kind: "decoder-search" | "decoder-search-smartdecoder-bug" | "get-time" | "session" | "resend") {
+  function startDiscovery() {
+    const timeoutMs = Number(discoveryTimeoutMs);
+    void runAction("/p3-test/discovery/start", {
+      timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 4000,
+    });
+  }
+
+  function connectToDiscoveredDecoder(decoder: P3DiscoveredDecoder) {
+    setHost(decoder.host);
+    setPort(String(decoder.port));
+
+    if (decoder.decoderId && decoder.decoderId.trim()) {
+      setDecoderId(decoder.decoderId);
+      setDecoderIdManuallyEdited(false);
+    }
+
+    void runAction("/p3-test/connect", { host: decoder.host, port: decoder.port });
+  }
+
+
+    function sendRequest(kind: "get-time" | "session" | "resend") {
+
     if (kind === "session") {
       void runAction("/p3-test/request", {
         kind,
@@ -288,12 +348,13 @@ export default function App() {
     void runAction("/p3-test/request", { kind });
   }
 
-  function resendLastN() {
-    const n = Number(resendTo);
+    function resendLastN() {
+    const n = Number(resendLastNValue);
     if (!Number.isInteger(n) || n <= 0) {
-      setFeedback({ kind: "error", message: "Last N must be a positive integer (using RESEND to field)." });
+      setFeedback({ kind: "error", message: "Last N must be a positive integer." });
       return;
     }
+
 
     if (latestKnownPassingNumber == null) {
       setFeedback({ kind: "error", message: "No known passing/session index yet. Send SESSION first or wait for passings." });
@@ -314,10 +375,33 @@ export default function App() {
     });
   }
 
-  const status = state?.connection.status ?? "disconnected";
+            const status = state?.connection.status ?? "disconnected";
   const canSend = status === "connected";
+  const canResendLastN = canSend && !busy && latestKnownPassingNumber != null;
+  const canConnect = !busy && (status === "disconnected" || status === "error");
+  const canDisconnect = !busy && (status === "connected" || status === "connecting");
+  const discovery = state?.discovery;
+
+
+    const discoveryStatus = discovery?.status ?? "idle";
+  const discoveredDecoders = discovery?.decoders ?? [];
+
+  function renderNetworkInfo(decoder: P3DiscoveredDecoder) {
+    const [ipAddress, netmask, gateway, dns] = decoder.networkIps;
+
+    return (
+      <Stack spacing={0.25}>
+        <Typography variant="caption">IP: {ipAddress ?? "—"}</Typography>
+        <Typography variant="caption">Netmask: {netmask ?? "—"}</Typography>
+        <Typography variant="caption">Gateway: {gateway ?? "—"}</Typography>
+        <Typography variant="caption">DNS: {dns ?? "—"}</Typography>
+      </Stack>
+    );
+  }
 
   return (
+
+
     <Container sx={{ py: 3, display: "grid", gap: 2 }}>
       <Typography variant="h4">P3 Test Client</Typography>
       <Typography variant="body2" color="text.secondary">
@@ -327,6 +411,78 @@ export default function App() {
       {feedback ? <Alert severity={feedback.kind}>{feedback.message}</Alert> : null}
 
       <Card variant="outlined">
+        <CardHeader title="UDP Discovery" subheader="Broadcast discovery is handled server-side and independent from TCP connect/session." />
+        <Divider />
+        <CardContent>
+          <Stack spacing={1}>
+            <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+              <TextField
+                size="small"
+                label="Discovery timeout (ms)"
+                type="number"
+                value={discoveryTimeoutMs}
+                onChange={(e) => setDiscoveryTimeoutMs(e.target.value)}
+                sx={{ maxWidth: 220 }}
+              />
+              <Button variant="contained" disabled={busy || discoveryStatus === "running"} onClick={startDiscovery}>
+                {discoveryStatus === "running" ? "Discovery running..." : "Start Discovery"}
+              </Button>
+            </Stack>
+
+            <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+              <Chip label={`Discovery: ${discoveryStatus}`} color={discoveryStatus === "completed" ? "success" : discoveryStatus === "running" ? "warning" : discoveryStatus === "error" ? "error" : "default"} variant="outlined" />
+              <Chip label={`Responses: ${discovery?.responsesReceived ?? 0}`} variant="outlined" />
+              <Chip label={`Decoders: ${discoveredDecoders.length}`} variant="outlined" />
+            </Stack>
+
+            <Typography variant="body2" color="text.secondary">
+              Last discovery error: {discovery?.lastError ?? "—"}
+            </Typography>
+
+            {discoveredDecoders.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">No decoders discovered yet.</Typography>
+            ) : (
+              <Box sx={{ overflowX: "auto" }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                                            <TableCell>Responder IP</TableCell>
+
+                      <TableCell>Decoder ID</TableCell>
+                      <TableCell>Type / Firmware</TableCell>
+                      <TableCell>TORs</TableCell>
+                                            <TableCell>Reported Decoder Network IPs</TableCell>
+
+                      <TableCell align="right">Action</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {discoveredDecoders.map((decoder) => (
+                      <TableRow key={decoder.key}>
+                        <TableCell>{decoder.host}:{decoder.port}</TableCell>
+                        <TableCell>{decoder.decoderId ?? "—"}</TableCell>
+                        <TableCell>{decoder.decoderType ?? "—"} / {decoder.firmwareVersion ?? "—"}</TableCell>
+                        <TableCell>{decoder.torNames.join(", ") || "—"}</TableCell>
+                                                <TableCell>{renderNetworkInfo(decoder)}</TableCell>
+
+                        <TableCell align="right">
+                                                    <Button size="small" variant="outlined" disabled={!canConnect} onClick={() => connectToDiscoveredDecoder(decoder)}>
+
+                            Connect
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            )}
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Card variant="outlined">
+
         <CardHeader title="Connection" />
         <Divider />
         <CardContent>
@@ -337,9 +493,10 @@ export default function App() {
             </Stack>
 
             <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-              <Button
+                            <Button
                 variant="contained"
-                disabled={busy}
+                color={canConnect ? "primary" : "inherit"}
+                disabled={!canConnect}
                 onClick={() => {
                   setDecoderIdManuallyEdited(false);
                   void runAction("/p3-test/connect", { host, port: Number(port) });
@@ -347,9 +504,15 @@ export default function App() {
               >
                 Connect
               </Button>
-              <Button variant="outlined" disabled={busy} onClick={() => void runAction("/p3-test/disconnect", { reason: "operator request" })}>
+              <Button
+                variant="outlined"
+                color={canDisconnect ? "warning" : "inherit"}
+                disabled={!canDisconnect}
+                onClick={() => void runAction("/p3-test/disconnect", { reason: "operator request" })}
+              >
                 Disconnect
               </Button>
+
               <Button variant="outlined" disabled={busy} onClick={() => void runAction("/p3-test/clear", {})}>
                 Clear History
               </Button>
@@ -371,24 +534,19 @@ export default function App() {
         </CardContent>
       </Card>
 
-      <Card variant="outlined">
-        <CardHeader title="Requests" subheader="Only request types evidenced in Pascal code / parser package are exposed." />
+            <Card variant="outlined">
+        <CardHeader title="Requests" subheader="Direct decoder queries (GET_TIME / SESSION / RESEND). Discovery is handled in the UDP Discovery section." />
+
         <Divider />
         <CardContent>
           <Stack spacing={1}>
             <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-              <Button variant="contained" disabled={!canSend || busy} onClick={() => sendRequest("decoder-search")}>
-                Decoder Search
-              </Button>
-              <Button variant="contained" disabled={!canSend || busy} onClick={() => sendRequest("decoder-search-smartdecoder-bug")}>
-                Decoder Search (SmartDecoder Bug)
-              </Button>
               <Button variant="contained" disabled={!canSend || busy} onClick={() => sendRequest("get-time")}>
                 GET_TIME
               </Button>
             </Stack>
 
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                        <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems="flex-start">
               <TextField
                 size="small"
                 label="Decoder ID"
@@ -397,29 +555,44 @@ export default function App() {
                   setDecoderId(e.target.value);
                   setDecoderIdManuallyEdited(true);
                 }}
-                helperText="Auto-detected from decoder status. Sent in reversed wire byte order for SESSION/RESEND."
+                helperText="Auto-detected from decoder status."
               />
-              <Button variant="outlined" disabled={!canSend || busy} onClick={() => sendRequest("session")}>
+              <Button variant="contained" disabled={!canSend || busy} onClick={() => sendRequest("session")}>
                 SESSION
               </Button>
             </Stack>
 
+
             <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
               <TextField size="small" type="number" label="RESEND from" value={resendFrom} onChange={(e) => setResendFrom(e.target.value)} sx={{ minWidth: 130 }} />
-              <TextField size="small" type="number" label="RESEND to / last N" value={resendTo} onChange={(e) => setResendTo(e.target.value)} sx={{ minWidth: 160 }} />
-              <Button variant="outlined" disabled={!canSend || busy} onClick={() => sendRequest("resend")}>
+              <TextField size="small" type="number" label="RESEND to" value={resendTo} onChange={(e) => setResendTo(e.target.value)} sx={{ minWidth: 130 }} />
+              <Button variant="contained" disabled={!canSend || busy} onClick={() => sendRequest("resend")}>
                 RESEND Range
               </Button>
-              <Button variant="outlined" disabled={!canSend || busy} onClick={resendLastN}>
+            </Stack>
+
+            <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+              <TextField
+                size="small"
+                type="number"
+                label="Last N"
+                value={resendLastNValue}
+                onChange={(e) => setResendLastNValue(e.target.value)}
+                sx={{ minWidth: 130 }}
+              />
+                            <Button variant="contained" disabled={!canResendLastN} onClick={resendLastN}>
                 RESEND last N
               </Button>
+
             </Stack>
+
             <Typography variant="caption" color="text.secondary">
               Latest known passing index: {latestKnownPassingNumber ?? "—"}
             </Typography>
           </Stack>
         </CardContent>
       </Card>
+
 
       <Card variant="outlined">
         <CardHeader

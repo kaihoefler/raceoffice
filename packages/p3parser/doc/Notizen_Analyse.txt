@@ -1,0 +1,44 @@
+Die Zeitmess-Software Orbits erkennt die vorhandenen Decoder im Netzwerk durch udp Nachrichten. 
+Sie sendet initial  eine Nachricht mit 25 Byte
+
+Destination 255.255.255.255 UDP 5303 --> 5403
+
+8e001900a53900000300010002000300040008000a000c008f
+
+Orbits sucht nach Decodern mit folgenden UDP Nachrichten, die regelmäßig gesendet werden:
+Destination 255.255.255.255 UDP 5303 --> 5403
+
+32 Byte
+0000   8e 00 1f 00 dd 8d af 00 00 36 00 01 00 02 00 03
+0010   00 04 00 05 00 06 00 07 00 08 00 09 00 0a 00 8f
+
+8e001f00dd8daf000036000100020003000400050006000700080009000a008f
+
+sowie
+23 Byte
+8e001700a7f600004a000100020003000400050006008f
+
+oder 
+
+21 Byte 
+8e001500338000001200010002000300040005008f
+
+----------------------------------
+
+Der Smart-Decoder antwortet auf den 32 Bit Request mit 
+
+65 Byte auf UDP 5303 
+
+8e024100106c0000160002043bc9a8c0070101030400ffffff040401c9a8c005040808080806010008043bc9a8c0090400ffffff0a0401c9a8c0810492030c008f
+
+ 
+und auf den 21 Byte Request mit 35 Byte
+
+8e0223009fd600001200030428000000040428000000050428000000810492030c008f
+
+auf den 23 Byte request mit 43 Bytes 
+
+8e022b0046f100004a000106534620506974020401040000030403000000040404000000810492030c008f
+
+
+

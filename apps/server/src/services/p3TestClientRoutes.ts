@@ -3,6 +3,8 @@ import type { P3TestRequestKind } from "./p3TestClientService.js";
 
 type P3TestClientController = {
   getState: () => unknown;
+  getDiscoveryState: () => unknown;
+  startDiscovery: (timeoutMs?: number) => Promise<{ ok: boolean; message: string }>;
   connect: (host: string, port: number) => { ok: boolean; message: string };
   disconnect: (reason?: string) => { ok: boolean; message: string };
   clearHistory: () => void;
@@ -14,13 +16,17 @@ type P3TestClientController = {
   }) => { ok: boolean; message: string };
 };
 
+
 export const P3_TEST_CLIENT_SERVICE_ENDPOINTS = [
   { path: "/p3-test/state", description: "P3 test client snapshot" },
+  { path: "/p3-test/discovery/state", description: "UDP discovery state snapshot" },
+  { path: "/p3-test/discovery/start", description: "Run UDP decoder discovery" },
   { path: "/p3-test/connect", description: "Connect P3 test client TCP socket" },
   { path: "/p3-test/disconnect", description: "Disconnect P3 test client TCP socket" },
   { path: "/p3-test/request", description: "Send one evidenced P3 request" },
   { path: "/p3-test/clear", description: "Clear P3 test event history" },
 ] as const;
+
 
 /**
  * Registers HTTP routes for a server-side P3 test session.
@@ -37,7 +43,24 @@ export function registerP3TestClientRoutes(app: FastifyInstance, controller: P3T
     };
   });
 
+    app.get("/p3-test/discovery/state", async () => {
+    return {
+      ok: true,
+      discovery: controller.getDiscoveryState(),
+    };
+  });
+
+  app.post("/p3-test/discovery/start", async (req, reply) => {
+    const body = (req.body ?? {}) as { timeoutMs?: unknown };
+    const timeoutMs = Number.isFinite(Number(body.timeoutMs)) ? Number(body.timeoutMs) : undefined;
+
+    const result = await controller.startDiscovery(timeoutMs);
+    if (!result.ok) return reply.code(400).send(result);
+    return reply.send(result);
+  });
+
   app.post("/p3-test/connect", async (req, reply) => {
+
     const body = (req.body ?? {}) as { host?: unknown; port?: unknown };
     const host = String(body.host ?? "").trim();
     const port = Number(body.port);

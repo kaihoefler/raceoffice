@@ -1,20 +1,28 @@
 import {
   P3_CONTROL,
   P3Frame,
+    P3FirstContactRecord,
   P3GetTimeRecord,
+  P3GpsInfoRecord,
   P3Header,
+  P3NetworkSettingsRecord,
   P3ParserOptions,
   P3PassingRecord,
-    P3Record,
+  P3Record,
   P3ResendRecord,
   P3SessionRecord,
+  P3SettingsRecord,
+  P3SignalsRecord,
   P3StatusRecord,
-
+  P3TimelineRecord,
+  P3Tor0012ObservedRecord,
   P3TlvField,
   P3_TOR,
   P3UnknownRecord,
   P3VersionDecoderRecord,
 } from "./types.js";
+
+
 
 const PASSING_FIELD = {
   PASSING_NUMBER: 0x01,
@@ -32,7 +40,9 @@ const PASSING_FIELD = {
   VOLTAGE: 0x30,
   TEMPERATURE: 0x31,
   DECODER_ID: 0x81,
+  FIELD_131: 0x83,
 } as const;
+
 
 const STATUS_FIELD = {
   NOISE: 0x01,
@@ -47,26 +57,69 @@ const STATUS_FIELD = {
 const RTC_FIELD = {
   RTC: 0x01,
   DECODER_ID: 0x81,
+  FIELD_131: 0x83,
 } as const;
+
 
 const SESSION_FIELD = {
   LAST_PASSING_INDEX: 0x04,
   DECODER_ID: 0x81,
+  FIELD_131: 0x83,
   REQUEST_ID: 0x85,
 } as const;
+
 
 const RESEND_FIELD = {
   FROM_PASSING_NUMBER: 0x01,
   TO_PASSING_NUMBER: 0x02,
   DECODER_ID: 0x81,
+  FIELD_131: 0x83,
 } as const;
+
 
 
 const VERSION_FIELD = {
   DECODER_TYPE: 0x02,
   FIRMWARE: 0x03,
   DECODER_ID: 0x81,
+  FIELD_131: 0x83,
 } as const;
+
+
+const NETWORK_SETTINGS_FIELD = {
+  FIELD_02: 0x02,
+  FIELD_03: 0x03,
+  FIELD_04: 0x04,
+  FIELD_05: 0x05,
+  FIELD_06: 0x06,
+  FIELD_07: 0x07,
+  FIELD_08: 0x08,
+  FIELD_09: 0x09,
+  FIELD_0A: 0x0a,
+  DECODER_ID: 0x81,
+  FIELD_131: 0x83,
+} as const;
+
+
+const TOR_0012_OBSERVED_FIELD = {
+  FIELD_03: 0x03,
+  FIELD_04: 0x04,
+  FIELD_05: 0x05,
+  DECODER_ID: 0x81,
+  FIELD_131: 0x83,
+} as const;
+
+
+const TIMELINE_FIELD = {
+  NAME: 0x01,
+  FIELD_02: 0x02,
+  FIELD_03: 0x03,
+  FIELD_04: 0x04,
+  DECODER_ID: 0x81,
+  FIELD_131: 0x83,
+} as const;
+
+
 
 export class P3Parser {
   private readonly strict: boolean;
@@ -125,13 +178,30 @@ export class P3Parser {
         return this.parseStatus(base, parsed.tlvs);
       case P3_TOR.VERSION_DECODER:
         return this.parseVersionDecoder(base, parsed.tlvs);
-      case P3_TOR.GET_TIME:
+            case P3_TOR.GET_TIME:
         return this.parseGetTime(base, parsed.tlvs);
-            case P3_TOR.SESSION:
+      case P3_TOR.SESSION:
         return this.parseSession(base, parsed.tlvs);
       case P3_TOR.RESEND:
         return this.parseResend(base, parsed.tlvs);
+            case P3_TOR.NETWORK_SETTINGS:
+        return this.parseNetworkSettings(base, parsed.tlvs);
+      case P3_TOR.TOR_0012_OBSERVED:
+        return this.parseTor0012Observed(base, parsed.tlvs);
+      case P3_TOR.TIMELINE:
+        return this.parseTimeline(base, parsed.tlvs);
+      case P3_TOR.SERVER_SETTINGS:
+      case P3_TOR.GENERAL_SETTINGS:
+        return this.parseSettings(base, parsed.tlvs, parsed.header.tor);
+      case P3_TOR.SIGNALS:
+        return this.parseSignals(base, parsed.tlvs);
+      case P3_TOR.GPS_INFO:
+        return this.parseGpsInfo(base, parsed.tlvs);
+      case P3_TOR.FIRST_CONTACT:
+        return this.parseFirstContact(base, parsed.tlvs);
+
       default:
+
 
         return {
           ...base,
@@ -207,12 +277,17 @@ export class P3Parser {
           record.sport = numericLe(tlv);
           consumeUnknown(unknownFields, tlv);
           break;
-        case PASSING_FIELD.DECODER_ID:
+                case PASSING_FIELD.DECODER_ID:
           record.decoderId = decodeDecoderIdPascalStyle(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case PASSING_FIELD.FIELD_131:
+          record.observedField131 = numericLe(tlv);
           consumeUnknown(unknownFields, tlv);
           break;
         default:
           break;
+
       }
     }
 
@@ -280,12 +355,17 @@ export class P3Parser {
           record.firmwareVersion = decodeAscii(tlv.raw);
           consumeUnknown(unknownFields, tlv);
           break;
-        case VERSION_FIELD.DECODER_ID:
+                case VERSION_FIELD.DECODER_ID:
           record.decoderId = bytesToHex(tlv.raw, "-");
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case VERSION_FIELD.FIELD_131:
+          record.observedField131 = numericLe(tlv);
           consumeUnknown(unknownFields, tlv);
           break;
         default:
           break;
+
       }
     }
 
@@ -307,12 +387,17 @@ export class P3Parser {
           record.currentDecoderTime = decodeP3Timestamp(tlv);
           consumeUnknown(unknownFields, tlv);
           break;
-        case RTC_FIELD.DECODER_ID:
+                case RTC_FIELD.DECODER_ID:
           record.decoderId = decodeDecoderIdPascalStyle(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case RTC_FIELD.FIELD_131:
+          record.observedField131 = numericLe(tlv);
           consumeUnknown(unknownFields, tlv);
           break;
         default:
           break;
+
       }
     }
 
@@ -334,14 +419,19 @@ export class P3Parser {
           record.lastPassingIndex = numericLe(tlv);
           consumeUnknown(unknownFields, tlv);
           break;
-                case SESSION_FIELD.DECODER_ID:
+                        case SESSION_FIELD.DECODER_ID:
           record.decoderId = decodeDecoderIdPascalStyle(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case SESSION_FIELD.FIELD_131:
+          record.observedField131 = numericLe(tlv);
           consumeUnknown(unknownFields, tlv);
           break;
         case SESSION_FIELD.REQUEST_ID:
           record.requestId = readBigUIntLe(tlv.raw).toString(10);
           consumeUnknown(unknownFields, tlv);
           break;
+
         default:
 
           break;
@@ -351,7 +441,7 @@ export class P3Parser {
     return record;
   }
 
-  private parseResend(base: ReturnType<typeof createBaseRecord>, tlvs: P3TlvField[]): P3ResendRecord {
+    private parseResend(base: ReturnType<typeof createBaseRecord>, tlvs: P3TlvField[]): P3ResendRecord {
     const unknownFields = [...tlvs];
     const record: P3ResendRecord = {
       ...base,
@@ -370,18 +460,252 @@ export class P3Parser {
           record.toPassingNumber = numericLe(tlv);
           consumeUnknown(unknownFields, tlv);
           break;
-        case RESEND_FIELD.DECODER_ID:
+                case RESEND_FIELD.DECODER_ID:
           record.decoderId = decodeDecoderIdPascalStyle(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case RESEND_FIELD.FIELD_131:
+          record.observedField131 = numericLe(tlv);
           consumeUnknown(unknownFields, tlv);
           break;
         default:
           break;
+
       }
     }
 
     return record;
   }
+
+  private parseNetworkSettings(
+    base: ReturnType<typeof createBaseRecord>,
+    tlvs: P3TlvField[],
+  ): P3NetworkSettingsRecord {
+    const unknownFields = [...tlvs];
+    const record: P3NetworkSettingsRecord = {
+      ...base,
+      kind: "network-settings",
+      tor: P3_TOR.NETWORK_SETTINGS,
+      unknownFields,
+    };
+
+    for (const tlv of tlvs) {
+            switch (tlv.type) {
+        case NETWORK_SETTINGS_FIELD.FIELD_05:
+          record.dnsServer = decodeIpv4Le(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case NETWORK_SETTINGS_FIELD.FIELD_08:
+          record.ipAddress = decodeIpv4Le(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case NETWORK_SETTINGS_FIELD.FIELD_09:
+          record.netmask = decodeIpv4Le(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case NETWORK_SETTINGS_FIELD.FIELD_0A:
+          record.defaultGateway = decodeIpv4Le(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+                case NETWORK_SETTINGS_FIELD.DECODER_ID:
+          record.decoderId = decodeDecoderIdPascalStyle(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case NETWORK_SETTINGS_FIELD.FIELD_131:
+          record.observedField131 = numericLe(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        default:
+          break;
+
+      }
+
+    }
+
+    return record;
+  }
+
+  private parseTor0012Observed(
+    base: ReturnType<typeof createBaseRecord>,
+    tlvs: P3TlvField[],
+  ): P3Tor0012ObservedRecord {
+    const unknownFields = [...tlvs];
+    const record: P3Tor0012ObservedRecord = {
+      ...base,
+      kind: "tor-0012-observed",
+      tor: P3_TOR.TOR_0012_OBSERVED,
+      unknownFields,
+    };
+
+    for (const tlv of tlvs) {
+      switch (tlv.type) {
+        case TOR_0012_OBSERVED_FIELD.FIELD_03:
+          record.observedField03 = numericLe(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case TOR_0012_OBSERVED_FIELD.FIELD_04:
+          record.observedField04 = numericLe(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case TOR_0012_OBSERVED_FIELD.FIELD_05:
+          record.observedField05 = numericLe(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+                case TOR_0012_OBSERVED_FIELD.DECODER_ID:
+          record.decoderId = decodeDecoderIdPascalStyle(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case TOR_0012_OBSERVED_FIELD.FIELD_131:
+          record.observedField131 = numericLe(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        default:
+          break;
+
+      }
+    }
+
+    return record;
+  }
+
+    private parseTimeline(base: ReturnType<typeof createBaseRecord>, tlvs: P3TlvField[]): P3TimelineRecord {
+    const unknownFields = [...tlvs];
+    const record: P3TimelineRecord = {
+      ...base,
+      kind: "timeline",
+      tor: P3_TOR.TIMELINE,
+      unknownFields,
+    };
+
+    for (const tlv of tlvs) {
+      switch (tlv.type) {
+        case TIMELINE_FIELD.NAME:
+          record.timelineName = decodeAscii(tlv.raw).trim();
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case TIMELINE_FIELD.FIELD_02:
+          record.observedField02 = numericLe(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case TIMELINE_FIELD.FIELD_03:
+          record.observedField03 = numericLe(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case TIMELINE_FIELD.FIELD_04:
+          record.observedField04 = numericLe(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+                case TIMELINE_FIELD.DECODER_ID:
+          record.decoderId = decodeDecoderIdPascalStyle(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        case TIMELINE_FIELD.FIELD_131:
+          record.observedField131 = numericLe(tlv);
+          consumeUnknown(unknownFields, tlv);
+          break;
+        default:
+          break;
+
+      }
+    }
+
+    return record;
+  }
+
+  /**
+   * SERVER_SETTINGS (0x0013) und GENERAL_SETTINGS (0x0028) werden aktuell
+   * evidenzbasiert als observed/raw geparst. Semantische Feldnamen folgen erst,
+   * wenn belastbare Referenzbelege vorliegen.
+   */
+  private parseSettings(
+    base: ReturnType<typeof createBaseRecord>,
+    tlvs: P3TlvField[],
+    tor: number,
+  ): P3SettingsRecord {
+    const unknownFields = [...tlvs];
+    const record: P3SettingsRecord = {
+      ...base,
+      kind: "settings",
+      tor: tor as P3SettingsRecord["tor"],
+      observedNumericFields: [],
+      observedAsciiFields: [],
+      unknownFields,
+    };
+
+    this.collectObservedFields(record, unknownFields, tlvs);
+    return record;
+  }
+
+  private parseSignals(base: ReturnType<typeof createBaseRecord>, tlvs: P3TlvField[]): P3SignalsRecord {
+    const unknownFields = [...tlvs];
+    const record: P3SignalsRecord = {
+      ...base,
+      kind: "signals",
+      tor: P3_TOR.SIGNALS,
+      observedNumericFields: [],
+      observedAsciiFields: [],
+      unknownFields,
+    };
+
+    this.collectObservedFields(record, unknownFields, tlvs);
+    return record;
+  }
+
+  private parseGpsInfo(base: ReturnType<typeof createBaseRecord>, tlvs: P3TlvField[]): P3GpsInfoRecord {
+    const unknownFields = [...tlvs];
+    const record: P3GpsInfoRecord = {
+      ...base,
+      kind: "gps-info",
+      tor: P3_TOR.GPS_INFO,
+      observedNumericFields: [],
+      observedAsciiFields: [],
+      unknownFields,
+    };
+
+    this.collectObservedFields(record, unknownFields, tlvs);
+    return record;
+  }
+
+  private parseFirstContact(base: ReturnType<typeof createBaseRecord>, tlvs: P3TlvField[]): P3FirstContactRecord {
+    const unknownFields = [...tlvs];
+    const record: P3FirstContactRecord = {
+      ...base,
+      kind: "first-contact",
+      tor: P3_TOR.FIRST_CONTACT,
+      observedNumericFields: [],
+      observedAsciiFields: [],
+      unknownFields,
+    };
+
+    this.collectObservedFields(record, unknownFields, tlvs);
+    return record;
+  }
+
+  private collectObservedFields(
+    record: {
+      decoderId?: string;
+      observedNumericFields: Array<{ type: number; value: number }>;
+      observedAsciiFields: Array<{ type: number; value: string }>;
+    },
+    unknownFields: P3TlvField[],
+    tlvs: P3TlvField[],
+  ): void {
+    for (const tlv of tlvs) {
+      if (tlv.type === 0x81) {
+        record.decoderId = decodeDecoderIdPascalStyle(tlv);
+        consumeUnknown(unknownFields, tlv);
+        continue;
+      }
+
+      record.observedNumericFields.push({ type: tlv.type, value: numericLe(tlv) });
+      if (isLikelyAscii(tlv.raw)) {
+        record.observedAsciiFields.push({ type: tlv.type, value: decodeAscii(tlv.raw).trim() });
+      }
+    }
+  }
 }
+
+
 
 
 function parseHeader(frame: Uint8Array): P3Header {
@@ -604,7 +928,19 @@ export function numericLe(tlv: P3TlvField): number {
   return Number(readBigUIntLe(tlv.raw));
 }
 
+function decodeIpv4Le(tlv: P3TlvField): string | undefined {
+  if (tlv.raw.length !== 4) return undefined;
+  const bytes = Uint8Array.from([...tlv.raw].reverse());
+  return `${bytes[0]}.${bytes[1]}.${bytes[2]}.${bytes[3]}`;
+}
+
+function isLikelyAscii(bytes: Uint8Array): boolean {
+  if (bytes.length === 0) return false;
+  return [...bytes].every((byte) => byte >= 0x20 && byte <= 0x7e);
+}
+
 function mapSpecialTransponderId(value: string): string {
+
   switch (value) {
     case "9992":
       return "Switch";

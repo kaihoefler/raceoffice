@@ -11,19 +11,26 @@ Ziel:
 
 ## Was sicher implementiert ist
 
-Diese TORs werden durch den Pascal-Code tatsächlich geparst und sind hier typisiert umgesetzt:
+Diese TORs werden typisiert umgesetzt:
 
 - `0x0001` PASSING
 - `0x0002` STATUS
 - `0x0003` VERSION_DECODER
 - `0x0004` RESEND
+- `0x0012` (observed UDP discovery response)
+- `0x0013` SETTINGS (SERVER_SETTINGS)
 - `0x0015` SESSION
+- `0x0016` NETWORK_SETTINGS (observed UDP discovery response)
 - `0x0024` GET_TIME
-
-Diese TORs sind im Pascal-Code zwar benannt, aber dort nicht wirklich inhaltlich dekodiert. Sie werden deshalb hier **nicht erfunden**, sondern als `kind: "unknown"` mit TLV-Rohdaten zurückgegeben:
-
+- `0x0028` SETTINGS (GENERAL_SETTINGS)
 - `0x002D` SIGNALS
-- weitere definierte, aber nicht implementierte TORs
+- `0x0030` GPS_INFO
+- `0x0045` FIRST_CONTACT
+- `0x004A` TIMELINE (observed UDP discovery response)
+
+
+Nicht typisiert bleiben weiterhin TORs/Felder ohne belastbare Evidenz. Diese werden als `kind: "unknown"` bzw. über `unknownFields` erhalten.
+
 
 
 ## Architektur
@@ -62,7 +69,9 @@ Damit kannst du direkt `socket.on("data", ...)` verarbeiten.
 npm install
 npm run check
 npm run build
+npm run test
 ```
+
 
 ## Kurzes Beispiel
 
@@ -82,9 +91,15 @@ Für die Beispielnachricht erhältst du einen `status`-Record.
 
 Wichtig:
 
-- `0x83` wird **nicht** spekulativ als stark typisierte Eigenschaft modelliert
+- `0x83` wird bei `PASSING`, `GET_TIME`, `SESSION` und `RESEND` als beobachtetes Feld `observedField131` (little-endian unsigned number) bereitgestellt; die fachliche Semantik bleibt bewusst offen
 - `0x0A` bei STATUS wird ebenfalls nicht fest in eine Eigenschaft gegossen, obwohl der Pascal-Code dafür `STATUS_SATINUSE` benennt
-- beide Felder bleiben in `unknownFields`, damit keine Scheinsicherheit entsteht
+- bei observed Discovery-/Meta-TORs (`0x0012`, `0x0016`, `0x004A`, `0x0013`, `0x0028`, `0x002D`, `0x0030`, `0x0045`) werden nur belegte Felder gemappt; unklare Semantik bleibt als `unknownFields`
+- für `NETWORK_SETTINGS (0x0016)` sind belegte semantische Felder vorhanden: `ipAddress`, `netmask`, `defaultGateway`, `dnsServer`
+
+
+
+
+
 
 ## Rückgabetypen
 
@@ -96,6 +111,15 @@ Wichtig:
 - `P3GetTimeRecord`
 - `P3SessionRecord`
 - `P3ResendRecord`
+- `P3Tor0012ObservedRecord`
+- `P3NetworkSettingsRecord`
+- `P3TimelineRecord`
+- `P3SettingsRecord`
+- `P3SignalsRecord`
+- `P3GpsInfoRecord`
+- `P3FirstContactRecord`
+
+
 
 
 ### Unbekannter Record
@@ -138,6 +162,30 @@ Feld `RTC_TIME (0x04)` und `UTC_TIME (0x10)` werden als Mikrosekunden seit `1970
 
 Das ist direkt aus `DecodePassingTime` übernommen.
 
+### Observed FIELD_131 (`0x83`)
+
+In den TORs `PASSING`, `GET_TIME`, `SESSION` und `RESEND` wird Feld `0x83` als `observedField131` ausgegeben.
+
+Die aktuelle evidenzbasierte Interpretation ist bewusst minimal:
+
+- little-endian unsigned Zahl (`numericLe`)
+- keine feste fachliche Bedeutung, bis belastbare Quellen vorliegen
+- bei nicht passenden TORs bleibt das Feld weiterhin in `unknownFields`
+
+
+### NETWORK_SETTINGS (0x0016): belegte Feldinterpretation
+
+Aus beobachteten Discovery-Antworten werden bei `network-settings` folgende Felder semantisch gemappt:
+
+- `0x08` -> `ipAddress`
+- `0x09` -> `netmask`
+- `0x0A` -> `defaultGateway`
+- `0x05` -> `dnsServer` (häufig `0.0.0.0`, wenn kein DNS konfiguriert ist)
+
+Nicht belegte `NETWORK_SETTINGS`-Felder bleiben weiterhin in `unknownFields` erhalten.
+
+
+
 ## Live-Nutzung am Socket
 
 ```ts
@@ -168,41 +216,80 @@ Diese Implementierung absichtlich **nicht**:
 
 ## Outbound Requests / Query-Builder
 
-Es gibt jetzt zusätzlich einen Builder für die belegten Anfragen aus dem Pascal-Code:
+Es gibt jetzt zusätzlich einen Builder für belegte Discovery-/Query-Frames:
 
-- `buildDecoderSearchRequest()`
+**UDP Broadcast Discovery**
+- `buildUdpBroadcastDiscoveryRequest25Byte()`
+- `buildUdpBroadcastDiscoveryRequest32ByteObserved()`
+- `buildUdpBroadcastDiscoveryRequest23ByteObserved()`
+- `buildUdpBroadcastDiscoveryRequest21ByteObserved()`
 - `buildDecoderSearchSmartDecoderBugRequest()`
+- `buildDecoderSearchRequest()` (Alias auf die 25-Byte-Discovery-Variante, für Rückwärtskompatibilität)
+
+**Direkte Decoder-Queries**
 - `buildGetTimeRequest()`
 - `buildSessionRequest(decoderId)`
 - `buildResendRequest(fromPassingNumber, toPassingNumber, decoderId)`
 
 Wichtig:
 
-- `decoder search` und der `SmartDecoderBug`-Workaround werden **nicht** semantisch neu modelliert, sondern exakt als bekannte Wire-Frames aus dem Pascal-Code bereitgestellt
-- `GET_TIME`, `SESSION` und `RESEND` werden als echte Builder erzeugt, mit dynamischer CRC-Berechnung
+- Broadcast-Discovery und direkte Decoder-Queries sind im Builder explizit getrennt (`request.usageScenario`)
+- bekannte Wire-Frames aus Pascal/Feldnotizen werden ohne zusätzliche Semantik als stabile Requests bereitgestellt
+- `GET_TIME`, `SESSION` und `RESEND` werden als dynamisch berechnete Requests (inkl. CRC) gebaut
 - jede Anfrage liefert sowohl `frame` als auch `escapedFrame`, plus Hex-Ausgabe für Logging und Analyse
 
-### Beispiel: Anfragen bauen
+### Beispiel: UDP Broadcast Discovery
 
 ```ts
+import dgram from "node:dgram";
 import {
-  buildDecoderSearchRequest,
+  buildUdpBroadcastDiscoveryRequest25Byte,
+  buildUdpBroadcastDiscoveryRequest32ByteObserved,
+  buildUdpBroadcastDiscoveryRequest23ByteObserved,
+  buildUdpBroadcastDiscoveryRequest21ByteObserved,
+  toNodeBuffer,
+} from "./src/index.js";
+
+const socket = dgram.createSocket("udp4");
+
+socket.bind(5303, () => {
+  socket.setBroadcast(true);
+
+  const requests = [
+    buildUdpBroadcastDiscoveryRequest25Byte(),
+    buildUdpBroadcastDiscoveryRequest32ByteObserved(),
+    buildUdpBroadcastDiscoveryRequest23ByteObserved(),
+    buildUdpBroadcastDiscoveryRequest21ByteObserved(),
+  ];
+
+  for (const request of requests) {
+    socket.send(toNodeBuffer(request), 5403, "255.255.255.255");
+  }
+});
+```
+
+### Beispiel: Direkte Decoder-Queries
+
+```ts
+import net from "node:net";
+import {
   buildGetTimeRequest,
   buildResendRequest,
   buildSessionRequest,
   toNodeBuffer,
 } from "./src/index.js";
 
-const search = buildDecoderSearchRequest();
-const rtc = buildGetTimeRequest();
-const session = buildSessionRequest("40-24-04-00");
-const resend = buildResendRequest(100, 120, "40-24-04-00");
+const socket = net.createConnection({ host: "192.168.0.10", port: 5403 }, () => {
+  const rtc = buildGetTimeRequest();
+  const session = buildSessionRequest("40-24-04-00");
+  const resend = buildResendRequest(100, 120, "40-24-04-00");
 
-socket.write(toNodeBuffer(search));
-socket.write(toNodeBuffer(rtc));
-socket.write(toNodeBuffer(session));
-socket.write(toNodeBuffer(resend));
+  socket.write(toNodeBuffer(rtc));
+  socket.write(toNodeBuffer(session));
+  socket.write(toNodeBuffer(resend));
+});
 ```
+
 
 ### Analysierbarkeit
 
@@ -212,6 +299,8 @@ Die Builder sind bewusst so gestaltet, dass du jeden gesendeten Request direkt l
 - `request.tor` / `request.torName`
 - `request.frameHex`
 - `request.escapedFrameHex`
+- `request.usageScenario`
+
 
 Damit bleibt auch die Sendeseite forensisch nachvollziehbar.
 

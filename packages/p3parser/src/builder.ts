@@ -1,4 +1,5 @@
-import { escapeMessage, normalizeBytes } from "./parser.js";
+import { deEscapeMessage, escapeMessage, normalizeBytes } from "./parser.js";
+
 import { P3_CONTROL, P3_TOR } from "./types.js";
 
 /**
@@ -7,6 +8,11 @@ import { P3_CONTROL, P3_TOR } from "./types.js";
  * `frame` is de-escaped and ready for CRC inspection.
  * `escapedFrame` is what should be sent on the socket.
  */
+export type P3RequestUsageScenario =
+  | "udp-broadcast-discovery"
+  | "direct-decoder-query"
+  | "direct-decoder-control";
+
 export interface P3BuiltRequest {
   name: string;
   tor: number;
@@ -15,8 +21,17 @@ export interface P3BuiltRequest {
   escapedFrame: Uint8Array;
   frameHex: string;
   escapedFrameHex: string;
+
+  /**
+   * Integration hint for callers:
+   * - udp-broadcast-discovery: send over UDP broadcast (e.g. 255.255.255.255:5403)
+   * - direct-decoder-query/control: send to a concrete decoder endpoint
+   */
+  usageScenario?: P3RequestUsageScenario;
+
   notes?: string;
 }
+
 
 /**
  * Low-level field representation for outbound TLV-style payload pieces.
@@ -41,8 +56,10 @@ export function buildP3Request(params: {
   flags?: number;
   tor: number;
   body: Uint8Array | string;
+  usageScenario?: P3RequestUsageScenario;
   notes?: string;
 }): P3BuiltRequest {
+
   const body = normalizeBytes(params.body);
   const flags = params.flags ?? 0;
 
@@ -70,10 +87,12 @@ export function buildP3Request(params: {
     frame,
     escapedFrame,
     frameHex: bytesToHex(frame),
-    escapedFrameHex: bytesToHex(escapedFrame),
+        escapedFrameHex: bytesToHex(escapedFrame),
+    usageScenario: params.usageScenario,
     notes: params.notes,
   };
 }
+
 
 /**
  * Build an outbound TLV field.
@@ -134,18 +153,71 @@ export function decoderIdToWireBytes(decoderId: string): Uint8Array {
 }
 
 /**
- * Version/decoder search request exactly as hard-coded in GetDecoderSearchPhrase().
+ * Broadcast discovery request observed in Pascal code (`GetDecoderSearchPhrase`).
  *
- * The Pascal implementation provides this as a literal frame. The semantic meaning of
- * the body fields is not derived in that code, so this helper preserves the exact wire image.
+ * Usage scenario:
+ * - send as UDP broadcast discovery frame
+ * - receive decoder/version responses on UDP
+ */
+export function buildUdpBroadcastDiscoveryRequest25Byte(): P3BuiltRequest {
+  return buildFromKnownFrameHex({
+    name: "udp-broadcast-discovery-25b",
+    frameHex: "8E001900A53900000300010002000300040008000A000C008F",
+    usageScenario: "udp-broadcast-discovery",
+    notes: "Exact frame from GetDecoderSearchPhrase() in the Pascal implementation.",
+  });
+}
+
+/**
+ * Broadcast discovery request observed in field notes (`Notizen_Analyse.txt`), 32-byte wire frame.
+ *
+ * Important:
+ * - this hex is treated as escaped wire payload as captured on UDP
+ * - no additional semantic interpretation is introduced
+ */
+export function buildUdpBroadcastDiscoveryRequest32ByteObserved(): P3BuiltRequest {
+  return buildFromKnownEscapedFrameHex({
+    name: "udp-broadcast-discovery-32b-observed",
+    escapedFrameHex: "8E001F00DD8DAF000036000100020003000400050006000700080009000A008F",
+    usageScenario: "udp-broadcast-discovery",
+    notes: "Observed UDP broadcast request from Notizen_Analyse.txt (32-byte wire frame).",
+  });
+}
+
+/**
+ * Broadcast discovery request observed in field notes (`Notizen_Analyse.txt`), 23-byte wire frame.
+ */
+export function buildUdpBroadcastDiscoveryRequest23ByteObserved(): P3BuiltRequest {
+  return buildFromKnownEscapedFrameHex({
+    name: "udp-broadcast-discovery-23b-observed",
+    escapedFrameHex: "8E001700A7F600004A000100020003000400050006008F",
+    usageScenario: "udp-broadcast-discovery",
+    notes: "Observed UDP broadcast request from Notizen_Analyse.txt (23-byte wire frame).",
+  });
+}
+
+/**
+ * Broadcast discovery request observed in field notes (`Notizen_Analyse.txt`), 21-byte wire frame.
+ */
+export function buildUdpBroadcastDiscoveryRequest21ByteObserved(): P3BuiltRequest {
+  return buildFromKnownEscapedFrameHex({
+    name: "udp-broadcast-discovery-21b-observed",
+    escapedFrameHex: "8E001500338000001200010002000300040005008F",
+    usageScenario: "udp-broadcast-discovery",
+    notes: "Observed UDP broadcast request from Notizen_Analyse.txt (21-byte wire frame).",
+  });
+}
+
+/**
+ * Backward-compatible alias kept for existing callers.
+ *
+ * Prefer `buildUdpBroadcastDiscoveryRequest25Byte()` in new code to make
+ * the broadcast use-case explicit.
  */
 export function buildDecoderSearchRequest(): P3BuiltRequest {
-  return buildFromKnownFrameHex(
-    "decoder-search",
-    "8E001900A53900000300010002000300040008000A000C008F",
-    "Exact frame from GetDecoderSearchPhrase() in the Pascal implementation.",
-  );
+  return buildUdpBroadcastDiscoveryRequest25Byte();
 }
+
 
 /**
  * SmartDecoder workaround request exactly as hard-coded in GetDecoderSearchPhraseSmartDecoderBug().
@@ -154,12 +226,14 @@ export function buildDecoderSearchRequest(): P3BuiltRequest {
  * provided Pascal code does not explain the body structure beyond the literal request bytes.
  */
 export function buildDecoderSearchSmartDecoderBugRequest(): P3BuiltRequest {
-  return buildFromKnownFrameHex(
-    "decoder-search-smartdecoder-bug",
-    "8E0021007CE3000016000800090006000A0005000E0085080A01010A000000008F",
-    "Exact frame from GetDecoderSearchPhraseSmartDecoderBug() in the Pascal implementation.",
-  );
+  return buildFromKnownFrameHex({
+    name: "decoder-search-smartdecoder-bug",
+    frameHex: "8E0021007CE3000016000800090006000A0005000E0085080A01010A000000008F",
+    usageScenario: "udp-broadcast-discovery",
+    notes: "Exact frame from GetDecoderSearchPhraseSmartDecoderBug() in the Pascal implementation.",
+  });
 }
+
 
 /**
  * Build a GET_TIME / RTC query.
@@ -167,14 +241,16 @@ export function buildDecoderSearchSmartDecoderBugRequest(): P3BuiltRequest {
  * This reproduces GetRtcPhrase() from the Pascal code, but computes the CRC dynamically.
  */
 export function buildGetTimeRequest(): P3BuiltRequest {
-  return buildP3Request({
+    return buildP3Request({
     name: "get-time",
     version: 0x02,
     tor: P3_TOR.GET_TIME,
     body: "010002000300040008000A000C00",
+    usageScenario: "direct-decoder-query",
     notes: "Body shape taken from GetRtcPhrase() in the Pascal implementation.",
   });
 }
+
 
 /**
  * Build a SESSION query for a specific decoder ID.
@@ -187,14 +263,16 @@ export function buildSessionRequest(decoderId: string): P3BuiltRequest {
     buildOutboundField({ type: 0x81, value: decoderIdToWireBytes(decoderId) }),
   );
 
-  return buildP3Request({
+    return buildP3Request({
     name: "session",
     version: 0x00,
     tor: P3_TOR.SESSION,
     body,
+    usageScenario: "direct-decoder-query",
     notes: "Built from GetSessionPhrase(DecoderId) in the Pascal implementation.",
   });
 }
+
 
 /**
  * Build a RESEND query for a passing-number interval and decoder ID.
@@ -213,14 +291,16 @@ export function buildResendRequest(
     buildOutboundField({ type: 0x81, value: decoderIdToWireBytes(decoderId) }),
   );
 
-  return buildP3Request({
+    return buildP3Request({
     name: "resend",
     version: 0x00,
     tor: P3_TOR.RESEND,
     body,
+    usageScenario: "direct-decoder-query",
     notes: "Built from GetResendPhrase(FromPassingNr, ToPassingNr, DecoderId) in the Pascal implementation.",
   });
 }
+
 
 /**
  * Convert a built request into a socket-writeable Buffer.
@@ -235,22 +315,57 @@ export function toNodeBuffer(request: P3BuiltRequest): Buffer {
  * Useful where the Pascal implementation only gives us a stable wire image but not a
  * semantic field model.
  */
-export function buildFromKnownFrameHex(name: string, frameHex: string, notes?: string): P3BuiltRequest {
-  const frame = normalizeBytes(frameHex);
+export function buildFromKnownFrameHex(params: {
+  name: string;
+  frameHex: string;
+  usageScenario?: P3RequestUsageScenario;
+  notes?: string;
+}): P3BuiltRequest {
+  const frame = normalizeBytes(params.frameHex);
   const escapedFrame = escapeMessage(frame);
   const tor = frame.length >= 10 ? readU16Le(frame, 8) : -1;
 
   return {
-    name,
+    name: params.name,
     tor,
     torName: tor >= 0 ? torName(tor) : "UNKNOWN",
     frame,
     escapedFrame,
     frameHex: bytesToHex(frame),
     escapedFrameHex: bytesToHex(escapedFrame),
-    notes,
+    usageScenario: params.usageScenario,
+    notes: params.notes,
   };
 }
+
+/**
+ * Re-wrap a known escaped wire-frame literal into a P3BuiltRequest.
+ *
+ * Use this for captured UDP/TCP payloads that are already escaped on wire.
+ */
+export function buildFromKnownEscapedFrameHex(params: {
+  name: string;
+  escapedFrameHex: string;
+  usageScenario?: P3RequestUsageScenario;
+  notes?: string;
+}): P3BuiltRequest {
+  const escapedFrame = normalizeBytes(params.escapedFrameHex);
+  const frame = deEscapeMessage(escapedFrame);
+  const tor = frame.length >= 10 ? readU16Le(frame, 8) : -1;
+
+  return {
+    name: params.name,
+    tor,
+    torName: tor >= 0 ? torName(tor) : "UNKNOWN",
+    frame,
+    escapedFrame,
+    frameHex: bytesToHex(frame),
+    escapedFrameHex: bytesToHex(escapedFrame),
+    usageScenario: params.usageScenario,
+    notes: params.notes,
+  };
+}
+
 
 export function calcCrc16(input: Uint8Array | string): number {
   const bytes = normalizeBytes(input);
