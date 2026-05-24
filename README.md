@@ -1,40 +1,34 @@
 # RaceOffice
 
-RaceOffice consists of:
+RaceOffice besteht aus:
 
-- **Frontend SPA**: React + TypeScript + Vite
-- **Backend**: Fastify + WebSockets + SQLite (`apps/server/`)
+- **Frontend** (`apps/frontend/`) – Hauptanwendung: Eventmanagement, Ergebnisse, Visualisierungen
+- **Livetracking Frontend** (`apps/livetracking-frontend/`) – Eigenständige UI für Livetracking-Steuerung und Visualisierung
+- **P3 Test Client** (`apps/p3test-frontend/`) – Diagnose-UI für MYLAPS P3 Decoder
+- **Backend** (`apps/server/`) – Fastify + WebSockets + SQLite
+- **Livetracking Worker** (`apps/livetracking-worker/`) – Zeitmess-Engine, verbindet sich mit P3 Decodern
+- **Domain Package** (`packages/domain/`) – Gemeinsame Typen und Logik
+- **P3 Parser Package** (`packages/p3parser/`) – MYLAPS P3 Protokoll-Parser und Client API
 
 ## Table of contents
 
 - [Documentation](#documentation)
-  - [Server protocol details](#server-protocol-details)
 - [Quick start (Windows & macOS)](#quick-start-windows--macos)
   - [1) Prerequisites](#1-prerequisites)
   - [2) Install dependencies](#2-install-dependencies)
   - [3) Run in development](#3-run-in-development)
-- [Run in production mode (local/server)](#run-in-production-mode-localserver)
-  - [Windows (PowerShell)](#windows-powershell)
-  - [macOS (zsh/bash)](#macos-zshbash)
+- [Run in production mode](#run-in-production-mode)
 - [Windows Service / deployment](#windows-service--deployment)
-- [Project structure (short)](#project-structure-short)
+- [Project structure](#project-structure)
 
 ## Documentation
 
 - Architecture details: [`doc/architecture.md`](doc/architecture.md)
 - Build & deploy guide (including WinSW): [`doc/build-and-deploy.md`](doc/build-and-deploy.md)
-- Visualization skipped-row indicator: [`doc/visualization.md`](doc/visualization.md)
 - Server API/protocol and error handling: [`doc/server.md`](doc/server.md)
-- P3 test client notes (decoder-id byte order, session/resend behavior): [`doc/p3test-client-notes.md`](doc/p3test-client-notes.md)
-
-
----
-
-## Server protocol details
-
-For realtime message formats, revision handling, and unified server error responses, see:
-
-- [`doc/server.md`](doc/server.md)
+- Visualization skipped-row indicator: [`doc/visualization.md`](doc/visualization.md)
+- P3 test client notes (decoder-id byte order, session/resend): [`doc/p3test-client-notes.md`](doc/p3test-client-notes.md)
+- P3 Parser & Client API: [`packages/p3parser/README.md`](packages/p3parser/README.md)
 
 ---
 
@@ -42,12 +36,10 @@ For realtime message formats, revision handling, and unified server error respon
 
 ### 1) Prerequisites
 
-- Node.js `20.19.0` or newer (see [`.nvmrc`](.nvmrc) and root [`package.json`](package.json) `engines`)
+- Node.js `20.19.0` oder neuer (siehe [`.nvmrc`](.nvmrc) und [`package.json`](package.json) `engines`)
 - npm
 
 ### 2) Install dependencies
-
-> Repository uses npm workspaces (`apps/frontend`, `apps/server`, `packages/domain`).
 
 ```sh
 npm install
@@ -55,36 +47,46 @@ npm install
 
 ### 3) Run in development
 
-Use two terminals.
-
-**Terminal A (backend):**
+#### Alles auf einmal starten (empfohlen)
 
 ```sh
-npm run dev:server
+npm run dev:all
 ```
 
-**Terminal B (frontend):**
+Startet parallel:
+
+| Dienst | URL |
+|---|---|
+| Backend (Server + API) | `http://localhost:8787` |
+| Frontend (Hauptanwendung) | `http://localhost:5173` |
+| Livetracking Frontend | `http://localhost:5174/livetracking/` |
+| P3 Test Client | `http://localhost:5175` |
+
+> Der Livetracking Worker muss bei Bedarf separat gestartet werden (siehe unten).
+
+#### Dienste einzeln starten
 
 ```sh
-npm run dev
+npm run dev:server                  # Backend auf Port 8787
+npm run dev                         # Hauptfrontend auf Port 5173
+npm run dev:livetracking-frontend   # Livetracking UI auf Port 5174
+npm run dev:p3test-frontend         # P3 Test Client auf Port 5175
+npm run dev:livetracking-worker     # Livetracking Worker (Zeitmess-Engine)
 ```
 
-Open the frontend URL shown by Vite (usually `http://localhost:5173`).
-
-Notes:
-- Vite proxies `/ws`, `/sse` and `/health` to backend `http://localhost:8787`.
+Vite proxiert `/ws`, `/sse` und `/health` an das Backend `http://localhost:8787`.
 
 ---
 
-## Run in production mode (local/server)
+## Run in production mode
 
-Build all artifacts (domain package is built first automatically via root `build`):
+Alle Artefakte bauen (Domain-Package wird automatisch zuerst gebaut):
 
 ```sh
 npm run build:all
 ```
 
-Start backend (serves API + SPA):
+Backend starten (serviert API + alle SPAs):
 
 ### Windows (PowerShell)
 
@@ -98,25 +100,38 @@ npm run start:server -- --host 0.0.0.0 --port 8787 --db "C:\ProgramData\RaceOffi
 npm run start:server -- --host 0.0.0.0 --port 8787 --db "./data/raceoffice.db"
 ```
 
-Open:
-- UI: `http://<server-host>:8787/`
-- Health: `http://<server-host>:8787/health`
+Der Server serviert alle Frontends unter ihren jeweiligen Pfaden:
+
+| URL | Inhalt |
+|---|---|
+| `http://<host>:8787/` | Hauptfrontend |
+| `http://<host>:8787/livetracking/` | Livetracking Frontend |
+| `http://<host>:8787/p3test/` | P3 Test Client |
+| `http://<host>:8787/health` | Health Check |
 
 ---
 
 ## Windows Service / deployment
 
-For deployment folder generation, WinSW service installation, and advanced config options, see:
+Für Deployment-Ordner-Generierung, WinSW-Service-Installation und erweiterte Konfiguration:
 
 - [`doc/build-and-deploy.md`](doc/build-and-deploy.md)
 
 ---
 
-## Project structure (short)
+## Project structure
 
-- `apps/frontend/` – frontend SPA
-- `apps/server/` – backend server
-- `packages/domain/` – shared domain package (types + pure race/results/activity logic)
-- `doc/` – project documentation
-- `examples/` – sample data/assets
+```
+apps/
+  frontend/               Hauptanwendung (Eventmanagement, Ergebnisse)
+  livetracking-frontend/  Eigenständige Livetracking UI
+  livetracking-worker/    Zeitmess-Engine (P3 Decoder Anbindung)
+  p3test-frontend/        Diagnose-UI für P3 Decoder
+  server/                 Fastify Backend (API, WebSockets, SQLite)
 
+packages/
+  domain/                 Gemeinsame Typen und Logik (Events, Races, Livetracking)
+  p3parser/               MYLAPS P3 Protokoll-Parser und Client API
+
+doc/                      Projektdokumentation
+```
