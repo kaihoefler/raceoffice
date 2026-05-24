@@ -12,7 +12,7 @@
   "dependencies": {
     "@raceoffice/domain": "file:../../packages/domain",
     "fast-json-patch": "^3.1.1",
-    "ws": "^8.18.3"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/node": "^25.0.3",
