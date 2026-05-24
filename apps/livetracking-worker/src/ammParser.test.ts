@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeAmmPayloadToPassing } from "./ammParser.js";
+import { normalizeAmmPayloadToPassing } from "./decoder/ammc/ammParser.js";
 
 describe("ammParser", () => {
   it("applies positive decoder timestamp offset", () => {
@@ -12,7 +12,6 @@ describe("ammParser", () => {
       },
       timingPoint: {
         id: "tp-1",
-        decoderId: "dec-1",
         decoderTimestampOffsetSecs: 3600,
       },
     });
@@ -29,7 +28,6 @@ describe("ammParser", () => {
       },
       timingPoint: {
         id: "tp-1",
-        decoderId: "dec-1",
         decoderTimestampOffsetSecs: -120,
       },
     });

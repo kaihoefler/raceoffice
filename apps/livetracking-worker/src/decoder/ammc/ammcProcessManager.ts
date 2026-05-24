@@ -54,10 +54,10 @@ type DecoderExecutableKind = "amb" | "sim";
 
 
 function resolveWorkspaceRoot(): string {
-  // src/ammcProcessManager.ts -> livetracking-worker -> apps -> workspace root
+  // src/decoder/ammc/ammcProcessManager.ts -> ammc -> decoder -> src -> livetracking-worker -> apps -> workspace root
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
-  return path.resolve(__dirname, "../../..");
+  return path.resolve(__dirname, "../../../../..");
 }
 
 /**
@@ -152,7 +152,7 @@ function buildArgs(
   const tranCodesCsv = normalizeSimTranCodes(point).join(",");
   const passingDelay = normalizeSimPassingDelayRange(point.simPassingDelay);
   const startupDelaySecs = String(Math.max(0, Number(point.simStartupDelaySecs ?? 0) || 0));
-  const decoderId = options?.decoderId ?? point.decoderId;
+  const decoderId = options?.decoderId ?? point.decoderLabel;
 
   return template.map((token) =>
     token
@@ -428,10 +428,10 @@ export class AmmcProcessManager {
 
         let simChild: ChildProcess | null = null;
     if (needsSimulator) {
-      const normalizedSimDecoderId = normalizeSimDecoderId(point.decoderId);
+      const normalizedSimDecoderId = normalizeSimDecoderId(point.decoderLabel);
       if (normalizedSimDecoderId.changed) {
         this.onWarning?.(
-          `[ammc:${point.id}] normalized sim decoder-id from ${JSON.stringify(point.decoderId)} to ${JSON.stringify(normalizedSimDecoderId.value)} (required: 6 hex chars 0-9/A-F)`,
+          `[ammc:${point.id}] normalized sim decoder-id from ${JSON.stringify(point.decoderLabel)} to ${JSON.stringify(normalizedSimDecoderId.value)} (required: 6 hex chars 0-9/A-F)`,
         );
       }
 

@@ -27,6 +27,8 @@ type AmmPassingPayload = {
 
 export type AmmNormalizedPassing = {
   passing: LiveTrackingRuntimePassingEvent;
+  /** Fortlaufende Nummer vom Decoder (0 wenn nicht im Payload vorhanden). */
+  passingNumber: number;
   warnings: string[];
 };
 
@@ -38,7 +40,15 @@ function toRecord(value: unknown): Record<string, unknown> | null {
 function normalizeTimestamp(value: unknown, offsetSecs: number): string | null {
   if (typeof value !== "string") return null;
 
-  const baseMs = Date.parse(value);
+  // ammc sends "YYYY-MM-DD HH:MM:SS.SSSSSS +HH:MM" — non-standard in three ways:
+  // space instead of T, microseconds (6 digits), space before timezone offset.
+  // Normalize to ISO 8601 before parsing.
+  const iso = value
+    .replace(/^(\d{4}-\d{2}-\d{2})\s+/, "$1T")   // space → T
+    .replace(/(\.\d{3})\d+/, "$1")                 // truncate µs → ms
+    .replace(/\s+([+-])/, "$1");                   // remove space before tz offset
+
+  const baseMs = Date.parse(iso);
   if (!Number.isFinite(baseMs)) return null;
 
   const correctedMs = baseMs + offsetSecs * 1000;
@@ -70,7 +80,7 @@ function buildEventId(args: {
  */
 export function normalizeAmmPayloadToPassing(args: {
   payload: unknown;
-  timingPoint: Pick<LiveTrackingTimingPoint, "id" | "decoderId" | "decoderTimestampOffsetSecs">;
+  timingPoint: Pick<LiveTrackingTimingPoint, "id" | "decoderTimestampOffsetSecs">;
 }): AmmNormalizedPassing | null {
 
   const record = toRecord(args.payload);
@@ -79,7 +89,7 @@ export function normalizeAmmPayloadToPassing(args: {
   const payload = record as AmmPassingPayload;
   const warnings: string[] = [];
 
-    const timestamp = normalizeTimestamp(payload.rtc_time, Number(args.timingPoint.decoderTimestampOffsetSecs ?? 0));
+  const timestamp = normalizeTimestamp(payload.rtc_time, Number(args.timingPoint.decoderTimestampOffsetSecs ?? 0));
 
   if (!timestamp) return null;
 
@@ -93,10 +103,18 @@ export function normalizeAmmPayloadToPassing(args: {
     warnings.push(`Unexpected AMM msg type '${payload.msg}', treated as passing payload.`);
   }
 
+  // Hardware decoder ID comes only from the payload. Empty string when absent —
+  // do NOT fall back to the timing-point label (decoderId/decoderLabel), which is
+  // a human-readable name, not a hardware identifier.
   const decoderId =
     typeof payload.decoder_id === "string" && payload.decoder_id.trim()
       ? payload.decoder_id.trim()
-      : args.timingPoint.decoderId;
+      : "";
+
+  const passingNumber =
+    payload.passing_number != null && Number.isFinite(Number(payload.passing_number))
+      ? Number(payload.passing_number)
+      : 0;
 
   const sequence =
     payload.passing_number != null
@@ -119,6 +137,7 @@ export function normalizeAmmPayloadToPassing(args: {
       timingPointId: args.timingPoint.id,
       decoderId,
     },
+    passingNumber,
     warnings,
   };
 }

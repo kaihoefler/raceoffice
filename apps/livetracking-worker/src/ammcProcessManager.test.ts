@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { afterEach, describe, expect, it } from "vitest";
 import type { LiveTrackingTimingPoint } from "@raceoffice/domain";
-import { AmmcProcessManager } from "./ammcProcessManager.js";
+import { AmmcProcessManager } from "./decoder/ammc/ammcProcessManager.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,7 +75,7 @@ describe("AmmcProcessManager integration (AMB + simulator)", () => {
     const timingPoint: LiveTrackingTimingPoint = {
       id: "tp-amb-1",
       name: "AMB Start/Finish",
-      decoderId: "AMB-DEC-1",
+      decoderLabel: "AMB-DEC-1",
       decoderIp: "127.0.0.1",
       websocketPortAMM: wsPort,
       order: 1,
@@ -118,20 +118,20 @@ describe("AmmcProcessManager integration (AMB + simulator)", () => {
     await waitFor(() => statuses.includes("running"), 10000);
 
       const raw = await waitForWebsocketMessage(`ws://127.0.0.1:${wsPort}`, 12000);
-      expect(raw).toContain("transponder");
+      expect(raw).toContain("tran_code");
 
       manager.stopAll();
       await waitFor(() => statuses.includes("stopped"), 5000);
     } finally {
       manager.stopAll();
     }
-  });
+  }, 30000);
 
   it("retries process start on repeated sync when converter exits with error", async () => {
     const timingPoint: LiveTrackingTimingPoint = {
       id: "tp-amb-restart",
       name: "AMB Restart Test",
-      decoderId: "AMB-DEC-R",
+      decoderLabel: "AMB-DEC-R",
       decoderIp: "127.0.0.1",
       websocketPortAMM: 19122,
       order: 1,
@@ -171,7 +171,7 @@ describe("AmmcProcessManager integration (AMB + simulator)", () => {
     const timingPoint: LiveTrackingTimingPoint = {
       id: "tp-amb-sync-remove",
       name: "AMB Sync Remove",
-      decoderId: "AMB-DEC-S",
+      decoderLabel: "AMB-DEC-S",
       decoderIp: "127.0.0.1",
       websocketPortAMM: wsPort,
       order: 1,

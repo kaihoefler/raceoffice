@@ -23,7 +23,8 @@ export type LiveTrackingTimingPoint = {
 
   id: string;
   name: string;
-    decoderId: string;
+  /** Konfigurierbarer, menschenlesbarer Name des Decoders. Nicht identisch mit der hardware-seitigen Decoder-ID aus dem P3-Protokoll. */
+  decoderLabel: string;
   decoderIp: string;
   websocketPortAMM: number;
 
@@ -104,6 +105,12 @@ export type LiveTrackingSetupDocument = {
   name: string;
 
   /**
+   * Decoder backend to use for this setup.
+   * Defaults to "ammc" when absent (backward compatibility).
+   */
+  decoderBackend?: "ammc" | "p3parser";
+
+  /**
    * Minimum lap time in seconds. Passings that would close a lap shorter than
    * this threshold are rejected as `min_lap_time` invalid events.
    * Defaults to 8 when absent.
@@ -125,7 +132,7 @@ export type LiveTrackingSetupValidationIssue = {
     | "timing_point_start_finish_count"
     | "timing_point_distance_invalid"
     | "timing_point_duplicate_id"
-        | "timing_point_duplicate_decoder_endpoint"
+    | "timing_point_duplicate_decoder_ip"
     | "timing_point_absolute_position_exceeds_track_length"
     | "timing_point_decoder_time_offset_invalid";
 
@@ -235,8 +242,15 @@ export function normalizeTimingPoints(points: LiveTrackingTimingPoint[]): LiveTr
     const distance = index === 0 ? 0 : Math.max(0, toFiniteNumber(point.distanceFromPreviousM, 0));
     absolute += distance;
 
+    // Lazy migration: old documents have `decoderId` instead of `decoderLabel`.
+    const anyPoint = point as unknown as Record<string, unknown>;
+    const decoderLabel =
+      typeof anyPoint.decoderLabel === "string" ? anyPoint.decoderLabel :
+      typeof anyPoint.decoderId === "string" ? anyPoint.decoderId as string : "";
+
     return {
       ...point,
+      decoderLabel,
       order: index + 1,
       distanceFromPreviousM: distance,
       absolutePositionM: absolute,
@@ -292,16 +306,16 @@ export function validateLiveTrackingTrack(track: LiveTrackingTrack): LiveTrackin
       ids.add(id);
     }
 
-    const endpoint = `${String(point.decoderIp ?? "").trim()}:${toFiniteInt(point.websocketPortAMM, -1)}`;
-    if (endpoint !== ":-1") {
-      if (decoderEndpoints.has(endpoint)) {
+    const ip = String(point.decoderIp ?? "").trim();
+    if (ip) {
+      if (decoderEndpoints.has(ip)) {
         issues.push({
-          code: "timing_point_duplicate_decoder_endpoint",
-          message: "Each timing point should use a unique decoder endpoint (ip:port).",
+          code: "timing_point_duplicate_decoder_ip",
+          message: "Each timing point must use a unique decoder IP address.",
           timingPointId: id || undefined,
         });
       }
-      decoderEndpoints.add(endpoint);
+      decoderEndpoints.add(ip);
     }
 
         const order = toFiniteInt(point.order, 0);
@@ -389,10 +403,15 @@ export function validateLiveTrackingTrack(track: LiveTrackingTrack): LiveTrackin
 export function isLiveTrackingTimingPoint(value: unknown): value is LiveTrackingTimingPoint {
   if (!isRecord(value)) return false;
 
+  // Lazy migration: accept old documents that still have `decoderId` instead of `decoderLabel`.
+  // normalizeTimingPoints() coerces the field to `decoderLabel` on read.
+  const hasLabel = typeof value.decoderLabel === "string";
+  const hasLegacyId = typeof (value as Record<string, unknown>).decoderId === "string";
+
   return (
     typeof value.id === "string" &&
     typeof value.name === "string" &&
-    typeof value.decoderId === "string" &&
+    (hasLabel || hasLegacyId) &&
     typeof value.decoderIp === "string" &&
         typeof value.websocketPortAMM === "number" &&
     (value.decoderType === undefined || value.decoderType === "amb" || value.decoderType === "sim") &&
@@ -436,6 +455,7 @@ export function isLiveTrackingSetupDocument(value: unknown): value is LiveTracki
       (Array.isArray(value.activeParticipantPoolIds) && value.activeParticipantPoolIds.every((x) => typeof x === "string"))) &&
 
     typeof value.name === "string" &&
+    (value.decoderBackend === undefined || value.decoderBackend === "ammc" || value.decoderBackend === "p3parser") &&
     (value.minLapTimeSecs === undefined || typeof value.minLapTimeSecs === "number") &&
     isLiveTrackingTrack(value.track) &&
     (typeof value.updatedAt === "string" || value.updatedAt === null)

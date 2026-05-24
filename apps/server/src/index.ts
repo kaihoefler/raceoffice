@@ -49,6 +49,10 @@ import {
   registerP3TestClientRoutes,
 } from "./services/p3TestClientRoutes.js";
 import { P3TestClientService } from "./services/p3TestClientService.js";
+import {
+  P3_DISCOVERY_SERVICE_ENDPOINTS,
+  registerP3DiscoveryRoutes,
+} from "./services/p3DiscoveryRoutes.js";
 
 
 
@@ -422,6 +426,7 @@ const publicServiceEndpoints = [
 
   ...LIVE_TRACKING_WORKER_SERVICE_ENDPOINTS,
   ...P3_TEST_CLIENT_SERVICE_ENDPOINTS,
+  ...P3_DISCOVERY_SERVICE_ENDPOINTS,
 ] as const;
 
 
@@ -448,6 +453,9 @@ registerLiveTrackingWorkerRoutes(app, liveTrackingWorkerManager);
 
 // --- P3 protocol test client control routes
 registerP3TestClientRoutes(app, p3TestClientService);
+
+// --- P3 decoder network discovery scan
+registerP3DiscoveryRoutes(app);
 
 // --- Standalone P3 test UI (separate from race result management shell)
 // Important URL behavior:

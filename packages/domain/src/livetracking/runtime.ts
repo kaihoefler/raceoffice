@@ -33,17 +33,29 @@ export type LiveTrackingRuntimeDecoderState = {
 };
 
 /**
- * Normalized technical passing event captured from AMM streams.
+ * Normalized technical passing event captured from decoder streams.
  *
- * This intentionally mirrors the minimal event identity needed for later
- * timing-engine processing while remaining part of technical runtime debug data.
+ * Required fields carry the minimal identity for timing-engine processing.
+ * Optional fields are populated by backends that provide richer data (P3)
+ * and left absent by backends that do not (AMMC). All optional fields are
+ * backwards-compatible with stored runtime documents written before they existed.
  */
 export type LiveTrackingRuntimePassingEvent = {
   id: string;
   timestamp: string;
   transponderId: string;
   timingPointId: string;
+  /** Hardware-zugewiesene Decoder-ID (z.B. "40-24-04-00"). */
   decoderId: string;
+  /** "tranx" für Tranx-Transponder, "prochip" für ProChip/FlexChip. */
+  transponderType?: "tranx" | "prochip";
+  /** Zeitquelle des Timestamps. */
+  passingTimeSource?: "rtc" | "utc";
+  signalStrength?: number;
+  hits?: number;
+  lowBattery?: boolean;
+  /** Welches Decoder-Backend das Passing geliefert hat. */
+  backend?: "ammc" | "p3parser";
 };
 
 /**

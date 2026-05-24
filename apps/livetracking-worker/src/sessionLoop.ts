@@ -4,8 +4,7 @@
  * Responsibilities (single orchestration point):
  * - keep live subscriptions to session/runtime/results/setup/participants documents
  * - execute session command queue transitions (prepare/start/stop/shutdown/reset)
- * - manage AMMC process lifecycle + websocket connections per timing point
- * - persist runtime telemetry (decoder status, raw payloads, normalized passings)
+ * - manage decoder adapter lifecycle (start/stop based on session state)
  * - continuously project sporting results from runtime passings + setup + participant pool
  *
  * Important design rule:
@@ -19,11 +18,10 @@ import {
   getNextQueuedLiveTrackingCommand,
   getRunningLiveTrackingCommand,
   buildLiveTrackingResultsProjection,
-    isLiveTrackingParticipantPoolDocument,
+  isLiveTrackingParticipantPoolDocument,
   isLiveTrackingSessionDocument,
   isLiveTrackingSetupDocument,
   isLiveTrackingWorkerStatusCheck,
-
   makeLiveTrackingParticipantPoolDocId,
   makeLiveTrackingResultsDocId,
   makeLiveTrackingRuntimeDocId,
@@ -36,13 +34,13 @@ import {
   type LiveTrackingParticipantPoolDocument,
   type LiveTrackingResultsDocument,
   type LiveTrackingRuntimeDocument,
+  type LiveTrackingRuntimeRawPayload,
   type LiveTrackingSessionDocument,
   type LiveTrackingSetupDocument,
-  type LiveTrackingTimingPoint,
 } from "@raceoffice/domain";
-import WebSocket from "ws";
-import { explodeAmmPayloads, normalizeAmmPayloadToPassing } from "./ammParser.js";
-import { AmmcProcessManager } from "./ammcProcessManager.js";
+import { createDecoderSourceAdapter } from "./decoder/adapters/createDecoderSourceAdapter.js";
+import type { DecoderHealthPatch, DecoderSourceAdapter, NormalizedPassing } from "./decoder/adapters/decoderSourceAdapter.js";
+import { normalizedToRuntimePassing } from "./decoder/adapters/normalizedPassing.js";
 import { RealtimeDocClient } from "./realtimeDocClient.js";
 
 function nowIso(): string {
@@ -57,22 +55,14 @@ function appendBounded<T>(items: T[], value: T, max: number): T[] {
 /**
  * Extracts athletes from a pool doc defensively, tolerating legacy docs that predate
  * the `kind`/`version` requirement or that stored `bib` as a string instead of a number.
- *
- * Why this exists instead of just relying on `isLiveTrackingParticipantPoolDocument`:
- * - Pools created before the kind/version fields were introduced pass the guard, but
- *   athletes with string bibs cause the per-athlete check to fail, silently dropping
- *   the entire pool. This coercion layer makes the worker operational without requiring
- *   a UI-driven migration run first.
  */
 function extractAthletesFromPoolDoc(pool: unknown): LiveTrackingAthlete[] {
   if (!pool || typeof pool !== "object" || Array.isArray(pool)) return [];
 
-  // Fast path: valid doc passes the full guard.
   if (isLiveTrackingParticipantPoolDocument(pool)) {
     return (pool as { athletes: LiveTrackingAthlete[] }).athletes ?? [];
   }
 
-  // Legacy path: attempt per-athlete coercion.
   const raw = pool as Record<string, unknown>;
   if (!Array.isArray(raw.athletes)) return [];
 
@@ -121,11 +111,6 @@ function deriveTimingOptions(setup: { minLapTimeSecs?: number; track: { timingPo
   return { minLapTimeMs, minSectorTimeMs };
 }
 
-type AmmConnection = {
-  timingPoint: LiveTrackingTimingPoint;
-  socket: WebSocket;
-};
-
 export class SessionLoop {
   readonly sessionDocId: string;
   readonly runtimeDocId: string;
@@ -136,14 +121,16 @@ export class SessionLoop {
 
   private setupClient: RealtimeDocClient<LiveTrackingSetupDocument> | null = null;
   private activeSetupDocId: string | null = null;
-  // Keyed by pool doc ID; tracks all currently active pool subscriptions.
   private readonly participantPoolClients = new Map<string, RealtimeDocClient<LiveTrackingParticipantPoolDocument>>();
   private readonly unsubscribeParticipantPools = new Map<string, () => void>();
 
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private commandTimer: NodeJS.Timeout | null = null;
-  private ammSyncTimer: NodeJS.Timeout | null = null;
+  private adapterSyncTimer: NodeJS.Timeout | null = null;
   private resultsTimer: NodeJS.Timeout | null = null;
+
+  private readonly pendingRuntimeMutations: Array<(doc: LiveTrackingRuntimeDocument) => LiveTrackingRuntimeDocument> = [];
+  private runtimeFlushPending = false;
 
   private unsubscribeSession: (() => void) | null = null;
   private unsubscribeRuntime: (() => void) | null = null;
@@ -152,14 +139,11 @@ export class SessionLoop {
   private readonly workerHost = os.hostname();
   private readonly workerProcessId = process.pid;
 
-    private lastSessionState: LiveTrackingSessionDocument["state"] | null = null;
+  private lastSessionState: LiveTrackingSessionDocument["state"] | null = null;
   private lastWorkerStatus: LiveTrackingRuntimeDocument["workerStatus"] | null = null;
   private lastHandledWorkerStatusCheckRequestId: string | null = null;
 
-
-  private readonly ammConnections = new Map<string, AmmConnection>();
-  private readonly pendingAmmConnectTimers = new Map<string, NodeJS.Timeout>();
-  private readonly ammcProcessManager: AmmcProcessManager;
+  private adapter: DecoderSourceAdapter | null = null;
 
   constructor(
     private readonly baseHttpUrl: string,
@@ -172,26 +156,6 @@ export class SessionLoop {
     this.sessionClient = new RealtimeDocClient<LiveTrackingSessionDocument>(this.sessionDocId, baseHttpUrl);
     this.runtimeClient = new RealtimeDocClient<LiveTrackingRuntimeDocument>(this.runtimeDocId, baseHttpUrl);
     this.resultsClient = new RealtimeDocClient<LiveTrackingResultsDocument>(this.resultsDocId, baseHttpUrl);
-    this.ammcProcessManager = new AmmcProcessManager({
-      onStatus: (timingPoint, patch) => {
-        if (patch.processStatus === "error") {
-          console.error(
-            `[livetracking-worker] AMMC status error for timingPoint=${timingPoint.id}: ${patch.lastError ?? "unknown error"}`,
-          );
-        }
-
-        this.upsertRuntimeDecoder(timingPoint, patch);
-        this.scheduleSyncAmmConnections();
-
-        if (patch.processStatus === "error" || patch.processStatus === "stopped") {
-          setTimeout(() => this.scheduleSyncAmmConnections(), 2500);
-        }
-      },
-      onWarning: (warning) => {
-        console.warn(`[livetracking-worker] ${warning}`);
-        this.appendRuntimeWarning(warning);
-      },
-    });
   }
 
   start() {
@@ -203,15 +167,14 @@ export class SessionLoop {
       this.logSessionStateTransition();
       this.syncHeartbeatLifecycle();
       this.scheduleTickCommands();
-      this.scheduleSyncAmmConnections();
+      this.scheduleAdapterSync();
       this.scheduleUpdateResultsProjection();
     });
 
-        this.unsubscribeRuntime = this.runtimeClient.onData(() => {
+    this.unsubscribeRuntime = this.runtimeClient.onData(() => {
       this.handleWorkerStatusCheck();
       this.scheduleUpdateResultsProjection();
     });
-
 
     console.log(
       `[livetracking-worker] session loop started (pid=${this.workerProcessId}, host=${this.workerHost}, sessionDocId=${this.sessionDocId})`,
@@ -219,7 +182,7 @@ export class SessionLoop {
 
     this.syncHeartbeatLifecycle();
     this.scheduleTickCommands();
-    this.scheduleSyncAmmConnections();
+    this.scheduleAdapterSync();
     this.scheduleUpdateResultsProjection();
   }
 
@@ -235,14 +198,10 @@ export class SessionLoop {
     for (const unsub of this.unsubscribeParticipantPools.values()) unsub();
     this.unsubscribeParticipantPools.clear();
 
-    for (const [timingPointId] of this.pendingAmmConnectTimers) {
-      this.clearPendingAmmConnect(timingPointId);
+    if (this.adapter) {
+      this.adapter.stop().catch(() => {});
+      this.adapter = null;
     }
-
-    for (const [timingPointId] of this.ammConnections) {
-      this.disconnectAmm(timingPointId);
-    }
-    this.ammcProcessManager.stopAll();
 
     this.logWorkerStatusTransition("offline");
 
@@ -256,7 +215,6 @@ export class SessionLoop {
       workerStatusCheck: null,
       updatedAt: t,
     }));
-
 
     this.setupClient?.close();
     this.setupClient = null;
@@ -277,16 +235,13 @@ export class SessionLoop {
       clearTimeout(this.commandTimer);
       this.commandTimer = null;
     }
-    if (this.ammSyncTimer) {
-      clearTimeout(this.ammSyncTimer);
-      this.ammSyncTimer = null;
+    if (this.adapterSyncTimer) {
+      clearTimeout(this.adapterSyncTimer);
+      this.adapterSyncTimer = null;
     }
     if (this.resultsTimer) {
       clearTimeout(this.resultsTimer);
       this.resultsTimer = null;
-    }
-    for (const [timingPointId] of this.pendingAmmConnectTimers) {
-      this.clearPendingAmmConnect(timingPointId);
     }
   }
 
@@ -298,15 +253,15 @@ export class SessionLoop {
     }, 0);
   }
 
-  private scheduleSyncAmmConnections() {
-    if (this.ammSyncTimer) return;
-    this.ammSyncTimer = setTimeout(() => {
-      this.ammSyncTimer = null;
-      this.syncAmmConnections();
+  private scheduleAdapterSync() {
+    if (this.adapterSyncTimer) return;
+    this.adapterSyncTimer = setTimeout(() => {
+      this.adapterSyncTimer = null;
+      this.syncAdapterLifecycle();
     }, 0);
   }
 
-    private scheduleUpdateResultsProjection() {
+  private scheduleUpdateResultsProjection() {
     if (this.resultsTimer) clearTimeout(this.resultsTimer);
     this.resultsTimer = setTimeout(() => {
       this.resultsTimer = null;
@@ -315,11 +270,110 @@ export class SessionLoop {
   }
 
   /**
-   * Keeps runtime decoder list aligned to currently configured enabled timing points.
+   * Reconciles the decoder adapter lifecycle against current session/setup state.
    *
-   * Without this reconciliation, stale decoder entries from older setup revisions can
-   * remain visible in runtime debug output even after points were removed.
+   * Replaces the former `syncAmmConnections` method. The adapter is created when the
+   * session enters `running` state and stopped when it leaves. Setup changes while running
+   * are forwarded to the existing adapter via `syncPoints`.
    */
+  private syncAdapterLifecycle() {
+    const session = this.sessionClient.data;
+    const setup = this.ensureSetupClient();
+
+    if (setup) {
+      const enabledIds = new Set(
+        normalizeTimingPoints(setup.track.timingPoints)
+          .filter((p) => p.enabled)
+          .map((p) => p.id),
+      );
+      this.pruneRuntimeDecoders(enabledIds);
+    }
+
+    const shouldCollect =
+      !!session && isLiveTrackingSessionDocument(session) && session.state === "running";
+
+    if (!shouldCollect || !setup) {
+      if (this.adapter) {
+        this.adapter.stop().catch(() => {});
+        this.adapter = null;
+      }
+      return;
+    }
+
+    const enabledPoints = normalizeTimingPoints(setup.track.timingPoints).filter((p) => p.enabled);
+
+    if (this.adapter) {
+      this.adapter.syncPoints(enabledPoints);
+    } else {
+      const adapter = createDecoderSourceAdapter(setup.decoderBackend ?? "ammc", enabledPoints, {
+        onPassing: (passing: NormalizedPassing) => this.handleNormalizedPassing(passing),
+        onWarning: (msg: string) => this.appendRuntimeWarning(msg),
+        onHealth: (update: DecoderHealthPatch) => this.applyDecoderHealth(update),
+      });
+      this.adapter = adapter;
+      adapter.start().catch((err: unknown) => {
+        this.appendRuntimeWarning(
+          `[adapter] start failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Adapter callbacks
+
+  private handleNormalizedPassing(passing: NormalizedPassing) {
+    const runtimePassing = normalizedToRuntimePassing(passing);
+    const t = nowIso();
+    this.commitRuntimeUpdate((doc) => {
+      let recentRawPayloads = doc.recentRawPayloads ?? [];
+      if (typeof passing.raw === "string") {
+        const entry: LiveTrackingRuntimeRawPayload = {
+          receivedAt: t,
+          timingPointId: passing.timingPointId,
+          decoderId: passing.decoderId,
+          payload: passing.raw,
+        };
+        recentRawPayloads = appendBounded(recentRawPayloads, entry, 50);
+      }
+      return {
+        ...doc,
+        recentPassings: appendBounded(doc.recentPassings ?? [], runtimePassing, 200),
+        recentRawPayloads,
+        updatedAt: t,
+      };
+    });
+  }
+
+  private applyDecoderHealth(update: DecoderHealthPatch) {
+    const t = nowIso();
+    this.commitRuntimeUpdate((doc) => {
+      const decoders = [...(doc.decoders ?? [])];
+      const index = decoders.findIndex((d) => d.timingPointId === update.timingPointId);
+
+      const base: LiveTrackingRuntimeDocument["decoders"][number] =
+        index >= 0
+          ? decoders[index]!
+          : {
+              decoderId: update.decoderLabel,
+              timingPointId: update.timingPointId,
+              processStatus: "stopped",
+              websocketStatus: "disconnected",
+              lastConnectedAt: null,
+              lastMessageAt: null,
+              lastError: null,
+            };
+
+      const next: LiveTrackingRuntimeDocument["decoders"][number] = { ...base, ...update.patch };
+      if (index >= 0) decoders[index] = next;
+      else decoders.push(next);
+
+      return { ...doc, decoders, updatedAt: t };
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+
   private pruneRuntimeDecoders(enabledTimingPointIds: Set<string>) {
     this.commitRuntimeUpdate((doc) => ({
       ...doc,
@@ -328,13 +382,6 @@ export class SessionLoop {
     }));
   }
 
-
-  /**
-   * Runtime updates are very frequent (heartbeats + decoder events).
-   *
-   * To reduce patch noise, we ignore pure `updatedAt` differences and only publish
-   * when meaningful runtime fields changed.
-   */
   private hasRuntimeContentChanged(previous: LiveTrackingRuntimeDocument, next: LiveTrackingRuntimeDocument): boolean {
     const previousComparable = JSON.stringify({ ...previous, updatedAt: null });
     const nextComparable = JSON.stringify({ ...next, updatedAt: null });
@@ -342,33 +389,45 @@ export class SessionLoop {
   }
 
   /**
-   * Atomic runtime write helper.
-   *
-   * Why this exists:
-   * - several runtime fields must often change together (decoder status + raw payload + passings)
-   * - one atomic mutation avoids revision races caused by multiple back-to-back updates
+   * Queues a runtime mutation and flushes all pending mutations in a single patch
+   * at the end of the current microtask queue. This prevents rev_mismatch errors
+   * when multiple mutations (e.g. health update + passing) fire synchronously
+   * in the same event handler — each would otherwise send a patch with the same
+   * baseRev, causing the server to reject all but the first.
    */
   private commitRuntimeUpdate(buildNext: (doc: LiveTrackingRuntimeDocument) => LiveTrackingRuntimeDocument) {
+    this.pendingRuntimeMutations.push(buildNext);
+    if (!this.runtimeFlushPending) {
+      this.runtimeFlushPending = true;
+      queueMicrotask(() => this.flushRuntimeUpdates());
+    }
+  }
+
+  private flushRuntimeUpdates() {
+    this.runtimeFlushPending = false;
+    if (this.pendingRuntimeMutations.length === 0) return;
+    const mutations = this.pendingRuntimeMutations.splice(0);
+
     this.runtimeClient.update((doc) => {
-      const next = buildNext(doc);
-      return this.hasRuntimeContentChanged(doc, next) ? next : doc;
+      let current = doc;
+      for (const mutation of mutations) {
+        current = mutation(current);
+      }
+      return this.hasRuntimeContentChanged(doc, current) ? current : doc;
     });
   }
 
-      private syncHeartbeatLifecycle(sessionOverride?: LiveTrackingSessionDocument | null) {
+  private syncHeartbeatLifecycle(sessionOverride?: LiveTrackingSessionDocument | null) {
     if (!this.heartbeatTimer) {
       const heartbeatMs = Math.max(5_000, this.options?.heartbeatMs ?? 5_000);
       this.heartbeatTimer = setInterval(() => this.writeHeartbeat(), heartbeatMs);
     }
-
     this.writeHeartbeat(sessionOverride);
   }
 
   private writeHeartbeat(sessionOverride?: LiveTrackingSessionDocument | null) {
     const workerStatus = this.mapWorkerStatus(sessionOverride);
-
     this.logWorkerStatusTransition(workerStatus);
-
     this.commitRuntimeUpdate((doc) => {
       const t = nowIso();
       return {
@@ -382,11 +441,9 @@ export class SessionLoop {
     });
   }
 
-
   private logSessionStateTransition() {
     const session = this.sessionClient.data;
     if (!session || !isLiveTrackingSessionDocument(session)) return;
-
     if (this.lastSessionState === session.state) return;
     const from = this.lastSessionState ?? "unknown";
     this.lastSessionState = session.state;
@@ -400,39 +457,21 @@ export class SessionLoop {
     console.log(`[livetracking-worker] worker status changed: ${from} -> ${nextStatus}`);
   }
 
-        /**
-   * Maps current activity into worker process status signal.
-   *
-   * Important: this is intentionally not a 1:1 mirror of session.state.
-   * Session tracks measurement lifecycle, while workerStatus tracks process lifecycle.
-   */
   private mapWorkerStatus(sessionOverride?: LiveTrackingSessionDocument | null): LiveTrackingRuntimeDocument["workerStatus"] {
     const session = sessionOverride ?? this.sessionClient.data;
-
     if (!session || !isLiveTrackingSessionDocument(session)) return "ready";
-
     if (session.state === "running") return "running";
     if (session.state === "stopping") return "stopping";
     if (session.state === "error") return "error";
     return "ready";
   }
 
-  /**
-   * Consumes one pending worker-status probe request from runtime document.
-   *
-   * Protocol:
-   * - requester writes `{ action: "checkStatus", requestId, requestedAt }`
-   * - worker acknowledges exactly once per requestId
-   * - worker heartbeat + ack timestamp are refreshed and the request is cleared
-   */
   private handleWorkerStatusCheck() {
     const runtime = this.runtimeClient.data;
     if (!runtime) return;
-
     const check = runtime.workerStatusCheck;
     if (!isLiveTrackingWorkerStatusCheck(check)) return;
     if (this.lastHandledWorkerStatusCheckRequestId === check.requestId) return;
-
     this.lastHandledWorkerStatusCheckRequestId = check.requestId;
     this.acknowledgeWorkerStatusCheck(check.requestId);
   }
@@ -440,12 +479,11 @@ export class SessionLoop {
   private acknowledgeWorkerStatusCheck(requestId: string) {
     const workerStatus = this.mapWorkerStatus();
     this.logWorkerStatusTransition(workerStatus);
-
     this.commitRuntimeUpdate((doc) => {
       const t = nowIso();
       const matchesRequest =
-        isLiveTrackingWorkerStatusCheck(doc.workerStatusCheck) && doc.workerStatusCheck.requestId === requestId;
-
+        isLiveTrackingWorkerStatusCheck(doc.workerStatusCheck) &&
+        doc.workerStatusCheck.requestId === requestId;
       return {
         ...doc,
         workerStatus,
@@ -459,7 +497,6 @@ export class SessionLoop {
     });
   }
 
-
   private ensureSetupClient(): LiveTrackingSetupDocument | null {
     const session = this.sessionClient.data;
     if (!session || !isLiveTrackingSessionDocument(session)) return null;
@@ -471,7 +508,7 @@ export class SessionLoop {
       this.setupClient = new RealtimeDocClient<LiveTrackingSetupDocument>(setupDocId, this.baseHttpUrl);
       this.setupClient.connect();
       this.unsubscribeSetup = this.setupClient.onData(() => {
-        this.scheduleSyncAmmConnections();
+        this.scheduleAdapterSync();
         this.scheduleUpdateResultsProjection();
       });
       this.activeSetupDocId = setupDocId;
@@ -482,17 +519,9 @@ export class SessionLoop {
     return setup;
   }
 
-  /**
-   * Reconciles live subscriptions to all active participant pool docs.
-   *
-   * Pool IDs are read from `setup.activeParticipantPoolIds` so that the setup document
-   * is the single source of truth — the session's participantPoolDocId is not used here.
-   * Athletes from all active pools are merged and returned for name resolution.
-   */
   private ensureParticipantPoolAthletes(): LiveTrackingAthlete[] | null {
     const setup = this.setupClient?.data;
     if (!setup || !isLiveTrackingSetupDocument(setup)) {
-      // No setup available — close all existing pool subscriptions.
       for (const unsub of this.unsubscribeParticipantPools.values()) unsub();
       this.unsubscribeParticipantPools.clear();
       for (const client of this.participantPoolClients.values()) client.close();
@@ -504,7 +533,6 @@ export class SessionLoop {
       (setup.activeParticipantPoolIds ?? []).map((id) => makeLiveTrackingParticipantPoolDocId(id)),
     );
 
-    // Remove subscriptions for pools that are no longer active.
     for (const [docId, client] of this.participantPoolClients) {
       if (!targetDocIds.has(docId)) {
         this.unsubscribeParticipantPools.get(docId)?.();
@@ -514,7 +542,6 @@ export class SessionLoop {
       }
     }
 
-    // Add subscriptions for newly active pools.
     for (const docId of targetDocIds) {
       if (!this.participantPoolClients.has(docId)) {
         const client = new RealtimeDocClient<LiveTrackingParticipantPoolDocument>(docId, this.baseHttpUrl);
@@ -525,10 +552,6 @@ export class SessionLoop {
       }
     }
 
-    // If any target pool subscription hasn't received its first snapshot yet, return null so
-    // the caller can skip the projection. The onData callback will schedule a new one once
-    // all snapshots have arrived. This prevents a "flash" projection with empty athletes that
-    // would incorrectly mark known transponders as unknown.
     for (const docId of targetDocIds) {
       const client = this.participantPoolClients.get(docId);
       if (client && client.data === null) {
@@ -537,7 +560,6 @@ export class SessionLoop {
       }
     }
 
-    // Merge athletes from all active pools; later pools' entries append to earlier ones.
     const athletes: LiveTrackingAthlete[] = [];
     for (const client of this.participantPoolClients.values()) {
       athletes.push(...extractAthletesFromPoolDoc(client.data));
@@ -557,7 +579,6 @@ export class SessionLoop {
     if (!session || !isLiveTrackingSessionDocument(session)) return;
     if (!setup || !runtime) return;
 
-    // Reconcile pool subscriptions. Returns null when a snapshot is still in-flight — defer.
     const athletes = this.ensureParticipantPoolAthletes();
     if (athletes === null) return;
 
@@ -596,303 +617,6 @@ export class SessionLoop {
     this.resultsClient.update(() => projected);
   }
 
-  /**
-   * Reconciles AMMC processes and websocket connections against current setup/session state.
-   *
-   * Reconciliation model:
-   * - source of truth = enabled timing points in the active setup
-   * - if session is not running: tear everything down
-   * - if running: ensure process exists first, then websocket connect (with startup delay)
-   */
-    private syncAmmConnections() {
-    const session = this.sessionClient.data;
-    const setup = this.ensureSetupClient();
-
-    if (setup) {
-      const configuredEnabledIds = new Set(
-        normalizeTimingPoints(setup.track.timingPoints)
-          .filter((p) => p.enabled)
-          .map((p) => p.id),
-      );
-      this.pruneRuntimeDecoders(configuredEnabledIds);
-    }
-
-    const shouldCollect = !!session && isLiveTrackingSessionDocument(session) && session.state === "running";
-    if (!shouldCollect || !setup) {
-
-      for (const [timingPointId] of this.pendingAmmConnectTimers) {
-        this.clearPendingAmmConnect(timingPointId);
-      }
-      for (const [timingPointId] of this.ammConnections) {
-        this.disconnectAmm(timingPointId);
-      }
-      this.ammcProcessManager.stopAll();
-      return;
-    }
-
-    const enabledPoints = normalizeTimingPoints(setup.track.timingPoints).filter((p) => p.enabled);
-    const enabledIds = new Set(enabledPoints.map((p) => p.id));
-
-    this.ammcProcessManager.sync(enabledPoints);
-
-    for (const [timingPointId] of this.pendingAmmConnectTimers) {
-      const processRunning = this.ammcProcessManager.isRunning(timingPointId);
-      if (!enabledIds.has(timingPointId) || !processRunning) this.clearPendingAmmConnect(timingPointId);
-    }
-
-    for (const [timingPointId] of this.ammConnections) {
-      const processRunning = this.ammcProcessManager.isRunning(timingPointId);
-      if (!enabledIds.has(timingPointId) || !processRunning) this.disconnectAmm(timingPointId);
-    }
-
-    for (const point of enabledPoints) {
-      if (!this.ammcProcessManager.isRunning(point.id)) continue;
-      if (this.ammConnections.has(point.id)) continue;
-      this.scheduleConnectAmm(point);
-    }
-  }
-
-  private clearPendingAmmConnect(timingPointId: string) {
-    const timer = this.pendingAmmConnectTimers.get(timingPointId);
-    if (!timer) return;
-    clearTimeout(timer);
-    this.pendingAmmConnectTimers.delete(timingPointId);
-  }
-
-  private scheduleConnectAmm(point: LiveTrackingTimingPoint) {
-    if (this.pendingAmmConnectTimers.has(point.id)) return;
-
-    const delayMs = 1_000;
-    console.log(
-      `[livetracking-worker] waiting ${delayMs}ms before connecting to AMMC websocket for timingPoint=${point.id}`,
-    );
-
-    const timer = setTimeout(() => {
-      this.pendingAmmConnectTimers.delete(point.id);
-
-      const session = this.sessionClient.data;
-      const isRunning = !!session && isLiveTrackingSessionDocument(session) && session.state === "running";
-      if (!isRunning) return;
-      if (!this.ammcProcessManager.isRunning(point.id)) return;
-      if (this.ammConnections.has(point.id)) return;
-
-      this.connectAmm(point);
-    }, delayMs);
-
-    this.pendingAmmConnectTimers.set(point.id, timer);
-  }
-
-  private connectAmm(point: LiveTrackingTimingPoint) {
-    // AMMC opens the websocket endpoint locally on the worker host.
-    // The decoder IP is consumed by AMMC itself (process args), not by this websocket client.
-    const url = `ws://127.0.0.1:${point.websocketPortAMM}`;
-    console.log(`[livetracking-worker] connecting to AMMC websocket for timingPoint=${point.id}: ${url}`);
-    const socket = new WebSocket(url);
-    const connection: AmmConnection = { timingPoint: point, socket };
-    this.ammConnections.set(point.id, connection);
-
-    this.upsertRuntimeDecoder(point, {
-      websocketStatus: "connecting",
-      lastError: null,
-    });
-
-    socket.on("open", () => {
-      this.upsertRuntimeDecoder(point, {
-        websocketStatus: "connected",
-        lastConnectedAt: nowIso(),
-        lastError: null,
-      });
-    });
-
-    socket.on("message", (raw) => {
-      this.handleAmmMessage(point, raw);
-    });
-
-    socket.on("error", (err) => {
-      const message = err instanceof Error ? err.message : "AMM websocket error";
-      console.error(`[livetracking-worker] AMMC websocket error for timingPoint=${point.id}: ${message}`);
-      this.upsertRuntimeDecoder(point, {
-        processStatus: "error",
-        websocketStatus: "error",
-        lastError: message,
-      });
-    });
-
-    socket.on("close", (code, reason) => {
-      const reasonText = reason.toString("utf8") || "n/a";
-      console.warn(
-        `[livetracking-worker] AMMC websocket closed for timingPoint=${point.id} (code=${String(code)}, reason=${reasonText})`,
-      );
-      this.upsertRuntimeDecoder(point, {
-        websocketStatus: "disconnected",
-      });
-      this.ammConnections.delete(point.id);
-    });
-  }
-
-  private disconnectAmm(timingPointId: string) {
-    this.clearPendingAmmConnect(timingPointId);
-
-    const connection = this.ammConnections.get(timingPointId);
-    if (!connection) return;
-
-    connection.socket.close();
-    this.ammConnections.delete(timingPointId);
-
-    this.upsertRuntimeDecoder(connection.timingPoint, {
-      websocketStatus: "disconnected",
-    });
-  }
-
-  /**
-   * Handles one AMMC websocket frame.
-   *
-   * Pipeline:
-   * 1) parse JSON payload (store raw even on parse failures)
-   * 2) explode array/object payloads into event candidates
-   * 3) normalize candidates into canonical runtime passing events
-   * 4) persist decoder heartbeat + raw payload + passings + warnings in one atomic runtime update
-   */
-  private handleAmmMessage(point: LiveTrackingTimingPoint, raw: WebSocket.RawData) {
-    const receivedAt = nowIso();
-    const rawText = typeof raw === "string" ? raw : raw.toString("utf8");
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(rawText);
-    } catch {
-      this.commitRuntimeUpdate((doc) => {
-        const decoders = [...(doc.decoders ?? [])];
-        const index = decoders.findIndex((d) => d.timingPointId === point.id || d.decoderId === point.decoderId);
-
-        const base: LiveTrackingRuntimeDocument["decoders"][number] =
-          index >= 0
-            ? decoders[index]!
-            : {
-                decoderId: point.decoderId,
-                timingPointId: point.id,
-                processStatus: "stopped",
-                websocketStatus: "disconnected",
-                lastConnectedAt: null,
-                lastMessageAt: null,
-                lastError: null,
-              };
-
-        const nextDecoder: LiveTrackingRuntimeDocument["decoders"][number] = {
-          ...base,
-          websocketStatus: "error",
-          lastError: "Invalid AMM JSON payload",
-        };
-
-        if (index >= 0) decoders[index] = nextDecoder;
-        else decoders.push(nextDecoder);
-
-        return {
-          ...doc,
-          decoders,
-          recentRawPayloads: appendBounded(
-            doc.recentRawPayloads ?? [],
-            {
-              receivedAt,
-              timingPointId: point.id,
-              decoderId: point.decoderId,
-              payload: rawText,
-            },
-            50,
-          ),
-          updatedAt: receivedAt,
-        };
-      });
-      return;
-    }
-
-    const passings: LiveTrackingRuntimeDocument["recentPassings"] = [];
-    const warnings: string[] = [];
-
-    for (const item of explodeAmmPayloads(parsed)) {
-      const normalized = normalizeAmmPayloadToPassing({ payload: item, timingPoint: point });
-      if (!normalized) continue;
-
-      passings.push(normalized.passing);
-      for (const warning of normalized.warnings) {
-        warnings.push(`[${point.id}] ${warning}`);
-      }
-    }
-
-    this.commitRuntimeUpdate((doc) => {
-      const decoders = [...(doc.decoders ?? [])];
-      const index = decoders.findIndex((d) => d.timingPointId === point.id || d.decoderId === point.decoderId);
-
-      const base: LiveTrackingRuntimeDocument["decoders"][number] =
-        index >= 0
-          ? decoders[index]!
-          : {
-              decoderId: point.decoderId,
-              timingPointId: point.id,
-              processStatus: "stopped",
-              websocketStatus: "disconnected",
-              lastConnectedAt: null,
-              lastMessageAt: null,
-              lastError: null,
-            };
-
-      const nextDecoder: LiveTrackingRuntimeDocument["decoders"][number] = {
-        ...base,
-        websocketStatus: "connected",
-        lastMessageAt: receivedAt,
-        lastError: null,
-      };
-
-      if (index >= 0) decoders[index] = nextDecoder;
-      else decoders.push(nextDecoder);
-
-      let nextPassings = doc.recentPassings ?? [];
-      for (const passing of passings) {
-        nextPassings = appendBounded(nextPassings, passing, 200);
-      }
-
-      let nextWarnings = doc.warnings ?? [];
-      for (const warning of warnings) {
-        nextWarnings = appendBounded(nextWarnings, warning, 100);
-      }
-
-      return {
-        ...doc,
-        decoders,
-        recentRawPayloads: appendBounded(
-          doc.recentRawPayloads ?? [],
-          {
-            receivedAt,
-            timingPointId: point.id,
-            decoderId: point.decoderId,
-            payload: rawText,
-          },
-          50,
-        ),
-        recentPassings: nextPassings,
-        warnings: nextWarnings,
-        updatedAt: receivedAt,
-      };
-    });
-  }
-
-  private appendRuntimeRawPayload(point: LiveTrackingTimingPoint, receivedAt: string, payload: string) {
-    this.runtimeClient.update((doc) => ({
-      ...doc,
-      recentRawPayloads: appendBounded(
-        doc.recentRawPayloads ?? [],
-        {
-          receivedAt,
-          timingPointId: point.id,
-          decoderId: point.decoderId,
-          payload,
-        },
-        50,
-      ),
-      updatedAt: receivedAt,
-    }));
-  }
-
   private appendRuntimeWarning(warning: string) {
     const t = nowIso();
     this.runtimeClient.update((doc) => ({
@@ -902,45 +626,8 @@ export class SessionLoop {
     }));
   }
 
-  private upsertRuntimeDecoder(
-    point: LiveTrackingTimingPoint,
-    patch: Partial<LiveTrackingRuntimeDocument["decoders"][number]>,
-  ) {
-    const t = nowIso();
-    this.commitRuntimeUpdate((doc) => {
-      const decoders = [...(doc.decoders ?? [])];
-      const index = decoders.findIndex((d) => d.timingPointId === point.id || d.decoderId === point.decoderId);
-
-      const base: LiveTrackingRuntimeDocument["decoders"][number] =
-        index >= 0
-          ? decoders[index]!
-          : {
-              decoderId: point.decoderId,
-              timingPointId: point.id,
-              processStatus: "stopped",
-              websocketStatus: "disconnected",
-              lastConnectedAt: null,
-              lastMessageAt: null,
-              lastError: null,
-            };
-
-      const next: LiveTrackingRuntimeDocument["decoders"][number] = { ...base, ...patch };
-      if (index >= 0) decoders[index] = next;
-      else decoders.push(next);
-
-      return {
-        ...doc,
-        decoders,
-        updatedAt: t,
-      };
-    });
-  }
-
   /**
    * Executes one command-queue tick.
-   *
-   * Domain transition helpers from `@raceoffice/domain` enforce legal state flow.
-   * This method only maps command intents to concrete transition sequences.
    */
   private tickCommands() {
     const session = this.sessionClient.data;
@@ -975,7 +662,6 @@ export class SessionLoop {
           });
           break;
         }
-
         if (nextSession.state === "preparing") {
           nextSession = completeLiveTrackingCommand(nextSession, {
             commandId: active.id,
@@ -985,7 +671,6 @@ export class SessionLoop {
           });
           break;
         }
-
         nextSession = failLiveTrackingCommand(nextSession, {
           commandId: active.id,
           processedAt: t,
@@ -1006,7 +691,6 @@ export class SessionLoop {
           });
           break;
         }
-
         nextSession = failLiveTrackingCommand(nextSession, {
           commandId: active.id,
           processedAt: t,
@@ -1028,7 +712,6 @@ export class SessionLoop {
           });
           break;
         }
-
         if (nextSession.state === "stopping") {
           nextSession = completeLiveTrackingCommand(nextSession, {
             commandId: active.id,
@@ -1038,7 +721,6 @@ export class SessionLoop {
           });
           break;
         }
-
         if (nextSession.state === "ready") {
           nextSession = completeLiveTrackingCommand(nextSession, {
             commandId: active.id,
@@ -1047,7 +729,6 @@ export class SessionLoop {
           });
           break;
         }
-
         nextSession = failLiveTrackingCommand(nextSession, {
           commandId: active.id,
           processedAt: t,
@@ -1068,7 +749,6 @@ export class SessionLoop {
           });
           break;
         }
-
         if (nextSession.state === "idle") {
           nextSession = completeLiveTrackingCommand(nextSession, {
             commandId: active.id,
@@ -1077,7 +757,6 @@ export class SessionLoop {
           });
           break;
         }
-
         nextSession = failLiveTrackingCommand(nextSession, {
           commandId: active.id,
           processedAt: t,
@@ -1099,7 +778,6 @@ export class SessionLoop {
           });
           break;
         }
-
         if (nextSession.state === "ready" || nextSession.state === "error") {
           nextSession = completeLiveTrackingCommand(nextSession, {
             commandId: active.id,
@@ -1109,7 +787,6 @@ export class SessionLoop {
           });
           break;
         }
-
         if (nextSession.state === "idle") {
           nextSession = completeLiveTrackingCommand(nextSession, {
             commandId: active.id,
@@ -1118,7 +795,6 @@ export class SessionLoop {
           });
           break;
         }
-
         nextSession = failLiveTrackingCommand(nextSession, {
           commandId: active.id,
           processedAt: t,
@@ -1133,15 +809,11 @@ export class SessionLoop {
     this.commitIfChanged(session, nextSession);
   }
 
-    private commitIfChanged(previous: LiveTrackingSessionDocument, next: LiveTrackingSessionDocument) {
+  private commitIfChanged(previous: LiveTrackingSessionDocument, next: LiveTrackingSessionDocument) {
     if (previous === next) return;
     this.sessionClient.update(() => next);
-
-    // Use the target session snapshot immediately to avoid one-tick lag in workerStatus
-    // (e.g. ready -> idle after shutdown).
     this.syncHeartbeatLifecycle(next);
-    this.scheduleSyncAmmConnections();
+    this.scheduleAdapterSync();
     this.scheduleUpdateResultsProjection();
   }
-
 }

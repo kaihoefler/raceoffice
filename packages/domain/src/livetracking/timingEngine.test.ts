@@ -13,7 +13,7 @@ const track: LiveTrackingTrack = {
     {
       id: "sf",
       name: "Start/Finish",
-      decoderId: "dec-sf",
+      decoderLabel: "dec-sf",
       decoderIp: "127.0.0.1",
       websocketPortAMM: 19010,
       order: 1,
@@ -25,8 +25,8 @@ const track: LiveTrackingTrack = {
     {
       id: "s1",
       name: "Sector 1",
-      decoderId: "dec-s1",
-      decoderIp: "127.0.0.1",
+      decoderLabel: "dec-s1",
+      decoderIp: "127.0.0.2",
       websocketPortAMM: 19011,
       order: 2,
       distanceFromPreviousM: 150,
@@ -37,8 +37,8 @@ const track: LiveTrackingTrack = {
     {
       id: "s2",
       name: "Sector 2",
-      decoderId: "dec-s2",
-      decoderIp: "127.0.0.1",
+      decoderLabel: "dec-s2",
+      decoderIp: "127.0.0.3",
       websocketPortAMM: 19012,
       order: 3,
       distanceFromPreviousM: 250,

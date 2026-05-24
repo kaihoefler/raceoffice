@@ -81,7 +81,16 @@ type SetupDraft = {
   trackName: string;
   lengthM: number;
   minLapTimeSecs: number;
+  decoderBackend: "ammc" | "p3parser";
   timingPoints: LiveTrackingTimingPoint[];
+};
+
+type DiscoveredDecoder = {
+  ip: string;
+  port: number;
+  decoderId: string;
+  decoderType: string;
+  firmwareVersion: string;
 };
 
 
@@ -128,6 +137,7 @@ function toSetupDraft(doc: LiveTrackingSetupDocument): SetupDraft {
     trackName: doc.track.name,
     lengthM: doc.track.lengthM,
     minLapTimeSecs: doc.minLapTimeSecs ?? 8,
+    decoderBackend: doc.decoderBackend ?? "ammc",
     timingPoints: normalizeTimingPoints(doc.track.timingPoints),
   };
 }
@@ -388,6 +398,9 @@ export default function LiveTrackingControlPage() {
   const [newSetupDialogOpen, setNewSetupDialogOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [decoderOffsetInputByPointId, setDecoderOffsetInputByPointId] = useState<Record<string, string>>({});
+  const [p3ScanResult, setP3ScanResult] = useState<{ decoders: DiscoveredDecoder[] } | null>(null);
+  const [p3ScanLoading, setP3ScanLoading] = useState(false);
+  const [p3ScanError, setP3ScanError] = useState<string | null>(null);
 
 
 
@@ -458,6 +471,7 @@ export default function LiveTrackingControlPage() {
     const currentComparable = {
       setupId: setupDoc.setupId,
       name: setupDoc.name,
+      decoderBackend: setupDoc.decoderBackend ?? "ammc",
       minLapTimeSecs: setupDoc.minLapTimeSecs ?? 8,
       track: {
         id: setupDoc.track.id,
@@ -470,6 +484,7 @@ export default function LiveTrackingControlPage() {
     const draftComparable = {
       setupId: trackingDraft.setupId.trim(),
       name: setupDraft.name,
+      decoderBackend: setupDraft.decoderBackend,
       minLapTimeSecs: setupDraft.minLapTimeSecs,
       track: {
         id: stableTrackId,
@@ -487,7 +502,7 @@ export default function LiveTrackingControlPage() {
     const points = setupDraft?.timingPoints ?? (setupDoc ? normalizeTimingPoints(setupDoc.track.timingPoints) : []);
 
     for (const point of points) {
-      const label = String(point.name ?? "").trim() || String(point.decoderId ?? "").trim() || point.id;
+      const label = String(point.name ?? "").trim() || String(point.decoderLabel ?? "").trim() || point.id;
       map.set(point.id, label);
     }
 
@@ -700,6 +715,26 @@ export default function LiveTrackingControlPage() {
   }
 
 
+  async function scanP3Decoders() {
+    setP3ScanLoading(true);
+    setP3ScanError(null);
+    try {
+      const res = await fetch("/live-tracking/p3-discovery/scan?timeoutMs=3000");
+      const json = await res.json() as { ok: boolean; decoders?: DiscoveredDecoder[]; message?: string };
+      if (json.ok && json.decoders) {
+        setP3ScanResult({ decoders: json.decoders });
+      } else {
+        setP3ScanError(json.message ?? "Scan failed");
+        setP3ScanResult(null);
+      }
+    } catch (err) {
+      setP3ScanError(err instanceof Error ? err.message : "Network error");
+      setP3ScanResult(null);
+    } finally {
+      setP3ScanLoading(false);
+    }
+  }
+
   function addPoint() {
 
     setSetupDraft((prev) => {
@@ -712,7 +747,7 @@ export default function LiveTrackingControlPage() {
           {
             id: `tp-${crypto.randomUUID().slice(0, 8)}`,
             name: `TP ${order}`,
-            decoderId: "",
+            decoderLabel: "",
             decoderIp: "127.0.0.1",
             websocketPortAMM: 0,
             decoderType: "amb",
@@ -776,6 +811,7 @@ export default function LiveTrackingControlPage() {
       setupId: trackingDraft.setupId.trim(),
       eventId: prev.eventId ?? null,
       name: setupDraft.name,
+      decoderBackend: setupDraft.decoderBackend,
       minLapTimeSecs: setupDraft.minLapTimeSecs,
       track: {
         id: stableTrackId,
@@ -938,6 +974,80 @@ export default function LiveTrackingControlPage() {
                 />
               </Stack>
 
+              {/* Decoder-Backend */}
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems="flex-start">
+                <TextField
+                  size="small"
+                  select
+                  label="Decoder Backend"
+                  value={setupDraft.decoderBackend}
+                  onChange={(e) => {
+                    setSetupDraft((p) => p ? { ...p, decoderBackend: e.target.value as "ammc" | "p3parser" } : p);
+                    setP3ScanResult(null);
+                    setP3ScanError(null);
+                  }}
+                  sx={{ minWidth: 180 }}
+                >
+                  <MenuItem value="ammc">AMMC</MenuItem>
+                  <MenuItem value="p3parser">P3 Parser</MenuItem>
+                </TextField>
+              </Stack>
+
+              {/* P3 Discovery (nur bei p3parser) */}
+              {setupDraft.decoderBackend === "p3parser" && (
+                <Stack spacing={1}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Button variant="outlined" size="small" onClick={() => { void scanP3Decoders(); }} disabled={p3ScanLoading}>
+                      {p3ScanLoading ? "Scanning…" : "P3 Decoder scannen"}
+                    </Button>
+                    {p3ScanError && <Typography variant="body2" color="error">{p3ScanError}</Typography>}
+                  </Stack>
+                  {p3ScanResult && p3ScanResult.decoders.length === 0 && (
+                    <Typography variant="body2" color="text.secondary">Keine P3-Decoder im Netz gefunden.</Typography>
+                  )}
+                  {p3ScanResult && p3ScanResult.decoders.length > 0 && (
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>IP</TableCell>
+                          <TableCell>Hardware-ID</TableCell>
+                          <TableCell>Typ</TableCell>
+                          <TableCell>Firmware</TableCell>
+                          <TableCell>IP zuweisen</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {p3ScanResult.decoders.map((dec) => (
+                          <TableRow key={`${dec.ip}:${dec.decoderId}`}>
+                            <TableCell>{dec.ip}</TableCell>
+                            <TableCell>{dec.decoderId}</TableCell>
+                            <TableCell>{dec.decoderType}</TableCell>
+                            <TableCell>{dec.firmwareVersion}</TableCell>
+                            <TableCell>
+                              <TextField
+                                select
+                                size="small"
+                                value=""
+                                onChange={(e) => {
+                                  const idx = Number(e.target.value);
+                                  if (Number.isFinite(idx) && idx >= 0) patchPoint(idx, { decoderIp: dec.ip });
+                                }}
+                                sx={{ minWidth: 130 }}
+                              >
+                                <MenuItem value="">— Timing-Point —</MenuItem>
+                                {setupDraft.timingPoints.map((tp, i) => (
+                                  <MenuItem key={tp.id} value={i}>{tp.name || `TP ${i + 1}`}</MenuItem>
+                                ))}
+                              </TextField>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </Stack>
+              )}
+
               <Table size="small">
                 <TableHead>
                   <TableRow>
@@ -1003,23 +1113,25 @@ export default function LiveTrackingControlPage() {
 
                               <TextField
                                 size="small"
-                                label="Decoder"
-                                value={point.decoderId}
-                                onChange={(e) => patchPoint(index, { decoderId: e.target.value })}
+                                label="Decoder Name"
+                                value={point.decoderLabel}
+                                onChange={(e) => patchPoint(index, { decoderLabel: e.target.value })}
                               />
                               <TextField
                                 size="small"
-                                label="IP"
+                                label={setupDraft.decoderBackend === "p3parser" ? "IP (P3, Port 5403)" : "IP (AMMC)"}
                                 value={point.decoderIp}
                                 onChange={(e) => patchPoint(index, { decoderIp: e.target.value })}
                               />
-                              <TextField
-                                size="small"
-                                type="number"
-                                label="WS"
-                                value={point.websocketPortAMM}
-                                onChange={(e) => patchPoint(index, { websocketPortAMM: Number(e.target.value) })}
-                              />
+                              {setupDraft.decoderBackend !== "p3parser" && (
+                                <TextField
+                                  size="small"
+                                  type="number"
+                                  label="WS-Port"
+                                  value={point.websocketPortAMM}
+                                  onChange={(e) => patchPoint(index, { websocketPortAMM: Number(e.target.value) })}
+                                />
+                              )}
                               <TextField
                                 size="small"
                                 type="text"

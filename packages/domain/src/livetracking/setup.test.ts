@@ -9,7 +9,7 @@ describe("livetracking/setup", () => {
       {
         id: "tp-3",
         name: "Split 2",
-        decoderId: "d3",
+        decoderLabel: "d3",
         decoderIp: "10.0.0.3",
         websocketPortAMM: 5030,
         order: 3,
@@ -21,7 +21,7 @@ describe("livetracking/setup", () => {
       {
         id: "tp-1",
         name: "Start/Finish",
-        decoderId: "d1",
+        decoderLabel: "d1",
         decoderIp: "10.0.0.1",
         websocketPortAMM: 5010,
         decoderTimestampOffsetSecs: 1.234,
@@ -35,7 +35,7 @@ describe("livetracking/setup", () => {
       {
         id: "tp-2",
         name: "Split 1",
-        decoderId: "d2",
+        decoderLabel: "d2",
         decoderIp: "10.0.0.2",
         websocketPortAMM: 5020,
         order: 2,
@@ -58,7 +58,7 @@ describe("livetracking/setup", () => {
       {
         id: "tp-1",
         name: "Start/Finish",
-        decoderId: "d1",
+        decoderLabel: "d1",
         decoderIp: "10.0.0.1",
         websocketPortAMM: 5010,
         decoderTimestampOffsetSecs: 1.23456,
@@ -84,7 +84,7 @@ describe("livetracking/setup", () => {
         {
           id: "a",
           name: "A",
-          decoderId: "d1",
+          decoderLabel: "d1",
           decoderIp: "10.0.0.1",
           websocketPortAMM: 5001,
           order: 1,
@@ -96,7 +96,7 @@ describe("livetracking/setup", () => {
         {
           id: "b",
           name: "B",
-          decoderId: "d2",
+          decoderLabel: "d2",
           decoderIp: "10.0.0.2",
           websocketPortAMM: 5002,
           order: 2,
@@ -121,7 +121,7 @@ describe("livetracking/setup", () => {
         {
           id: "a",
           name: "A",
-          decoderId: "d1",
+          decoderLabel: "d1",
           decoderIp: "10.0.0.1",
           websocketPortAMM: 5001,
           order: 1,
@@ -133,7 +133,7 @@ describe("livetracking/setup", () => {
         {
           id: "b",
           name: "B",
-          decoderId: "d2",
+          decoderLabel: "d2",
           decoderIp: "10.0.0.2",
           websocketPortAMM: 5002,
           order: 3,
@@ -145,7 +145,7 @@ describe("livetracking/setup", () => {
         {
           id: "c",
           name: "C",
-          decoderId: "d3",
+          decoderLabel: "d3",
           decoderIp: "10.0.0.3",
           websocketPortAMM: 5003,
           order: 3,
@@ -171,7 +171,7 @@ describe("livetracking/setup", () => {
         {
           id: "a",
           name: "A",
-          decoderId: "d1",
+          decoderLabel: "d1",
           decoderIp: "10.0.0.1",
           websocketPortAMM: 5001,
           decoderTimestampOffsetSecs: 90_000,
@@ -198,7 +198,7 @@ describe("livetracking/setup", () => {
         {
           id: "a",
           name: "A",
-          decoderId: "d1",
+          decoderLabel: "d1",
           decoderIp: "10.0.0.1",
           websocketPortAMM: 5001,
           order: 1,
@@ -210,7 +210,7 @@ describe("livetracking/setup", () => {
         {
           id: "b",
           name: "B",
-          decoderId: "d2",
+          decoderLabel: "d2",
           decoderIp: "10.0.0.2",
           websocketPortAMM: 5002,
           order: 2,
