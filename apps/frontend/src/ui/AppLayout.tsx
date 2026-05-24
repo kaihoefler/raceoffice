@@ -68,7 +68,15 @@ export default function AppLayout() {
             About
           </Button>
           <Tooltip title="Open Live Tracking" arrow>
-            <IconButton color="inherit" component={Link} to="/live-tracking/setup" aria-label="Open Live Tracking" sx={{ ml: 0.5 }}>
+            <IconButton
+              color="inherit"
+              component="a"
+              href={import.meta.env.VITE_LIVETRACKING_URL ?? "/livetracking/"}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open Live Tracking"
+              sx={{ ml: 0.5 }}
+            >
               <TimerIcon />
             </IconButton>
           </Tooltip>

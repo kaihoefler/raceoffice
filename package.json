@@ -22,7 +22,7 @@
     "build:server": "npm --workspace @raceoffice/server run build",
     "dev:server": "npm --workspace @raceoffice/server run dev",
     "start:server": "npm --workspace @raceoffice/server run start",
-        "build:livetracking-worker": "npm --workspace @raceoffice/livetracking-worker run build",
+    "build:livetracking-worker": "npm --workspace @raceoffice/livetracking-worker run build",
     "dev:livetracking-worker": "npm --workspace @raceoffice/livetracking-worker run dev",
     "start:livetracking-worker": "npm --workspace @raceoffice/livetracking-worker run start",
     "build:livetracking-frontend": "npm --workspace @raceoffice/livetracking-frontend run build",
@@ -32,8 +32,10 @@
     "dev:p3test-frontend": "npm --workspace @raceoffice/p3test-frontend run dev",
     "preview:p3test-frontend": "npm --workspace @raceoffice/p3test-frontend run preview",
     "build:all": "npm run build && npm run build:server && npm run build:livetracking-worker && npm run build:livetracking-frontend && npm run build:p3test-frontend",
+    "dev:all": "concurrently --names \"server,frontend,livetracking,p3test\" --prefix-colors \"blue,green,cyan,yellow\" \"npm run dev:server\" \"npm run dev\" \"npm run dev:livetracking-frontend\" \"npm run dev:p3test-frontend\"",
     "deploy": "node scripts/deploy.mjs"
-
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }
-

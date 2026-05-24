@@ -9,6 +9,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    port: 5173,
     proxy: {
       "/ws": { target: "http://localhost:8787", ws: true },
       "/sse": { target: "http://localhost:8787", changeOrigin: true },
