@@ -91,16 +91,25 @@ export type LiveTrackingSetupDocument = {
 
 
   /**
-   * Active pool id used by setup-based participant sourcing.
+   * Pool IDs currently active for tracking (multi-select).
    *
    * Domain rule:
-   * - null means "not selected yet"
-   * - when set, it should reference one id from `participantPoolIds`
+   * - empty array means "no pool active"
+   * - all entries must be present in `participantPoolIds`
+   * - order is not semantically significant; worker merges all active pools
    */
-    activeParticipantPoolId?: string | null;
+  activeParticipantPoolIds?: string[];
 
 
   name: string;
+
+  /**
+   * Minimum lap time in seconds. Passings that would close a lap shorter than
+   * this threshold are rejected as `min_lap_time` invalid events.
+   * Defaults to 8 when absent.
+   */
+  minLapTimeSecs?: number;
+
   track: LiveTrackingTrack;
   updatedAt: string | null;
 };
@@ -184,12 +193,12 @@ export function createLiveTrackingSetupDocument(args?: {
   setupId?: string;
   eventId?: string | null;
   participantPoolIds?: string[];
-  activeParticipantPoolId?: string | null;
+  activeParticipantPoolIds?: string[];
   name?: string;
 }): LiveTrackingSetupDocument {
   const participantPoolIds = normalizeParticipantPoolIds(args?.participantPoolIds);
-  const requestedActiveId = args?.activeParticipantPoolId == null ? null : String(args.activeParticipantPoolId).trim();
-  const activeParticipantPoolId = requestedActiveId && participantPoolIds.includes(requestedActiveId) ? requestedActiveId : null;
+  const activeParticipantPoolIds = normalizeParticipantPoolIds(args?.activeParticipantPoolIds)
+    .filter((id) => participantPoolIds.includes(id));
 
   return {
     kind: "liveTrackingSetup",
@@ -197,8 +206,9 @@ export function createLiveTrackingSetupDocument(args?: {
     setupId: String(args?.setupId ?? "").trim(),
     eventId: args?.eventId == null ? null : String(args.eventId).trim(),
     participantPoolIds,
-    activeParticipantPoolId,
+    activeParticipantPoolIds,
     name: String(args?.name ?? "").trim(),
+    minLapTimeSecs: 8,
     track: {
       id: "",
       name: "",
@@ -422,11 +432,11 @@ export function isLiveTrackingSetupDocument(value: unknown): value is LiveTracki
     (typeof value.eventId === "string" || value.eventId === null) &&
         (value.participantPoolIds === undefined ||
       (Array.isArray(value.participantPoolIds) && value.participantPoolIds.every((x) => typeof x === "string"))) &&
-    (value.activeParticipantPoolId === undefined ||
-      typeof value.activeParticipantPoolId === "string" ||
-      value.activeParticipantPoolId === null) &&
+    (value.activeParticipantPoolIds === undefined ||
+      (Array.isArray(value.activeParticipantPoolIds) && value.activeParticipantPoolIds.every((x) => typeof x === "string"))) &&
 
     typeof value.name === "string" &&
+    (value.minLapTimeSecs === undefined || typeof value.minLapTimeSecs === "number") &&
     isLiveTrackingTrack(value.track) &&
     (typeof value.updatedAt === "string" || value.updatedAt === null)
   );

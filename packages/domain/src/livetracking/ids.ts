@@ -10,9 +10,10 @@
 
 export const LIVE_TRACKING_DOC_PREFIX = "liveTracking" as const;
 
-export type LiveTrackingDocKind = "participants" | "setup" | "session" | "runtime" | "results";
+export type LiveTrackingDocKind = "list" | "participants" | "setup" | "session" | "runtime" | "results";
 
 export type LiveTrackingDocRef =
+  | { kind: "list" }
   | { kind: "participants"; poolRef: string }
   | { kind: "setup"; setupRef: string }
   | { kind: "session"; sessionId: string }
@@ -46,6 +47,14 @@ export function makeLiveTrackingSetupDocId(setupRef: string): string {
 }
 
 /**
+ * Singleton registry listing all known setups and participant pools.
+ * Analogous to `eventList` in the main domain.
+ */
+export function makeLiveTrackingListDocId(): string {
+  return `${LIVE_TRACKING_DOC_PREFIX}List`;
+}
+
+/**
  * Session/runtime/results are singleton docs by domain rule:
  * there is exactly one active live-tracking session at a time.
  *
@@ -72,6 +81,9 @@ export function parseLiveTrackingDocId(docId: string): LiveTrackingDocRef | null
   if (!raw) return null;
 
   // Singleton ids without suffix
+  if (raw === `${LIVE_TRACKING_DOC_PREFIX}List`) {
+    return { kind: "list" };
+  }
   if (raw === `${LIVE_TRACKING_DOC_PREFIX}Session`) {
     return { kind: "session", sessionId: "" };
   }

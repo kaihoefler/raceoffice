@@ -17,6 +17,7 @@ export default defineConfig({
       "/ws": { target: "http://localhost:8787", ws: true },
       "/sse": { target: "http://localhost:8787", changeOrigin: true },
       "/health": { target: "http://localhost:8787" },
+      "/live-tracking": { target: "http://localhost:8787", changeOrigin: true },
     },
   },
 });

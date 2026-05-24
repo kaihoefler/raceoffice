@@ -46,10 +46,10 @@ export type LiveTrackingTimingEngineOptions = {
 export const DEFAULT_LIVE_TRACKING_TIMING_ENGINE_OPTIONS: LiveTrackingTimingEngineOptions = {
   debounceMs: 1_000,
   minSectorTimeMs: 500,
-  minLapTimeMs: 8_000,
+  minLapTimeMs: 4_000,
   activityWindowMs: 40_000,
   keepRecentPassings: 300,
-  keepRecentLapTimes: 10,
+  keepRecentLapTimes: 20,
   keepCompletedLaps: 30,
   keepInvalidEvents: 100,
   synthesizeUnknownTransponders: true,
@@ -72,6 +72,7 @@ type InternalAthleteState = {
   lastAcceptedAtMs: number | null;
   lastAcceptedByPointMs: Map<string, number>;
   currentLapSplits: LiveTrackingCurrentSplit[];
+  totalLapsCompleted: number;
   completedLaps: Array<{ lapNumber: number; lapTimeMs: number; valid: boolean; completedAt: string }>;
   recentLapTimesMs: number[];
 };
@@ -221,6 +222,7 @@ export function buildLiveTrackingResultsProjection(args: {
       lastAcceptedAtMs: null,
       lastAcceptedByPointMs: new Map(),
       currentLapSplits: [],
+      totalLapsCompleted: 0,
       completedLaps: [],
       recentLapTimesMs: [],
     };
@@ -341,7 +343,8 @@ export function buildLiveTrackingResultsProjection(args: {
           continue;
         }
 
-        const lapNumber = athlete.completedLaps.length + 1;
+        athlete.totalLapsCompleted += 1;
+        const lapNumber = athlete.totalLapsCompleted;
         athlete.completedLaps = appendBounded(
           athlete.completedLaps,
           {
@@ -396,7 +399,7 @@ export function buildLiveTrackingResultsProjection(args: {
 
       isActive: status === "active",
       lastPassingAt: state?.lastPassingAt ?? null,
-      lapsCompleted: state?.completedLaps.length ?? 0,
+      lapsCompleted: state?.totalLapsCompleted ?? 0,
       currentLapSplits: [...(state?.currentLapSplits ?? [])],
       recentLapTimesMs: [...recentLapTimes],
       completedLaps: [...(state?.completedLaps ?? [])],

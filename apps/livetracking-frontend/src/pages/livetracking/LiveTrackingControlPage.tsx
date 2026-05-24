@@ -1,14 +1,23 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import React, { Fragment, useEffect, useMemo, useState } from "react";
 
 import {
+  Autocomplete,
   Box,
   Button,
   Card,
   CardContent,
   CardHeader,
   Checkbox,
-
+  createFilterOptions,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
+  IconButton,
+  List,
+  ListItem,
+  ListItemText,
   MenuItem,
   Stack,
   Table,
@@ -19,6 +28,10 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
+import TuneIcon from "@mui/icons-material/Tune";
 import {
   canIssueLiveTrackingCommand,
   createLiveTrackingCommand,
@@ -41,6 +54,9 @@ import {
   type LiveTrackingSessionDocument,
   type LiveTrackingSetupDocument,
   type LiveTrackingTimingPoint,
+  makeLiveTrackingListDocId,
+  type LiveTrackingListDocument,
+  type LiveTrackingSetupEntry,
 } from "@raceoffice/domain";
 
 import { Link as RouterLink } from "react-router-dom";
@@ -57,8 +73,6 @@ import { useRealtimeDoc } from "../../realtime/useRealtimeDoc";
 type TrackingConfigDraft = {
   setupId: string;
   mode: LiveTrackingMode;
-  eventId: string;
-  participantPoolDocId: string;
 };
 
 type SetupDraft = {
@@ -66,6 +80,7 @@ type SetupDraft = {
   trackId: string;
   trackName: string;
   lengthM: number;
+  minLapTimeSecs: number;
   timingPoints: LiveTrackingTimingPoint[];
 };
 
@@ -112,16 +127,186 @@ function toSetupDraft(doc: LiveTrackingSetupDocument): SetupDraft {
     trackId: String(doc.track.id ?? "").trim() || `track-${crypto.randomUUID().slice(0, 8)}`,
     trackName: doc.track.name,
     lengthM: doc.track.lengthM,
+    minLapTimeSecs: doc.minLapTimeSecs ?? 8,
     timingPoints: normalizeTimingPoints(doc.track.timingPoints),
   };
 }
 
-export default function LiveTrackingControlPage() {
-  const eventList = { events: [] as Array<{ id: string; name?: string | null }> };
+function NewEntryDialog({
+  open,
+  title,
+  onConfirm,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  onConfirm: (name: string) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState("");
 
+  function handleConfirm() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onConfirm(trimmed);
+    setName("");
+    onClose();
+  }
+
+  function handleClose() {
+    setName("");
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>
+        <TextField
+          autoFocus
+          size="small"
+          label="Name"
+          fullWidth
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleConfirm();
+            if (e.key === "Escape") handleClose();
+          }}
+          sx={{ mt: 1 }}
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleClose}>Cancel</Button>
+        <Button variant="contained" onClick={handleConfirm} disabled={!name.trim()}>
+          Create
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+type ManageEntry = { id: string; name: string };
+
+function ManageListDialog({
+  open,
+  title,
+  entries,
+  onRename,
+  onDelete,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  entries: ManageEntry[];
+  onRename: (id: string, name: string) => void;
+  onDelete: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [editing, setEditing] = useState<Record<string, string>>({});
+
+  function startEdit(id: string, name: string) {
+    setEditing((p) => ({ ...p, [id]: name }));
+  }
+
+  function cancelEdit(id: string) {
+    setEditing((p) => { const { [id]: _, ...rest } = p; return rest; });
+  }
+
+  function save(id: string) {
+    const name = (editing[id] ?? "").trim();
+    if (name) onRename(id, name);
+    cancelEdit(id);
+  }
+
+  function handleClose() {
+    setEditing({});
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent dividers sx={{ p: 0 }}>
+        {entries.length === 0 ? (
+          <Typography color="text.secondary" variant="body2" sx={{ p: 2 }}>
+            No entries yet.
+          </Typography>
+        ) : (
+          <List dense disablePadding>
+            {entries.map((entry) => {
+              const isEditing = entry.id in editing;
+              return (
+                <ListItem
+                  key={entry.id}
+                  divider
+                  sx={{ pr: isEditing ? 18 : 11 }}
+                  secondaryAction={
+                    isEditing ? (
+                      <Stack direction="row" spacing={0.5}>
+                        <Button size="small" onClick={() => save(entry.id)}>Save</Button>
+                        <Button size="small" color="inherit" onClick={() => cancelEdit(entry.id)}>Cancel</Button>
+                      </Stack>
+                    ) : (
+                      <Stack direction="row" spacing={0}>
+                        <IconButton size="small" onClick={() => startEdit(entry.id, entry.name)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => {
+                            if (window.confirm(`Delete "${entry.name}"?`)) onDelete(entry.id);
+                          }}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Stack>
+                    )
+                  }
+                >
+                  {isEditing ? (
+                    <TextField
+                      size="small"
+                      fullWidth
+                      value={editing[entry.id]}
+                      onChange={(e) => setEditing((p) => ({ ...p, [entry.id]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") save(entry.id);
+                        if (e.key === "Escape") cancelEdit(entry.id);
+                      }}
+                      autoFocus
+                    />
+                  ) : (
+                    <ListItemText primary={entry.name} secondary={entry.id} />
+                  )}
+                </ListItem>
+              );
+            })}
+          </List>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleClose}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+type SetupOption = LiveTrackingSetupEntry & { inputValue?: string };
+
+const filterSetupOptions = createFilterOptions<SetupOption>({ stringify: (o) => `${o.name} ${o.setupId}` });
+
+export default function LiveTrackingControlPage() {
+  const listDocId = useMemo(() => makeLiveTrackingListDocId(), []);
   const sessionDocId = useMemo(() => makeLiveTrackingSessionDocId(), []);
   const runtimeDocId = useMemo(() => makeLiveTrackingRuntimeDocId(), []);
   const resultsDocId = useMemo(() => makeLiveTrackingResultsDocId(), []);
+
+  const { data: liveTrackingList, update: updateList } = useRealtimeDoc<LiveTrackingListDocument>(listDocId);
+  const setupEntries = (liveTrackingList?.setups ?? []) as SetupOption[];
+  // Genutzt für Namensauflösung der verknüpften Pools im Setup-Editor
+  const poolEntries = liveTrackingList?.participantPools ?? [];
 
   const { data: session, update: updateSession } = useRealtimeDoc<LiveTrackingSessionDocument>(sessionDocId);
 
@@ -129,41 +314,6 @@ export default function LiveTrackingControlPage() {
   const { data: results, update: updateResults } = useRealtimeDoc<LiveTrackingResultsDocument>(resultsDocId);
 
 
-  const sessionParticipantPoolDocId = useMemo(() => {
-    if (!session) return "";
-    return session.participantSource.kind === "race"
-      ? makeLiveTrackingParticipantPoolDocId(session.participantSource.eventId)
-      : session.participantSource.participantPoolDocId;
-  }, [session]);
-
-  const { data: participantPoolDoc } = useRealtimeDoc<LiveTrackingParticipantPoolDocument>(
-    sessionParticipantPoolDocId.trim() || null,
-  );
-
-  const participantNameByAthleteId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const athlete of participantPoolDoc?.athletes ?? []) {
-      const fullName = `${String(athlete.firstName ?? "").trim()} ${String(athlete.lastName ?? "").trim()}`.trim();
-      if (!fullName) continue;
-      map.set(athlete.id, fullName);
-    }
-    return map;
-  }, [participantPoolDoc]);
-
-  const participantNameByTransponderId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const athlete of participantPoolDoc?.athletes ?? []) {
-      const fullName = `${String(athlete.firstName ?? "").trim()} ${String(athlete.lastName ?? "").trim()}`.trim();
-      if (!fullName) continue;
-
-      for (const raw of athlete.transponderIds ?? []) {
-        const transponderId = String(raw ?? "").trim();
-        if (!transponderId) continue;
-        if (!map.has(transponderId)) map.set(transponderId, fullName);
-      }
-    }
-    return map;
-  }, [participantPoolDoc]);
 
 
 
@@ -188,16 +338,54 @@ export default function LiveTrackingControlPage() {
   const [trackingDraft, setTrackingDraft] = useState<TrackingConfigDraft>({
     setupId: "",
     mode: "training",
-    eventId: "",
-    participantPoolDocId: "",
   });
 
   const setupDocId = trackingDraft.setupId.trim() ? makeLiveTrackingSetupDocId(trackingDraft.setupId.trim()) : null;
   const { data: setupDoc, update: updateSetup } = useRealtimeDoc<LiveTrackingSetupDocument>(setupDocId);
+
+  const sessionParticipantPoolDocId = useMemo(() => {
+    // Setup's activeParticipantPoolIds is the source of truth (session.participantSource is legacy).
+    const firstActivePoolId = setupDoc?.activeParticipantPoolIds?.[0];
+    if (firstActivePoolId) return makeLiveTrackingParticipantPoolDocId(firstActivePoolId);
+    if (!session) return "";
+    return session.participantSource.kind === "race"
+      ? makeLiveTrackingParticipantPoolDocId(session.participantSource.eventId)
+      : session.participantSource.participantPoolDocId;
+  }, [session, setupDoc]);
+
+  const { data: participantPoolDoc } = useRealtimeDoc<LiveTrackingParticipantPoolDocument>(
+    sessionParticipantPoolDocId.trim() || null,
+  );
+
+  const participantNameByAthleteId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const athlete of participantPoolDoc?.athletes ?? []) {
+      const fullName = `${String(athlete.firstName ?? "").trim()} ${String(athlete.lastName ?? "").trim()}`.trim();
+      if (!fullName) continue;
+      map.set(athlete.id, fullName);
+    }
+    return map;
+  }, [participantPoolDoc]);
+
+  const participantNameByTransponderId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const athlete of participantPoolDoc?.athletes ?? []) {
+      const fullName = `${String(athlete.firstName ?? "").trim()} ${String(athlete.lastName ?? "").trim()}`.trim();
+      if (!fullName) continue;
+      for (const raw of athlete.transponderIds ?? []) {
+        const transponderId = String(raw ?? "").trim();
+        if (!transponderId) continue;
+        if (!map.has(transponderId)) map.set(transponderId, fullName);
+      }
+    }
+    return map;
+  }, [participantPoolDoc]);
   const setupJson = useMemo(() => (setupDoc ? JSON.stringify(setupDoc, null, 2) : "—"), [setupDoc]);
 
   const [setupDraft, setSetupDraft] = useState<SetupDraft | null>(null);
   const [workerControlBusy, setWorkerControlBusy] = useState(false);
+  const [setupDialogOpen, setSetupDialogOpen] = useState(false);
+  const [newSetupDialogOpen, setNewSetupDialogOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [decoderOffsetInputByPointId, setDecoderOffsetInputByPointId] = useState<Record<string, string>>({});
 
@@ -205,17 +393,9 @@ export default function LiveTrackingControlPage() {
 
   useEffect(() => {
     if (!session) return;
-    const eventId = session.participantSource.eventId;
-    const participantPoolDocId =
-      session.participantSource.kind === "race"
-        ? makeLiveTrackingParticipantPoolDocId(eventId)
-        : session.participantSource.participantPoolDocId;
-
     setTrackingDraft({
       setupId: session.setupId,
       mode: session.mode,
-      eventId,
-      participantPoolDocId,
     });
   }, [session]);
 
@@ -256,27 +436,10 @@ export default function LiveTrackingControlPage() {
 
   const trackingConfigDirty = useMemo(() => {
     if (!session) return false;
-
-    const expected = {
-      setupId: session.setupId,
-      mode: session.mode,
-      eventId: session.participantSource.eventId,
-      participantPoolDocId:
-        session.participantSource.kind === "race"
-          ? makeLiveTrackingParticipantPoolDocId(session.participantSource.eventId)
-          : session.participantSource.participantPoolDocId,
-    };
-
-
-    const current = {
-      setupId: trackingDraft.setupId.trim(),
-      mode: trackingDraft.mode,
-      eventId: trackingDraft.eventId.trim(),
-      participantPoolDocId:
-        trackingDraft.participantPoolDocId.trim() || makeLiveTrackingParticipantPoolDocId(trackingDraft.eventId.trim()),
-    };
-
-    return JSON.stringify(expected) !== JSON.stringify(current);
+    return (
+      session.setupId !== trackingDraft.setupId.trim() ||
+      session.mode !== trackingDraft.mode
+    );
   }, [session, trackingDraft]);
 
   const setupDirty = useMemo(() => {
@@ -294,8 +457,8 @@ export default function LiveTrackingControlPage() {
 
     const currentComparable = {
       setupId: setupDoc.setupId,
-      eventId: setupDoc.eventId,
       name: setupDoc.name,
+      minLapTimeSecs: setupDoc.minLapTimeSecs ?? 8,
       track: {
         id: setupDoc.track.id,
         name: setupDoc.track.name,
@@ -306,8 +469,8 @@ export default function LiveTrackingControlPage() {
 
     const draftComparable = {
       setupId: trackingDraft.setupId.trim(),
-      eventId: trackingDraft.eventId.trim() || null,
       name: setupDraft.name,
+      minLapTimeSecs: setupDraft.minLapTimeSecs,
       track: {
         id: stableTrackId,
         name: setupDraft.trackName,
@@ -349,17 +512,11 @@ export default function LiveTrackingControlPage() {
 
 
   function saveSessionConfig() {
-
+    // participantSource wird ausschließlich über die Participants-Seite verwaltet (setActivePool)
     updateSession((prev) => ({
       ...prev,
       setupId: trackingDraft.setupId.trim(),
       mode: trackingDraft.mode,
-      participantSource: {
-        kind: "event_participant_pool",
-        eventId: trackingDraft.eventId.trim(),
-        participantPoolDocId:
-          trackingDraft.participantPoolDocId.trim() || makeLiveTrackingParticipantPoolDocId(trackingDraft.eventId.trim()),
-      },
       updatedAt: nowIso(),
     }));
   }
@@ -486,6 +643,26 @@ export default function LiveTrackingControlPage() {
     }));
   }
 
+  function renameSetup(setupId: string, name: string) {
+    updateList((prev) => ({
+      ...prev,
+      setups: prev.setups.map((e) => e.setupId === setupId ? { ...e, name, updatedAt: nowIso() } : e),
+    }));
+  }
+
+  function deleteSetup(setupId: string) {
+    updateList((prev) => ({ ...prev, setups: prev.setups.filter((e) => e.setupId !== setupId) }));
+    if (trackingDraft.setupId === setupId) setTrackingDraft((p) => ({ ...p, setupId: "" }));
+  }
+
+  function handleCreateSetup(name: string) {
+    const setupId = crypto.randomUUID();
+    updateList((prev) => ({
+      ...prev,
+      setups: [...(prev.setups ?? []), { setupId, name, updatedAt: nowIso() }],
+    }));
+    setTrackingDraft((p) => ({ ...p, setupId }));
+  }
 
   function patchPoint(index: number, patch: Partial<LiveTrackingTimingPoint>) {
     setSetupDraft((prev) => {
@@ -597,8 +774,9 @@ export default function LiveTrackingControlPage() {
     updateSetup((prev) => ({
       ...prev,
       setupId: trackingDraft.setupId.trim(),
-      eventId: trackingDraft.eventId.trim() || null,
+      eventId: prev.eventId ?? null,
       name: setupDraft.name,
+      minLapTimeSecs: setupDraft.minLapTimeSecs,
       track: {
         id: stableTrackId,
         name: setupDraft.trackName,
@@ -609,6 +787,20 @@ export default function LiveTrackingControlPage() {
     }));
 
     setSetupDraft((prev) => (prev ? { ...prev, trackId: stableTrackId } : prev));
+
+    const targetSetupId = trackingDraft.setupId.trim();
+    const nameToSync = setupDraft.name;
+    if (targetSetupId) {
+      updateList((prev) => {
+        if (!prev?.setups?.some((e) => e.setupId === targetSetupId)) return prev;
+        return {
+          ...prev,
+          setups: prev.setups.map((e) =>
+            e.setupId === targetSetupId ? { ...e, name: nameToSync, updatedAt: nowIso() } : e
+          ),
+        };
+      });
+    }
   }
 
   return (
@@ -621,37 +813,65 @@ export default function LiveTrackingControlPage() {
         <CardContent>
           <Stack spacing={1}>
             <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-              <TextField size="small" label="Setup ID" value={trackingDraft.setupId} onChange={(e) => setTrackingDraft((p) => ({ ...p, setupId: e.target.value }))} fullWidth />
-              <TextField size="small" label="Mode" select value={trackingDraft.mode} onChange={(e) => setTrackingDraft((p) => ({ ...p, mode: e.target.value as LiveTrackingMode }))}>
+              <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.5, flexGrow: 1 }}>
+              <Autocomplete<SetupOption, false, false, false>
+                size="small"
+                fullWidth
+                options={setupEntries}
+                value={setupEntries.find((e) => e.setupId === trackingDraft.setupId) ?? null}
+                onChange={(_, option) => {
+                  if (!option) {
+                    setTrackingDraft((p) => ({ ...p, setupId: "" }));
+                  } else if (option.inputValue) {
+                    handleCreateSetup(option.inputValue);
+                  } else {
+                    setTrackingDraft((p) => ({ ...p, setupId: option.setupId }));
+                  }
+                }}
+                filterOptions={(options, params) => {
+                  const filtered = filterSetupOptions(options, params);
+                  const trimmed = params.inputValue.trim();
+                  if (trimmed && !options.some((o) => o.name.toLowerCase() === trimmed.toLowerCase())) {
+                    filtered.push({ setupId: "__new__", name: `Create "${trimmed}"`, updatedAt: null, inputValue: trimmed });
+                  }
+                  return filtered;
+                }}
+                getOptionLabel={(option) => (option.inputValue ? option.inputValue : option.name || option.setupId)}
+                isOptionEqualToValue={(option, value) => option.setupId === value.setupId}
+                selectOnFocus
+                handleHomeEndKeys
+                renderOption={(props, option) => {
+                  const { key, ...rest } = props as React.HTMLAttributes<HTMLLIElement> & { key: React.Key };
+                  return (
+                    <li key={key} {...rest}>
+                      {option.inputValue ? <em>Create &quot;{option.inputValue}&quot;</em> : option.name}
+                    </li>
+                  );
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Setup"
+                    size="small"
+                    helperText={
+                      trackingDraft.setupId && !setupEntries.some((e) => e.setupId === trackingDraft.setupId)
+                        ? `ID: ${trackingDraft.setupId}`
+                        : undefined
+                    }
+                  />
+                )}
+              />
+              <IconButton size="small" sx={{ mt: "4px" }} onClick={() => setNewSetupDialogOpen(true)} title="New setup">
+                <AddIcon fontSize="small" />
+              </IconButton>
+              <IconButton size="small" sx={{ mt: "4px" }} onClick={() => setSetupDialogOpen(true)} title="Manage setups">
+                <TuneIcon fontSize="small" />
+              </IconButton>
+              </Box>
+              <TextField size="small" label="Mode" select value={trackingDraft.mode} onChange={(e) => setTrackingDraft((p) => ({ ...p, mode: e.target.value as LiveTrackingMode }))} sx={{ minWidth: 140 }}>
                 <MenuItem value="training">training</MenuItem>
                 <MenuItem value="qualifying">qualifying</MenuItem>
               </TextField>
-            </Stack>
-
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-              <TextField
-                size="small"
-                label="Event"
-                select
-                value={trackingDraft.eventId}
-                onChange={(e) => {
-                  const eventId = e.target.value;
-                  setTrackingDraft((p) => ({ ...p, eventId, participantPoolDocId: makeLiveTrackingParticipantPoolDocId(eventId) }));
-                }}
-                fullWidth
-              >
-                <MenuItem value="">(none)</MenuItem>
-                {(eventList?.events ?? []).map((event) => (
-                  <MenuItem key={event.id} value={event.id}>{event.name || event.id}</MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                size="small"
-                label="Participant Pool Doc ID"
-                value={trackingDraft.participantPoolDocId}
-                onChange={(e) => setTrackingDraft((p) => ({ ...p, participantPoolDocId: e.target.value }))}
-                fullWidth
-              />
             </Stack>
 
             <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
@@ -686,9 +906,6 @@ export default function LiveTrackingControlPage() {
               <Button color="warning" variant="outlined" onClick={clearRuntimeBuffers} disabled={workerControlBusy}>
                 Clear Passings/Runtime Buffers
               </Button>
-              <Button component={RouterLink} to="/live-tracking/participants" variant="outlined">
-                Manage Setup Pools
-              </Button>
             </Stack>
 
           </Stack>
@@ -707,6 +924,18 @@ export default function LiveTrackingControlPage() {
                 <TextField size="small" label="Setup Name" value={setupDraft.name} onChange={(e) => setSetupDraft((p) => (p ? { ...p, name: e.target.value } : p))} fullWidth />
                 <TextField size="small" label="Track Name" value={setupDraft.trackName} onChange={(e) => setSetupDraft((p) => (p ? { ...p, trackName: e.target.value } : p))} fullWidth />
                 <TextField size="small" type="number" label="Track Length (m)" value={setupDraft.lengthM} onChange={(e) => setSetupDraft((p) => (p ? { ...p, lengthM: Number(e.target.value) } : p))} sx={{ maxWidth: 180 }} />
+                <TextField
+                  size="small"
+                  type="number"
+                  label="Min. Lap Time (s)"
+                  value={setupDraft.minLapTimeSecs}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (Number.isFinite(v) && v > 0) setSetupDraft((p) => (p ? { ...p, minLapTimeSecs: v } : p));
+                  }}
+                  inputProps={{ min: 1, step: 1 }}
+                  sx={{ maxWidth: 160 }}
+                />
               </Stack>
 
               <Table size="small">
@@ -862,23 +1091,44 @@ export default function LiveTrackingControlPage() {
                 </Typography>
               )}
 
+              {/* Verknüpfte Pools: Namensanzeige aus liveTrackingList, aktiver Pool markiert */}
               <Stack spacing={0.5}>
-                <Typography variant="body2" color="text.secondary">
-                  Setup pools: {(setupDoc?.participantPoolIds ?? []).join(", ") || "—"}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Active pool: {setupDoc?.activeParticipantPoolId ?? "—"}
-                </Typography>
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <Typography variant="body2" color="text.secondary" fontWeight="medium">
+                    Participant Pools
+                  </Typography>
+                  <Button
+                    component={RouterLink}
+                    to="/live-tracking/participants"
+                    variant={trackingDraft.setupId ? "contained" : "outlined"}
+                    size="small"
+                    disabled={!trackingDraft.setupId}
+                  >
+                    Participant Pools Verwalten →
+                  </Button>
+                </Box>
+                {(setupDoc?.participantPoolIds ?? []).length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    — Noch keine Pools verknüpft
+                  </Typography>
+                ) : (
+                  (setupDoc?.participantPoolIds ?? []).map((poolId) => {
+                    const entry = poolEntries.find((p) => p.poolId === poolId);
+                    const isActive = (setupDoc?.activeParticipantPoolIds ?? []).includes(poolId);
+                    return (
+                      <Typography key={poolId} variant="body2" color={isActive ? "primary" : "text.secondary"}>
+                        • {entry?.name ?? poolId}{isActive ? " (aktiv)" : ""}
+                      </Typography>
+                    );
+                  })
+                )}
               </Stack>
 
               <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                <Button variant="outlined" onClick={addPoint}>
+                <Button variant="contained" onClick={addPoint}>
                   Add Timing Point
                 </Button>
-                <Button component={RouterLink} to="/live-tracking/participants" variant="outlined">
-                  Open Participant Pools
-                </Button>
-                <Button variant={setupDirty ? "contained" : "outlined"} onClick={saveSetup} disabled={!setupDirty}>
+                <Button variant={setupDirty ? "contained" : "outlined"} color={setupDirty ? "primary" : "inherit"} onClick={saveSetup} disabled={!setupDirty}>
                   Save Setup Document
                 </Button>
               </Stack>
@@ -988,6 +1238,22 @@ export default function LiveTrackingControlPage() {
 
         </CardContent>
       </Card>
+
+      <NewEntryDialog
+        open={newSetupDialogOpen}
+        title="New Setup"
+        onConfirm={handleCreateSetup}
+        onClose={() => setNewSetupDialogOpen(false)}
+      />
+
+      <ManageListDialog
+        open={setupDialogOpen}
+        title="Manage Setups"
+        entries={setupEntries.map((e) => ({ id: e.setupId, name: e.name }))}
+        onRename={renameSetup}
+        onDelete={deleteSetup}
+        onClose={() => setSetupDialogOpen(false)}
+      />
     </Box>
   );
 }

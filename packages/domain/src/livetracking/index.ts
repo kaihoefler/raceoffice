@@ -6,6 +6,7 @@
 
 export {
   LIVE_TRACKING_DOC_PREFIX,
+  makeLiveTrackingListDocId,
   makeLiveTrackingParticipantPoolDocId,
   makeLiveTrackingSetupDocId,
   makeLiveTrackingSessionDocId,
@@ -15,6 +16,14 @@ export {
   type LiveTrackingDocKind,
   type LiveTrackingDocRef,
 } from "./ids.js";
+
+export {
+  createLiveTrackingListDocument,
+  isLiveTrackingListDocument,
+  type LiveTrackingListDocument,
+  type LiveTrackingSetupEntry,
+  type LiveTrackingParticipantPoolEntry,
+} from "./list.js";
 
 export {
   createLiveTrackingParticipantPoolDocument,

@@ -24,6 +24,7 @@ import {
   isLiveTrackingSetupDocument,
   isLiveTrackingWorkerStatusCheck,
 
+  makeLiveTrackingParticipantPoolDocId,
   makeLiveTrackingResultsDocId,
   makeLiveTrackingRuntimeDocId,
   makeLiveTrackingSessionDocId,
@@ -31,6 +32,7 @@ import {
   normalizeTimingPoints,
   startLiveTrackingCommand,
   transitionLiveTrackingSessionState,
+  type LiveTrackingAthlete,
   type LiveTrackingParticipantPoolDocument,
   type LiveTrackingResultsDocument,
   type LiveTrackingRuntimeDocument,
@@ -52,6 +54,73 @@ function appendBounded<T>(items: T[], value: T, max: number): T[] {
   return next.length > max ? next.slice(next.length - max) : next;
 }
 
+/**
+ * Extracts athletes from a pool doc defensively, tolerating legacy docs that predate
+ * the `kind`/`version` requirement or that stored `bib` as a string instead of a number.
+ *
+ * Why this exists instead of just relying on `isLiveTrackingParticipantPoolDocument`:
+ * - Pools created before the kind/version fields were introduced pass the guard, but
+ *   athletes with string bibs cause the per-athlete check to fail, silently dropping
+ *   the entire pool. This coercion layer makes the worker operational without requiring
+ *   a UI-driven migration run first.
+ */
+function extractAthletesFromPoolDoc(pool: unknown): LiveTrackingAthlete[] {
+  if (!pool || typeof pool !== "object" || Array.isArray(pool)) return [];
+
+  // Fast path: valid doc passes the full guard.
+  if (isLiveTrackingParticipantPoolDocument(pool)) {
+    return (pool as { athletes: LiveTrackingAthlete[] }).athletes ?? [];
+  }
+
+  // Legacy path: attempt per-athlete coercion.
+  const raw = pool as Record<string, unknown>;
+  if (!Array.isArray(raw.athletes)) return [];
+
+  const result: LiveTrackingAthlete[] = [];
+  for (const entry of raw.athletes) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const v = entry as Record<string, unknown>;
+    if (typeof v.id !== "string" || typeof v.firstName !== "string" || typeof v.lastName !== "string") continue;
+
+    let bib: number | null = null;
+    if (typeof v.bib === "number") bib = v.bib;
+    else if (typeof v.bib === "string" && v.bib.trim()) {
+      const n = Number(v.bib.trim());
+      if (Number.isFinite(n)) bib = n;
+    }
+
+    result.push({
+      id: v.id,
+      bib,
+      firstName: v.firstName,
+      lastName: v.lastName,
+      nation: typeof v.nation === "string" ? v.nation : null,
+      ageGroupId: typeof v.ageGroupId === "string" ? v.ageGroupId : null,
+      transponderIds: Array.isArray(v.transponderIds)
+        ? v.transponderIds.filter((x): x is string => typeof x === "string")
+        : [],
+    });
+  }
+
+  if (result.length > 0) {
+    console.warn(
+      `[livetracking-worker] Pool doc missing kind/version or had type mismatches — coerced ${result.length} athlete(s). Navigate to Participants page to persist the migration.`,
+    );
+  }
+
+  return result;
+}
+
+function deriveTimingOptions(setup: { minLapTimeSecs?: number; track: { timingPoints: Array<{ enabled: boolean }> } }): {
+  minLapTimeMs: number;
+  minSectorTimeMs: number;
+} {
+  const minLapTimeMs = Math.max(1_000, (setup.minLapTimeSecs ?? 8) * 1_000);
+  const enabledCount = setup.track.timingPoints.filter((p) => p.enabled).length;
+  const minSectorTimeMs = enabledCount > 1 ? Math.max(500, Math.floor(minLapTimeMs / enabledCount)) : 500;
+  return { minLapTimeMs, minSectorTimeMs };
+}
+
 type AmmConnection = {
   timingPoint: LiveTrackingTimingPoint;
   socket: WebSocket;
@@ -67,8 +136,9 @@ export class SessionLoop {
 
   private setupClient: RealtimeDocClient<LiveTrackingSetupDocument> | null = null;
   private activeSetupDocId: string | null = null;
-  private participantPoolClient: RealtimeDocClient<LiveTrackingParticipantPoolDocument> | null = null;
-  private activeParticipantPoolDocId: string | null = null;
+  // Keyed by pool doc ID; tracks all currently active pool subscriptions.
+  private readonly participantPoolClients = new Map<string, RealtimeDocClient<LiveTrackingParticipantPoolDocument>>();
+  private readonly unsubscribeParticipantPools = new Map<string, () => void>();
 
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private commandTimer: NodeJS.Timeout | null = null;
@@ -78,7 +148,6 @@ export class SessionLoop {
   private unsubscribeSession: (() => void) | null = null;
   private unsubscribeRuntime: (() => void) | null = null;
   private unsubscribeSetup: (() => void) | null = null;
-  private unsubscribeParticipantPool: (() => void) | null = null;
 
   private readonly workerHost = os.hostname();
   private readonly workerProcessId = process.pid;
@@ -163,8 +232,8 @@ export class SessionLoop {
     this.unsubscribeRuntime = null;
     this.unsubscribeSetup?.();
     this.unsubscribeSetup = null;
-    this.unsubscribeParticipantPool?.();
-    this.unsubscribeParticipantPool = null;
+    for (const unsub of this.unsubscribeParticipantPools.values()) unsub();
+    this.unsubscribeParticipantPools.clear();
 
     for (const [timingPointId] of this.pendingAmmConnectTimers) {
       this.clearPendingAmmConnect(timingPointId);
@@ -191,8 +260,8 @@ export class SessionLoop {
 
     this.setupClient?.close();
     this.setupClient = null;
-    this.participantPoolClient?.close();
-    this.participantPoolClient = null;
+    for (const client of this.participantPoolClients.values()) client.close();
+    this.participantPoolClients.clear();
 
     this.sessionClient.close();
     this.runtimeClient.close();
@@ -413,55 +482,100 @@ export class SessionLoop {
     return setup;
   }
 
-    private ensureParticipantPoolClient(): LiveTrackingParticipantPoolDocument | null {
-    const session = this.sessionClient.data;
-    if (!session || !isLiveTrackingSessionDocument(session)) return null;
-
-    const poolDocId =
-      session.participantSource.kind === "event_participant_pool" || session.participantSource.kind === "setup_participant_pool"
-        ? session.participantSource.participantPoolDocId
-        : null;
-
-    if (!poolDocId) {
-      this.unsubscribeParticipantPool?.();
-      this.participantPoolClient?.close();
-      this.participantPoolClient = null;
-      this.activeParticipantPoolDocId = null;
-      return null;
+  /**
+   * Reconciles live subscriptions to all active participant pool docs.
+   *
+   * Pool IDs are read from `setup.activeParticipantPoolIds` so that the setup document
+   * is the single source of truth — the session's participantPoolDocId is not used here.
+   * Athletes from all active pools are merged and returned for name resolution.
+   */
+  private ensureParticipantPoolAthletes(): LiveTrackingAthlete[] | null {
+    const setup = this.setupClient?.data;
+    if (!setup || !isLiveTrackingSetupDocument(setup)) {
+      // No setup available — close all existing pool subscriptions.
+      for (const unsub of this.unsubscribeParticipantPools.values()) unsub();
+      this.unsubscribeParticipantPools.clear();
+      for (const client of this.participantPoolClients.values()) client.close();
+      this.participantPoolClients.clear();
+      return [];
     }
 
-    if (this.activeParticipantPoolDocId !== poolDocId) {
-      this.unsubscribeParticipantPool?.();
-      this.participantPoolClient?.close();
-      this.participantPoolClient = new RealtimeDocClient<LiveTrackingParticipantPoolDocument>(poolDocId, this.baseHttpUrl);
-      this.participantPoolClient.connect();
-      this.unsubscribeParticipantPool = this.participantPoolClient.onData(() => {
-        this.scheduleUpdateResultsProjection();
-      });
-      this.activeParticipantPoolDocId = poolDocId;
+    const targetDocIds = new Set(
+      (setup.activeParticipantPoolIds ?? []).map((id) => makeLiveTrackingParticipantPoolDocId(id)),
+    );
+
+    // Remove subscriptions for pools that are no longer active.
+    for (const [docId, client] of this.participantPoolClients) {
+      if (!targetDocIds.has(docId)) {
+        this.unsubscribeParticipantPools.get(docId)?.();
+        this.unsubscribeParticipantPools.delete(docId);
+        client.close();
+        this.participantPoolClients.delete(docId);
+      }
     }
 
-    const pool = this.participantPoolClient?.data;
-    if (!pool || !isLiveTrackingParticipantPoolDocument(pool)) return null;
-    return pool;
+    // Add subscriptions for newly active pools.
+    for (const docId of targetDocIds) {
+      if (!this.participantPoolClients.has(docId)) {
+        const client = new RealtimeDocClient<LiveTrackingParticipantPoolDocument>(docId, this.baseHttpUrl);
+        client.connect();
+        const unsub = client.onData(() => this.scheduleUpdateResultsProjection());
+        this.participantPoolClients.set(docId, client);
+        this.unsubscribeParticipantPools.set(docId, unsub);
+      }
+    }
+
+    // If any target pool subscription hasn't received its first snapshot yet, return null so
+    // the caller can skip the projection. The onData callback will schedule a new one once
+    // all snapshots have arrived. This prevents a "flash" projection with empty athletes that
+    // would incorrectly mark known transponders as unknown.
+    for (const docId of targetDocIds) {
+      const client = this.participantPoolClients.get(docId);
+      if (client && client.data === null) {
+        console.log(`[livetracking-worker] pool snapshot pending: ${docId} — deferring projection`);
+        return null;
+      }
+    }
+
+    // Merge athletes from all active pools; later pools' entries append to earlier ones.
+    const athletes: LiveTrackingAthlete[] = [];
+    for (const client of this.participantPoolClients.values()) {
+      athletes.push(...extractAthletesFromPoolDoc(client.data));
+    }
+
+    console.log(
+      `[livetracking-worker] pool athletes loaded: ${athletes.length} athlete(s), transponders: [${athletes.flatMap((a) => a.transponderIds).join(", ")}]`,
+    );
+
+    return athletes;
   }
 
   private updateResultsProjection() {
     const session = this.sessionClient.data;
     const setup = this.ensureSetupClient();
     const runtime = this.runtimeClient.data;
-    const pool = this.ensureParticipantPoolClient();
-
     if (!session || !isLiveTrackingSessionDocument(session)) return;
     if (!setup || !runtime) return;
 
-    const warnings: string[] = [];
-    const athletes = pool?.athletes ?? [];
+    // Reconcile pool subscriptions. Returns null when a snapshot is still in-flight — defer.
+    const athletes = this.ensureParticipantPoolAthletes();
+    if (athletes === null) return;
 
-        if (session.participantSource.kind === "race") {
+    const warnings: string[] = [];
+
+    if (session.participantSource.kind === "race") {
       warnings.push("race participant source projection is not connected yet; only participant-pool sources are supported.");
     }
 
+    const timingOptions = { debounceMs: 2_000, ...deriveTimingOptions(setup) };
+
+    if (athletes.length === 0 && (setup.activeParticipantPoolIds ?? []).length > 0) {
+      const poolIds = (setup.activeParticipantPoolIds ?? []).join(", ");
+      warnings.push(`[worker] No athletes loaded from active pool(s): ${poolIds}. Pool documents may be empty or still loading.`);
+      console.warn(`[livetracking-worker] projection: 0 athletes from pools [${poolIds}], ${(runtime.recentPassings ?? []).length} passings, minLapTimeMs=${timingOptions.minLapTimeMs}`);
+    } else {
+      console.log(`[livetracking-worker] projection: ${athletes.length} athletes, ${(runtime.recentPassings ?? []).length} passings, minLapTimeMs=${timingOptions.minLapTimeMs}`);
+    }
 
     const projected = buildLiveTrackingResultsProjection({
       passings: runtime.recentPassings ?? [],
@@ -469,11 +583,7 @@ export class SessionLoop {
       athletes,
       generatedAt: nowIso(),
       warnings,
-      options: {
-        debounceMs: 1_000,
-        minSectorTimeMs: 500,
-        minLapTimeMs: 10_000,
-      },
+      options: timingOptions,
     });
 
     const current = this.resultsClient.data;

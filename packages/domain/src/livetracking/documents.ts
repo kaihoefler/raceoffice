@@ -9,6 +9,11 @@
 
 import { parseLiveTrackingDocId } from "./ids.js";
 import {
+  createLiveTrackingListDocument,
+  isLiveTrackingListDocument,
+  type LiveTrackingListDocument,
+} from "./list.js";
+import {
   createLiveTrackingParticipantPoolDocument,
   isLiveTrackingParticipantPoolDocument,
   type LiveTrackingParticipantPoolDocument,
@@ -41,6 +46,7 @@ import {
  * and concrete payload types second.
  */
 export type LiveTrackingDocument =
+  | LiveTrackingListDocument
   | LiveTrackingParticipantPoolDocument
   | LiveTrackingSetupDocument
   | LiveTrackingSessionDocument
@@ -56,7 +62,9 @@ export function createInitialLiveTrackingDocument(docId: string): LiveTrackingDo
   const parsed = parseLiveTrackingDocId(docId);
   if (!parsed) return null;
 
-    if (parsed.kind === "participants") {
+  if (parsed.kind === "list") return createLiveTrackingListDocument();
+
+  if (parsed.kind === "participants") {
     // Backward compatibility choice:
     // - When only doc-id suffix is known, we use it as pool identity.
     // - We also mirror it into `eventId` so legacy event-scoped flows keep working.
@@ -97,6 +105,7 @@ export function createInitialLiveTrackingDocument(docId: string): LiveTrackingDo
  */
 export function isLiveTrackingDocument(value: unknown): value is LiveTrackingDocument {
   return (
+    isLiveTrackingListDocument(value) ||
     isLiveTrackingParticipantPoolDocument(value) ||
     isLiveTrackingSetupDocument(value) ||
     isLiveTrackingSessionDocument(value) ||
