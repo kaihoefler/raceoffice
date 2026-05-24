@@ -1,11 +1,9 @@
 import dgram from "node:dgram";
-import net, { type Socket } from "node:net";
 import os from "node:os";
 
-
 import {
+  P3DecoderConnection,
   P3Parser,
-  P3StreamDecoder,
   buildDecoderSearchRequest,
   buildDecoderSearchSmartDecoderBugRequest,
   buildGetTimeRequest,
@@ -15,7 +13,6 @@ import {
   buildUdpBroadcastDiscoveryRequest23ByteObserved,
   buildUdpBroadcastDiscoveryRequest25Byte,
   buildUdpBroadcastDiscoveryRequest32ByteObserved,
-
   toNodeBuffer,
   type P3BuiltRequest,
   type P3Record,
@@ -72,7 +69,6 @@ export type P3DiscoveryState = {
 };
 
 export type P3TestClientState = {
-
   connection: {
     status: "disconnected" | "connecting" | "connected" | "error";
     host: string | null;
@@ -82,9 +78,7 @@ export type P3TestClientState = {
     lastError: string | null;
   };
   transport: {
-    bytesReceived: number;
     bytesSent: number;
-    bufferedHex: string;
   };
   history: {
     nextEventId: number;
@@ -92,7 +86,6 @@ export type P3TestClientState = {
   };
   discovery: P3DiscoveryState;
 };
-
 
 /**
  * Event stream item surfaced to the frontend.
@@ -202,7 +195,8 @@ function knownTlvTypesForRecord(record: P3Record): Set<number> {
 
     case "status":
       return new Set([0x01, 0x06, 0x07, 0x0c, 0x81]);
-        case "version-decoder":
+
+    case "version-decoder":
       return new Set([0x02, 0x03, 0x81, 0x83]);
 
     case "get-time":
@@ -214,14 +208,13 @@ function knownTlvTypesForRecord(record: P3Record): Set<number> {
     case "resend":
       return new Set([0x01, 0x02, 0x81, 0x83]);
 
-        case "network-settings":
+    case "network-settings":
       return new Set([0x05, 0x08, 0x09, 0x0a, 0x81, 0x83]);
 
-
-        case "tor-0012-observed":
+    case "tor-0012-observed":
       return new Set([0x03, 0x04, 0x05, 0x81, 0x83]);
 
-        case "timeline":
+    case "timeline":
       return new Set([0x01, 0x02, 0x03, 0x04, 0x81, 0x83]);
 
     case "settings":
@@ -229,12 +222,12 @@ function knownTlvTypesForRecord(record: P3Record): Set<number> {
     case "gps-info":
     case "first-contact":
       return new Set([0x81]);
+
     case "unknown":
     default:
       return new Set();
   }
 }
-
 
 function deriveUnknownFields(record: P3Record): P3TlvField[] {
   const known = knownTlvTypesForRecord(record);
@@ -281,7 +274,6 @@ function toSerializableRecord(record: P3Record) {
         observedField131: record.observedField131 ?? null,
       };
 
-
     case "status":
       return {
         ...base,
@@ -292,7 +284,7 @@ function toSerializableRecord(record: P3Record) {
         decoderId: record.decoderId ?? null,
       };
 
-        case "version-decoder":
+    case "version-decoder":
       return {
         ...base,
         firmwareVersion: record.firmwareVersion ?? null,
@@ -301,7 +293,6 @@ function toSerializableRecord(record: P3Record) {
         observedField131: record.observedField131 ?? null,
       };
 
-
     case "get-time":
       return {
         ...base,
@@ -309,7 +300,6 @@ function toSerializableRecord(record: P3Record) {
         decoderId: record.decoderId ?? null,
         observedField131: record.observedField131 ?? null,
       };
-
 
     case "session":
       return {
@@ -320,7 +310,6 @@ function toSerializableRecord(record: P3Record) {
         observedField131: record.observedField131 ?? null,
       };
 
-
     case "resend":
       return {
         ...base,
@@ -330,8 +319,7 @@ function toSerializableRecord(record: P3Record) {
         observedField131: record.observedField131 ?? null,
       };
 
-
-        case "network-settings":
+    case "network-settings":
       return {
         ...base,
         decoderId: record.decoderId ?? null,
@@ -342,9 +330,7 @@ function toSerializableRecord(record: P3Record) {
         observedField131: record.observedField131 ?? null,
       };
 
-
-
-        case "tor-0012-observed":
+    case "tor-0012-observed":
       return {
         ...base,
         decoderId: record.decoderId ?? null,
@@ -354,8 +340,7 @@ function toSerializableRecord(record: P3Record) {
         observedField131: record.observedField131 ?? null,
       };
 
-
-        case "timeline":
+    case "timeline":
       return {
         ...base,
         decoderId: record.decoderId ?? null,
@@ -365,7 +350,6 @@ function toSerializableRecord(record: P3Record) {
         observedField04: record.observedField04 ?? null,
         observedField131: record.observedField131 ?? null,
       };
-
 
     case "settings":
     case "signals":
@@ -383,7 +367,6 @@ function toSerializableRecord(record: P3Record) {
       return base;
   }
 }
-
 
 function decoderIdOfRecord(record: P3Record): string | null {
   switch (record.kind) {
@@ -413,7 +396,6 @@ function networkIpsOfRecord(record: P3Record): string[] {
   );
 }
 
-
 function ipv4ToInt(ip: string): number | null {
   const parts = ip.split(".").map((part) => Number(part));
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
@@ -423,7 +405,6 @@ function ipv4ToInt(ip: string): number | null {
   const [a, b, c, d] = parts as [number, number, number, number];
   return ((a << 24) | (b << 16) | (c << 8) | d) >>> 0;
 }
-
 
 function intToIpv4(value: number): string {
   return [
@@ -456,11 +437,12 @@ function getBroadcastTargets(): string[] {
 
 export class P3TestClientService {
 
-  private readonly parser = new P3Parser({ strict: true, rejectOnCrcMismatch: false });
-  private readonly stream = new P3StreamDecoder(this.parser);
-  private socket: Socket | null = null;
-  private discoveryInFlight: Promise<void> | null = null;
+  // P3Parser is still needed for raw UDP discovery (which intentionally uses the
+  // low-level API to surface all TOR types, including TIMELINE and TOR_0012).
+  private readonly parser = new P3Parser({ strict: false, rejectOnCrcMismatch: false });
 
+  private connection: P3DecoderConnection | null = null;
+  private discoveryInFlight: Promise<void> | null = null;
 
   private state: P3TestClientState = {
     connection: {
@@ -472,9 +454,7 @@ export class P3TestClientService {
       lastError: null,
     },
     transport: {
-      bytesReceived: 0,
       bytesSent: 0,
-      bufferedHex: "",
     },
     history: {
       nextEventId: 1,
@@ -491,8 +471,7 @@ export class P3TestClientService {
     },
   };
 
-
-  constructor(private readonly logger: Logger) { }
+  constructor(private readonly logger: Logger) {}
 
   getState(): P3TestClientState {
     return structuredClone(this.state);
@@ -576,7 +555,6 @@ export class P3TestClientService {
   }
 
   clearHistory() {
-
     this.state = {
       ...this.state,
       history: {
@@ -598,11 +576,10 @@ export class P3TestClientService {
       return { ok: false, message: "Port must be an integer between 1 and 65535." };
     }
 
-    if (this.socket) {
-      this.disconnect("connect requested while previous socket was active");
+    if (this.connection) {
+      this.disconnect("connect requested while previous connection was active");
     }
 
-    this.stream.reset();
     this.state = {
       ...this.state,
       connection: {
@@ -613,141 +590,92 @@ export class P3TestClientService {
         disconnectedAt: this.state.connection.disconnectedAt,
         lastError: null,
       },
-      transport: {
-        ...this.state.transport,
-        bufferedHex: "",
-      },
+      transport: { bytesSent: 0 },
     };
 
-    this.pushEvent("socket", {
-      action: "connect-requested",
-      host: safeHost,
-      port: safePort,
-    });
+    this.pushEvent("socket", { action: "connect-requested", host: safeHost, port: safePort });
+    this.logger.info({ scope: "p3-test-client", host: safeHost, port: safePort }, "p3 connect requested");
 
-    this.logger.info(
+    const conn = new P3DecoderConnection(
+      { ip: safeHost, port: safePort },
       {
-        scope: "p3-test-client",
-        host: safeHost,
-        port: safePort,
+        onConnected: (info) => {
+          this.logger.info(
+            { scope: "p3-test-client", decoderType: info.decoderType, decoderId: info.decoderId },
+            "p3 decoder identified",
+          );
+        },
+        onDisconnected: (reason) => {
+          this.connection = null;
+          this.state = {
+            ...this.state,
+            connection: {
+              ...this.state.connection,
+              status: "disconnected",
+              disconnectedAt: nowIso(),
+            },
+          };
+          this.pushEvent("socket", { action: "disconnected", reason });
+          this.logger.info({ scope: "p3-test-client", reason }, "p3 socket closed");
+        },
+        onPassing: () => {},
+        onStatus: () => {},
+        onError: (error) => {
+          const message = error.message;
+          this.state = {
+            ...this.state,
+            connection: {
+              ...this.state.connection,
+              status: "error",
+              lastError: message,
+            },
+          };
+          this.logger.warn({ scope: "p3-test-client", error: message }, "p3 socket error");
+          this.pushEvent("warning", { action: "socket-error", message });
+        },
+        onRawRecord: (record) => {
+          const receivedAt = nowIso();
+          this.pushEvent("record", { receivedAt, record: toSerializableRecord(record) });
+          this.logger.info(
+            {
+              scope: "p3-test-client",
+              kind: record.kind,
+              tor: record.tor,
+              torName: record.torName,
+              crcValid: record.crcValid,
+              parseError: record.parseError ?? null,
+            },
+            "p3 record parsed",
+          );
+        },
       },
-      "p3 connect requested",
+      { autoReconnect: false },
     );
 
-    const socket = net.createConnection({ host: safeHost, port: safePort });
-    this.socket = socket;
+    this.connection = conn;
 
-    socket.on("connect", () => {
-      if (this.socket !== socket) return;
-
-      this.state = {
-        ...this.state,
-        connection: {
-          ...this.state.connection,
-          status: "connected",
-          connectedAt: nowIso(),
-          lastError: null,
-        },
-      };
-
-      this.pushEvent("socket", { action: "connected", host: safeHost, port: safePort });
-      this.logger.info(
-        {
-          scope: "p3-test-client",
-          host: safeHost,
-          port: safePort,
-        },
-        "p3 socket connected",
-      );
-    });
-
-    socket.on("data", (chunk) => {
-      if (this.socket !== socket) return;
-
-      const bytes = typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk;
-      const receivedAt = nowIso();
-      const result = this.stream.push(bytes);
-
-      this.logger.info(
-        {
-          scope: "p3-test-client",
-          receivedAt,
-          bytes: bytes.length,
-          chunkHexPreview: toHexPreview(bytes),
-          parsedRecords: result.records.length,
-          bufferedHexTail: result.bufferedHex,
-        },
-        "p3 socket data received",
-      );
-
-      this.state = {
-        ...this.state,
-        transport: {
-          ...this.state.transport,
-          bytesReceived: this.state.transport.bytesReceived + bytes.length,
-          bufferedHex: result.bufferedHex,
-        },
-      };
-
-      for (const record of result.records) {
-        this.pushEvent("record", {
-          receivedAt,
-          record: toSerializableRecord(record),
-        });
-
-        this.logger.info(
-          {
-            scope: "p3-test-client",
-            kind: record.kind,
-            tor: record.tor,
-            torName: record.torName,
-            crcValid: record.crcValid,
-            parseError: record.parseError ?? null,
+    // Fire-and-forget: update state once TCP connection is established.
+    conn.connect().then(() => {
+      if (conn.state === "connected") {
+        this.state = {
+          ...this.state,
+          connection: {
+            ...this.state.connection,
+            status: "connected",
+            connectedAt: nowIso(),
+            lastError: null,
           },
-          "p3 record parsed",
-        );
+        };
+        this.pushEvent("socket", { action: "connected", host: safeHost, port: safePort });
+        this.logger.info({ scope: "p3-test-client", host: safeHost, port: safePort }, "p3 socket connected");
       }
-    });
-
-    socket.on("error", (error) => {
-      if (this.socket !== socket) return;
-
-      const message = error instanceof Error ? error.message : "Socket error";
-      this.state = {
-        ...this.state,
-        connection: {
-          ...this.state.connection,
-          status: "error",
-          lastError: message,
-        },
-      };
-
-      this.logger.warn({ scope: "p3-test-client", error: message }, "p3 socket error");
-      this.pushEvent("warning", { action: "socket-error", message });
-    });
-
-    socket.on("close", () => {
-      if (this.socket !== socket) return;
-
-      this.socket = null;
-      this.state = {
-        ...this.state,
-        connection: {
-          ...this.state.connection,
-          status: "disconnected",
-          disconnectedAt: nowIso(),
-        },
-      };
-
-      this.pushEvent("socket", { action: "disconnected" });
-      this.logger.info({ scope: "p3-test-client" }, "p3 socket closed");
-    });
+    }).catch(() => {});
 
     return { ok: true, message: `Connecting to ${safeHost}:${String(safePort)}` };
   }
 
   disconnect(reason = "disconnect requested") {
-    if (!this.socket) {
+    if (!this.connection) {
       this.state = {
         ...this.state,
         connection: {
@@ -760,11 +688,8 @@ export class P3TestClientService {
       return { ok: true, message: "Already disconnected." };
     }
 
-    const socket = this.socket;
-    this.socket = null;
-
-    socket.end();
-    socket.destroy();
+    this.connection.disconnect();
+    this.connection = null;
 
     this.state = {
       ...this.state,
@@ -786,7 +711,7 @@ export class P3TestClientService {
     fromPassingNumber?: number;
     toPassingNumber?: number;
   }) {
-    if (!this.socket || this.socket.readyState !== "open") {
+    if (!this.connection || this.connection.state !== "connected") {
       return { ok: false, message: "Socket is not connected." };
     }
 
@@ -795,12 +720,11 @@ export class P3TestClientService {
       return { ok: false, message: "Invalid request payload for selected request kind." };
     }
 
-    this.socket.write(toNodeBuffer(request));
+    this.connection.sendBuiltRequest(request);
 
     this.state = {
       ...this.state,
       transport: {
-        ...this.state.transport,
         bytesSent: this.state.transport.bytesSent + request.escapedFrame.length,
       },
     };
@@ -846,9 +770,7 @@ export class P3TestClientService {
       case "session":
         return input.decoderId ? buildSessionRequest(input.decoderId) : null;
       case "resend": {
-        const fromPassingNumber = input.fromPassingNumber;
-        const toPassingNumber = input.toPassingNumber;
-
+        const { fromPassingNumber, toPassingNumber } = input;
         if (
           input.decoderId === undefined ||
           fromPassingNumber === undefined ||
@@ -858,7 +780,6 @@ export class P3TestClientService {
         ) {
           return null;
         }
-
         return buildResendRequest(fromPassingNumber, toPassingNumber, input.decoderId);
       }
       default:
@@ -942,7 +863,6 @@ export class P3TestClientService {
         });
 
         const requests = [
-
           buildUdpBroadcastDiscoveryRequest25Byte(),
           buildUdpBroadcastDiscoveryRequest32ByteObserved(),
           buildUdpBroadcastDiscoveryRequest23ByteObserved(),
@@ -981,9 +901,7 @@ export class P3TestClientService {
       });
 
       // Many decoders answer discovery on UDP source port 5303 (as documented in field notes).
-      // We therefore listen on 5303 instead of an ephemeral port.
       socket.bind(5303, "0.0.0.0");
-
     });
   }
 
@@ -994,10 +912,6 @@ export class P3TestClientService {
     port: number,
     receivedAt: string,
   ) {
-    // Aggregation rule:
-    // A discovery run should show one row per responding decoder IP.
-    // Multiple TOR replies from the same host (e.g. 0x0016 / 0x0012 / 0x004A)
-    // are therefore merged into the same discovered entry.
     const key = host;
     const observedDecoderId = decoderIdOfRecord(record);
 
@@ -1045,9 +959,7 @@ export class P3TestClientService {
     };
   }
 
-
   private pushEvent(kind: P3TestEvent["kind"], payload: unknown) {
-
     const event: P3TestEvent = {
       id: this.state.history.nextEventId,
       ts: nowIso(),
