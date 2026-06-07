@@ -502,7 +502,7 @@ export default function LiveTrackingControlPage() {
     const points = setupDraft?.timingPoints ?? (setupDoc ? normalizeTimingPoints(setupDoc.track.timingPoints) : []);
 
     for (const point of points) {
-      const label = String(point.name ?? "").trim() || String(point.decoderLabel ?? "").trim() || point.id;
+      const label = String(point.name ?? "").trim() || point.id;
       map.set(point.id, label);
     }
 
@@ -747,7 +747,6 @@ export default function LiveTrackingControlPage() {
           {
             id: `tp-${crypto.randomUUID().slice(0, 8)}`,
             name: `TP ${order}`,
-            decoderLabel: "",
             decoderIp: "127.0.0.1",
             websocketPortAMM: 0,
             decoderType: "amb",
@@ -1111,12 +1110,6 @@ export default function LiveTrackingControlPage() {
                           <TableCell colSpan={6}>
                             <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
 
-                              <TextField
-                                size="small"
-                                label="Decoder Name"
-                                value={point.decoderLabel}
-                                onChange={(e) => patchPoint(index, { decoderLabel: e.target.value })}
-                              />
                               <TextField
                                 size="small"
                                 label={setupDraft.decoderBackend === "p3parser" ? "IP (P3, Port 5403)" : "IP (AMMC)"}

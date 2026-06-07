@@ -75,7 +75,6 @@ describe("AmmcProcessManager integration (AMB + simulator)", () => {
     const timingPoint: LiveTrackingTimingPoint = {
       id: "tp-amb-1",
       name: "AMB Start/Finish",
-      decoderLabel: "AMB-DEC-1",
       decoderIp: "127.0.0.1",
       websocketPortAMM: wsPort,
       order: 1,
@@ -118,7 +117,7 @@ describe("AmmcProcessManager integration (AMB + simulator)", () => {
     await waitFor(() => statuses.includes("running"), 10000);
 
       const raw = await waitForWebsocketMessage(`ws://127.0.0.1:${wsPort}`, 12000);
-      expect(raw).toContain("tran_code");
+      expect(raw).toContain("transponder");
 
       manager.stopAll();
       await waitFor(() => statuses.includes("stopped"), 5000);
@@ -131,7 +130,6 @@ describe("AmmcProcessManager integration (AMB + simulator)", () => {
     const timingPoint: LiveTrackingTimingPoint = {
       id: "tp-amb-restart",
       name: "AMB Restart Test",
-      decoderLabel: "AMB-DEC-R",
       decoderIp: "127.0.0.1",
       websocketPortAMM: 19122,
       order: 1,
@@ -171,7 +169,6 @@ describe("AmmcProcessManager integration (AMB + simulator)", () => {
     const timingPoint: LiveTrackingTimingPoint = {
       id: "tp-amb-sync-remove",
       name: "AMB Sync Remove",
-      decoderLabel: "AMB-DEC-S",
       decoderIp: "127.0.0.1",
       websocketPortAMM: wsPort,
       order: 1,

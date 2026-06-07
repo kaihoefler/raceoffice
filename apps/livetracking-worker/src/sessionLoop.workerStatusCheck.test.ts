@@ -8,7 +8,7 @@ import {
 import { SessionLoop } from "./sessionLoop.js";
 
 describe("SessionLoop workerStatusCheck handshake", () => {
-  it("acknowledges new check request and clears workerStatusCheck", () => {
+  it("acknowledges new check request and clears workerStatusCheck", async () => {
     const loop = new SessionLoop("http://127.0.0.1:8787", "active") as any;
 
     let runtimeDoc: LiveTrackingRuntimeDocument = {
@@ -36,6 +36,7 @@ describe("SessionLoop workerStatusCheck handshake", () => {
     };
 
     loop.handleWorkerStatusCheck();
+    await Promise.resolve();
 
     expect(updateCount).toBe(1);
     expect(runtimeDoc.workerStatusCheck).toBeNull();
@@ -44,7 +45,7 @@ describe("SessionLoop workerStatusCheck handshake", () => {
     expect(runtimeDoc.workerStatus).toBe("ready");
   });
 
-  it("does not process the same requestId twice", () => {
+  it("does not process the same requestId twice", async () => {
     const loop = new SessionLoop("http://127.0.0.1:8787", "active") as any;
 
     let runtimeDoc: LiveTrackingRuntimeDocument = {
@@ -72,6 +73,7 @@ describe("SessionLoop workerStatusCheck handshake", () => {
     };
 
     loop.handleWorkerStatusCheck();
+    await Promise.resolve();
 
     // Simulate stale duplicate message from transport replay.
     runtimeDoc = {
@@ -85,6 +87,7 @@ describe("SessionLoop workerStatusCheck handshake", () => {
     (loop.runtimeClient as any).data = runtimeDoc;
 
     loop.handleWorkerStatusCheck();
+    await Promise.resolve();
 
     expect(updateCount).toBe(1);
   });

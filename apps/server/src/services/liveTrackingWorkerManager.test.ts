@@ -114,6 +114,6 @@ describe("LiveTrackingWorkerManager", () => {
 
     expect(result.ok).toBe(false);
     expect(result.running).toBe(false);
-    expect(result.message).toContain("Worker entry not found");
+    expect(result.message).toContain("no runnable worker entry found");
   });
 });

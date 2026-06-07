@@ -23,8 +23,6 @@ export type LiveTrackingTimingPoint = {
 
   id: string;
   name: string;
-  /** Konfigurierbarer, menschenlesbarer Name des Decoders. Nicht identisch mit der hardware-seitigen Decoder-ID aus dem P3-Protokoll. */
-  decoderLabel: string;
   decoderIp: string;
   websocketPortAMM: number;
 
@@ -242,15 +240,8 @@ export function normalizeTimingPoints(points: LiveTrackingTimingPoint[]): LiveTr
     const distance = index === 0 ? 0 : Math.max(0, toFiniteNumber(point.distanceFromPreviousM, 0));
     absolute += distance;
 
-    // Lazy migration: old documents have `decoderId` instead of `decoderLabel`.
-    const anyPoint = point as unknown as Record<string, unknown>;
-    const decoderLabel =
-      typeof anyPoint.decoderLabel === "string" ? anyPoint.decoderLabel :
-      typeof anyPoint.decoderId === "string" ? anyPoint.decoderId as string : "";
-
     return {
       ...point,
-      decoderLabel,
       order: index + 1,
       distanceFromPreviousM: distance,
       absolutePositionM: absolute,
@@ -403,15 +394,9 @@ export function validateLiveTrackingTrack(track: LiveTrackingTrack): LiveTrackin
 export function isLiveTrackingTimingPoint(value: unknown): value is LiveTrackingTimingPoint {
   if (!isRecord(value)) return false;
 
-  // Lazy migration: accept old documents that still have `decoderId` instead of `decoderLabel`.
-  // normalizeTimingPoints() coerces the field to `decoderLabel` on read.
-  const hasLabel = typeof value.decoderLabel === "string";
-  const hasLegacyId = typeof (value as Record<string, unknown>).decoderId === "string";
-
   return (
     typeof value.id === "string" &&
     typeof value.name === "string" &&
-    (hasLabel || hasLegacyId) &&
     typeof value.decoderIp === "string" &&
         typeof value.websocketPortAMM === "number" &&
     (value.decoderType === undefined || value.decoderType === "amb" || value.decoderType === "sim") &&

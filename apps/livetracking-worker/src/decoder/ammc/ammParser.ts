@@ -104,7 +104,7 @@ export function normalizeAmmPayloadToPassing(args: {
   }
 
   // Hardware decoder ID comes only from the payload. Empty string when absent —
-  // do NOT fall back to the timing-point label (decoderId/decoderLabel), which is
+  // do NOT fall back to the timing-point name, which is
   // a human-readable name, not a hardware identifier.
   const decoderId =
     typeof payload.decoder_id === "string" && payload.decoder_id.trim()

@@ -355,7 +355,7 @@ export class SessionLoop {
         index >= 0
           ? decoders[index]!
           : {
-              decoderId: update.decoderLabel,
+              decoderId: update.decoderName,
               timingPointId: update.timingPointId,
               processStatus: "stopped",
               websocketStatus: "disconnected",

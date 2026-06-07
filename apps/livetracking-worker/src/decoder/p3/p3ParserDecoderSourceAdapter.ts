@@ -111,7 +111,7 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
     const managed: ManagedConnection = { point, connection: null! };
 
     const connection = new P3DecoderConnection(
-      { ip: point.decoderIp, port: P3_PORT, label: point.decoderLabel || point.name },
+      { ip: point.decoderIp, port: P3_PORT, label: point.name },
       {
         onConnected: (info: DecoderInfoEvent) => this._onConnected(managed, info),
         onDisconnected: (reason: string) => this._onDisconnected(managed, reason),
@@ -181,7 +181,7 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
   private _emitHealth(point: LiveTrackingTimingPoint, patch: DecoderHealthPatch["patch"]): void {
     this.callbacks.onHealth({
       timingPointId: point.id,
-      decoderLabel: point.decoderLabel,
+      decoderName: point.name,
       patch,
     });
   }

@@ -27,8 +27,8 @@ export type NormalizedPassing = {
  */
 export type DecoderHealthPatch = {
   timingPointId: string;
-  /** Anzeigename (decoderLabel), wird als decoderId im Runtime-Dokument gespeichert. */
-  decoderLabel: string;
+  /** Anzeigename (point.name), wird als decoderId im Runtime-Dokument gespeichert. */
+  decoderName: string;
   patch: {
     processStatus?: "stopped" | "starting" | "running" | "error";
     websocketStatus?: "disconnected" | "connecting" | "connected" | "error";

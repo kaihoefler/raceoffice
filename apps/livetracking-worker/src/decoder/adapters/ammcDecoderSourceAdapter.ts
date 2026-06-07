@@ -247,7 +247,7 @@ export class AmmcDecoderSourceAdapter implements DecoderSourceAdapter {
   ) {
     this.callbacks.onHealth({
       timingPointId: point.id,
-      decoderLabel: point.decoderLabel,
+      decoderName: point.name,
       patch,
     });
   }
