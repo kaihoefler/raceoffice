@@ -19,6 +19,7 @@
     "preview": "npm --workspace @raceoffice/frontend run preview",
     "build:domain": "npm --workspace @raceoffice/domain run build",
     "test:domain": "npm --workspace @raceoffice/domain run test:run",
+    "test:all": "npm run test:domain && npm --workspace @raceoffice/server run test:run && npm --workspace @raceoffice/livetracking-worker run test:run",
     "build:server": "npm --workspace @raceoffice/server run build",
     "dev:server": "npm --workspace @raceoffice/server run dev",
     "start:server": "npm --workspace @raceoffice/server run start",
