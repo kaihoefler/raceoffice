@@ -20,7 +20,7 @@
     "@fastify/websocket": "^11.2.0",
     "@raceoffice/domain": "file:../../packages/domain",
     "@raceoffice/p3parser": "file:../../packages/p3parser",
-    "better-sqlite3": "^12.5.0",
+    "better-sqlite3": "^12.10.0",
     "fast-json-patch": "^3.1.1",
     "fastify": "^5.6.2",
     "fastify-sse-v2": "^4.2.1"
