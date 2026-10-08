@@ -103,7 +103,7 @@ Wo die Tests liegen:
 |---|---|---|
 | `packages/domain` | `src/**/*.test.ts` (Ergebnisse, Activities, Livetracking-Engine) | vitest |
 | `packages/p3parser` | `test/*.test.mjs` (Golden-Tests gegen `dist`) | `node --test` |
-| `apps/server` | `test/*.test.ts` (Static-Serving, DocStore/SQLite, Race-Result-Export, Worker-Manager) | vitest |
+| `apps/server` | `test/*.test.ts` (Realtime-Protokoll über echte WebSocket-/SSE-Verbindungen, Static-Serving, DocStore/SQLite, Race-Result-Export, Worker-Manager) | vitest |
 | `apps/livetracking-worker` | `src/**/*.test.ts` | vitest |
 | `apps/frontend`, `apps/livetracking-frontend` | `src/**/*.test.ts` (reine Logik) | vitest |
 

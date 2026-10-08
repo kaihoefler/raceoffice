@@ -136,15 +136,16 @@ Current codes sent as `type: "error"`:
 - `invalid_json`
   - incoming WS message could not be parsed
 - `invalid_payload`
-  - payload does not match `{ baseRev:number, patch: Operation[] }`
+  - payload does not match `{ baseRev:number, patch: Operation[] }` (including JSON `null`, numbers, strings)
 - `rev_mismatch`
   - client is writing against an outdated revision
   - server also sends a fresh snapshot to re-sync the sender
 - `patch_failed`
-  - patch execution produced no `newDocument`
+  - patch execution produced no `newDocument` (practically unreachable with fast-json-patch; failing operations are reported as `patch_apply_failed`)
   - server also sends a fresh snapshot to re-sync the sender
 - `patch_apply_failed`
-  - exception while applying/processing patch
+  - exception while applying/processing patch: an invalid or failing JSON-Patch operation, or a persistence error
+  - `message` starts with the cause code, e.g. `TEST_OPERATION_FAILED: …`, `OPERATION_PATH_UNRESOLVABLE: …`
   - server does **not** crash
   - server also sends a fresh snapshot to re-sync the sender
 - `internal_error`
@@ -191,5 +192,7 @@ When receiving `type: "error"`:
 
 ## Notes
 
+- Implementation: `apps/server/src/services/realtimeHub.ts` (transport, persistence, broadcast) and `apps/server/src/services/realtimeProtocol.ts` (pure validation/patch rules). Tested end-to-end in `apps/server/test/realtimeServer.test.ts`.
+- A `remove` operation on the root path (`""`) is accepted and replaces the document with `null`. There is no per-document schema validation yet.
 - The frontend currently supports both old and new error formats for compatibility.
 - Preferred format is the unified `type: "error"` structure above.

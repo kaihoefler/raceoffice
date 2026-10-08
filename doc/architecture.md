@@ -146,22 +146,27 @@ This prevents stale WebSocket events from earlier connections (common in develop
 
 ---
 
-## 4) Server Implementation (`apps/server/src/index.ts`)
+## 4) Server Implementation (`apps/server/src/`)
 
 > Detailed protocol reference (including unified error payload): see `doc/server.md`.
 
 ### Module layout
-`index.ts` is the entrypoint. It reads CLI/env config, wires everything together, hosts the WebSocket/SSE realtime protocol and calls `listen()`. Feature logic lives in `apps/server/src/services/`:
+- `index.ts` is a thin entrypoint: it reads CLI/env config (`--port`, `--host`, `--db`, …), calls `buildApp()` and `listen()`.
+- `app.ts` exports `buildApp({ dbPath, publicDir, repoRoot, liveTrackingServerUrl, logger? })`. It registers plugins and all routes and returns the Fastify instance without listening. Tests use it directly. `app.close()` stops the worker/P3 client and closes the database.
+
+Feature logic lives in `apps/server/src/services/`:
 
 | Module | Responsibility |
 |---|---|
+| `realtimeHub.ts` | `RealtimeHub`: per-doc subscriber registries, `/ws/:docId` write pipeline, `/sse/:docId`, patch broadcast, `commitServerDocUpdate` for server-originated changes |
+| `realtimeProtocol.ts` | pure protocol rules: `parseClientWrite` (frame validation) and `applyClientWrite` (rev check + JSON-Patch apply), error codes |
 | `docStore.ts` | `DocStore` class: SQLite file, `docs` table, prepared statements, `loadDoc` (incl. bootstrap defaults) and `saveDoc` |
 | `staticServing.ts` | `registerStaticServing(app, { publicDir, serviceEndpoints })`: `@fastify/static`, SPA shells for `/p3test/` and `/livetracking/`, not-found handler (JSON service discovery vs. SPA `index.html`) |
 | `currentRaceResultService.ts` | payload for `GET /current_race_result` |
 | `liveTrackingWorker*.ts` | worker process lifecycle + its routes |
 | `p3*.ts` | P3 test client and decoder discovery routes |
 
-New server features should go into such a module. A module can then be tested on its own: a fresh `Fastify()` instance with `inject()`, or a temporary SQLite file. No full server boot is needed.
+New server features should go into such a module. A module can then be tested on its own: a fresh `Fastify()` instance with `inject()`, or a temporary SQLite file. For end-to-end protocol tests, `buildApp()` with a temp database is started on a random port (`listen({ port: 0 })`).
 
 ### Tech stack
 From `apps/server/package.json` and code:
@@ -192,14 +197,14 @@ Each document has:
 - `loadDoc(id)` → `{rev, data}` (bootstraps and persists missing documents, see section 2)
 - `saveDoc(id, doc)` → upsert into sqlite (`INSERT … ON CONFLICT(id) DO UPDATE`)
 
-`index.ts` keeps thin `loadDoc`/`saveDoc` wrappers around a single `DocStore` instance.
+`buildApp()` creates a single `DocStore` instance and shares it with `RealtimeHub` and the HTTP routes.
 
-### WebSocket endpoint: `/ws/:docId`
+### WebSocket endpoint: `/ws/:docId` (`RealtimeHub`)
 When a client connects:
-1. The server registers the socket in an in-memory map:
+1. The hub registers the socket in an in-memory map:
    - `wsClients: Map<docId, Set<socket>>`
 2. Immediately sends a snapshot:
-   - via `noteSnapshot(socket, docId)`
+   - via `sendSnapshot(socket, docId)`
    - message format:
      ```json doc/architecture.md
      { "type":"snapshot", "docId": "...", "rev": 0, "data": { ... } }
@@ -211,15 +216,17 @@ When a client sends an update:
   { "baseRev": number, "patch": Operation[] }
   ```
 
-Server flow:
-1. Load current doc (`loadDoc(docId)`)
-2. Reject if `current.rev !== baseRev`:
+Server flow (validation and patch rules are pure functions in `realtimeProtocol.ts`):
+0. Validate the frame (`parseClientWrite`): non-JSON → `invalid_json`; anything but `{ baseRev: number, patch: [] }` (including `null`) → `invalid_payload`
+1. Load current doc (`docStore.loadDoc(docId)`)
+2. Reject if `current.rev !== baseRev` (`applyClientWrite`):
    - responds with the unified error format, followed by a fresh snapshot:
      ```json doc/architecture.md
      { "type":"error", "docId":"...", "code":"rev_mismatch", "message":"Client baseRev is stale", "rev": 13, "retryable": true }
      ```
 3. Apply patch:
    - `applyPatch(structuredClone(current.data), patch, true, true)`
+   - an invalid or failing operation (e.g. failed `test`, unresolvable path) rejects the whole write as `patch_apply_failed` with the fast-json-patch cause code as message prefix (e.g. `TEST_OPERATION_FAILED: …`)
 4. Persist next doc:
    - `rev` increments by 1
 5. Broadcast patch to all subscribers:
@@ -264,13 +271,15 @@ Main goal: show reliably after every dependency update (Dependabot) that the app
 |---|---|---|
 | Pure domain logic | `packages/domain/src/**/*.test.ts` | race results/ranking, activities, LiveTracking session/setup/timing engine |
 | Protocol parser | `packages/p3parser/test/*.test.mjs` (`node --test` against `dist`) | P3 binary encode/decode (golden bytes) |
-| Server modules | `apps/server/test/*.test.ts` | static serving + SPA fallbacks (`fastify.inject()`), `DocStore` against a temp SQLite file, race result export, worker manager (mocked process) |
+| Server modules | `apps/server/test/*.test.ts` | static serving + SPA fallbacks (`fastify.inject()`), `DocStore` against a temp SQLite file, protocol rules (`realtimeProtocol.test.ts`), race result export, worker manager (mocked process) |
+| Server end-to-end | `apps/server/test/realtimeServer.test.ts` | real `buildApp()` on a random port with real WebSocket/SSE clients: snapshot, ack + broadcast, `rev_mismatch`, invalid frames, failed patches, persistence across restart, server-originated updates, `/current_race_result` |
 | Worker | `apps/livetracking-worker/src/**/*.test.ts` | AMM parsing, session loop status check, AMMC integration (only with binaries in `tools/ammc/`) |
 | Frontend logic | `apps/frontend`, `apps/livetracking-frontend` `src/**/*.test.ts` | pure helpers (no component rendering yet) |
 
 Conventions:
 - Test logic as pure functions (preferably in `packages/domain`) rather than through the UI.
-- Make server parts testable by extracting them into `services/` modules; don't boot `index.ts` in tests.
+- Make server parts testable by extracting them into `services/` modules. Tests use `buildApp()`; they never import `index.ts`, which starts listening.
+- `apps/server/test/helpers/realtimeClient.ts` (`connectDoc(baseUrl, docId)`) is the reusable protocol client for tests (Node's global `WebSocket`, no extra dependency).
 - Regression tests for an upgrade are written **before** the version bump, run green on the old version, then on the new one.
 
 ### Gates
@@ -278,6 +287,5 @@ Conventions:
 - CI: `.github/workflows/ci.yml` runs the same checks on every push to `main` and every pull request, Dependabot PRs included. Details: `doc/build-and-deploy.md` → "Continuous Integration & Releases".
 
 ### Known gaps (planned)
-- The WebSocket/SSE patch protocol in `index.ts` has no automated tests yet. This needs a `buildApp()` extraction so a test can start the server on a random port.
 - No component tests for the React frontends (no jsdom/Testing Library yet) and no browser E2E tests. MUI upgrades are therefore only verified by `typecheck` and `build`.
 - The release workflow does not yet smoke-test the packaged ZIP.

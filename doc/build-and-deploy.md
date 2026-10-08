@@ -94,7 +94,7 @@ Optional (recommended for copy-only installs):
 
 ## Server configuration (CLI / ENV)
 
-Backend configuration (`apps/server/src/index.ts`) is read in this order:
+Backend configuration (read by `apps/server/src/index.ts`, passed to `buildApp()` in `apps/server/src/app.ts`) is resolved in this order:
 
 1) CLI args:
 - `--db <path>`: SQLite file path
