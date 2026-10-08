@@ -1,11 +1,22 @@
 # RaceOffice – Architecture Overview
 
-RaceOffice is split into two parts:
+RaceOffice is an npm-workspaces monorepo:
 
-- **Frontend SPA** (React + TypeScript + Vite)  
-  Uses a **document-based realtime sync** model to read and update application state.
-- **Backend server** (`apps/server/`) (Fastify + WebSockets + SQLite)  
-  Hosts the realtime document protocol and persists documents.
+- **Frontend SPAs** (React + TypeScript + Vite + MUI), all built into `apps/server/public` and served by the backend:
+  - `apps/frontend/`: main app (events, races, scoring, visualizations), served at `/`
+  - `apps/livetracking-frontend/`: LiveTracking setup/control and visualization, served at `/livetracking/`
+  - `apps/p3test-frontend/`: P3 decoder diagnostics, served at `/p3test/`
+
+  The two realtime SPAs use a **document-based realtime sync** model to read and update application state.
+- **Backend server** (`apps/server/`, Fastify + WebSockets + SQLite)  
+  Hosts the realtime document protocol, persists documents and serves the SPAs.
+- **LiveTracking worker** (`apps/livetracking-worker/`)  
+  Separate Node process started by the server. It reads passings from decoders (AMMC or P3) and writes timing results back through the realtime protocol.
+- **Shared packages**
+  - `packages/domain/`: types and pure domain logic shared by all apps
+  - `packages/p3parser/`: MYLAPS P3 protocol parser and client API
+
+This document focuses on the realtime document model shared by frontend and server.
 
 ---
 
@@ -57,12 +68,14 @@ Examples of doc IDs:
 - any other string (server will create an empty document `{}` by default)
 
 ### Special document: `eventList`
-On the server, `eventList` is bootstrapped with an initial state (see `apps/server/src/index.ts`):
+On first access, the server bootstraps a missing document and persists it immediately at `rev: 0` (see `DocStore.loadDoc` in `apps/server/src/services/docStore.ts`):
 
 ```ts doc/architecture.md
 id === "eventList"
-  ? { rev: 0, data: { activeEventId: null, events: [] } }
-  : { rev: 0, data: {} };
+  ? { rev: 0, data: { activeEventId: null, events: [] } }   // dedicated core default
+  : liveTrackingInitial                                       // createInitialLiveTrackingDocument(id)
+    ? { rev: 0, data: liveTrackingInitial }                   // typed LiveTracking default
+    : { rev: 0, data: {} };                                   // generic fallback
 ```
 
 This makes `eventList` the main entry point for:
@@ -137,6 +150,19 @@ This prevents stale WebSocket events from earlier connections (common in develop
 
 > Detailed protocol reference (including unified error payload): see `doc/server.md`.
 
+### Module layout
+`index.ts` is the entrypoint. It reads CLI/env config, wires everything together, hosts the WebSocket/SSE realtime protocol and calls `listen()`. Feature logic lives in `apps/server/src/services/`:
+
+| Module | Responsibility |
+|---|---|
+| `docStore.ts` | `DocStore` class: SQLite file, `docs` table, prepared statements, `loadDoc` (incl. bootstrap defaults) and `saveDoc` |
+| `staticServing.ts` | `registerStaticServing(app, { publicDir, serviceEndpoints })`: `@fastify/static`, SPA shells for `/p3test/` and `/livetracking/`, not-found handler (JSON service discovery vs. SPA `index.html`) |
+| `currentRaceResultService.ts` | payload for `GET /current_race_result` |
+| `liveTrackingWorker*.ts` | worker process lifecycle + its routes |
+| `p3*.ts` | P3 test client and decoder discovery routes |
+
+New server features should go into such a module. A module can then be tested on its own: a fresh `Fastify()` instance with `inject()`, or a temporary SQLite file. No full server boot is needed.
+
 ### Tech stack
 From `apps/server/package.json` and code:
 - Fastify 5
@@ -162,9 +188,11 @@ Each document has:
 - `rev`: revision number (monotonically increasing integer)
 - `json`: serialized document data
 
-The server provides:
-- `loadDoc(id)` → `{rev, data}`
-- `saveDoc(id, doc)` → upsert into sqlite
+`DocStore` (`apps/server/src/services/docStore.ts`) provides:
+- `loadDoc(id)` → `{rev, data}` (bootstraps and persists missing documents, see section 2)
+- `saveDoc(id, doc)` → upsert into sqlite (`INSERT … ON CONFLICT(id) DO UPDATE`)
+
+`index.ts` keeps thin `loadDoc`/`saveDoc` wrappers around a single `DocStore` instance.
 
 ### WebSocket endpoint: `/ws/:docId`
 When a client connects:
@@ -186,9 +214,9 @@ When a client sends an update:
 Server flow:
 1. Load current doc (`loadDoc(docId)`)
 2. Reject if `current.rev !== baseRev`:
-   - responds:
+   - responds with the unified error format, followed by a fresh snapshot:
      ```json doc/architecture.md
-     { "error":"rev_mismatch", "rev": current.rev }
+     { "type":"error", "docId":"...", "code":"rev_mismatch", "message":"Client baseRev is stale", "rev": 13, "retryable": true }
      ```
 3. Apply patch:
    - `applyPatch(structuredClone(current.data), patch, true, true)`
@@ -224,3 +252,32 @@ Practical next steps (recommended):
 - Add domain-level schema validation for incoming patches per document type.
 - Optionally add retry/backoff strategy for repeated reconnect loops.
 - Add telemetry for error codes (`rev_mismatch`, `patch_apply_failed`, …) to monitor multi-client conflict frequency.
+
+---
+
+## 6) Tests & quality gates
+
+Main goal: show reliably after every dependency update (Dependabot) that the application still works.
+
+### Test layers
+| Layer | Where | What it guards |
+|---|---|---|
+| Pure domain logic | `packages/domain/src/**/*.test.ts` | race results/ranking, activities, LiveTracking session/setup/timing engine |
+| Protocol parser | `packages/p3parser/test/*.test.mjs` (`node --test` against `dist`) | P3 binary encode/decode (golden bytes) |
+| Server modules | `apps/server/test/*.test.ts` | static serving + SPA fallbacks (`fastify.inject()`), `DocStore` against a temp SQLite file, race result export, worker manager (mocked process) |
+| Worker | `apps/livetracking-worker/src/**/*.test.ts` | AMM parsing, session loop status check, AMMC integration (only with binaries in `tools/ammc/`) |
+| Frontend logic | `apps/frontend`, `apps/livetracking-frontend` `src/**/*.test.ts` | pure helpers (no component rendering yet) |
+
+Conventions:
+- Test logic as pure functions (preferably in `packages/domain`) rather than through the UI.
+- Make server parts testable by extracting them into `services/` modules; don't boot `index.ts` in tests.
+- Regression tests for an upgrade are written **before** the version bump, run green on the old version, then on the new one.
+
+### Gates
+- Local: `npm run verify` (typecheck → lint → `test:all` → `build:all`).
+- CI: `.github/workflows/ci.yml` runs the same checks on every push to `main` and every pull request, Dependabot PRs included. Details: `doc/build-and-deploy.md` → "Continuous Integration & Releases".
+
+### Known gaps (planned)
+- The WebSocket/SSE patch protocol in `index.ts` has no automated tests yet. This needs a `buildApp()` extraction so a test can start the server on a random port.
+- No component tests for the React frontends (no jsdom/Testing Library yet) and no browser E2E tests. MUI upgrades are therefore only verified by `typecheck` and `build`.
+- The release workflow does not yet smoke-test the packaged ZIP.

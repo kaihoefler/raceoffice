@@ -17,6 +17,8 @@ RaceOffice besteht aus:
   - [1) Prerequisites](#1-prerequisites)
   - [2) Install dependencies](#2-install-dependencies)
   - [3) Run in development](#3-run-in-development)
+- [Tests & Qualitätssicherung](#tests--qualitätssicherung)
+- [CI & Releases](#ci--releases)
 - [Run in production mode](#run-in-production-mode)
 - [Windows Service / deployment](#windows-service--deployment)
 - [Project structure](#project-structure)
@@ -36,14 +38,16 @@ RaceOffice besteht aus:
 
 ### 1) Prerequisites
 
-- Node.js `20.19.0` oder neuer (siehe [`.nvmrc`](.nvmrc) und [`package.json`](package.json) `engines`)
+- Node.js 22, empfohlen `22.21.1` (siehe [`.nvmrc`](.nvmrc)). Mit dieser Version laufen CI und das im Release gebündelte `node.exe`. Das `engines`-Minimum in [`package.json`](package.json) (`>=20.19.0`) wird nicht getestet.
 - npm
 
 ### 2) Install dependencies
 
 ```sh
-npm install
+npm install      # bzw. `npm ci` für eine exakt reproduzierbare Installation aus der package-lock.json
 ```
+
+Die Root-[`.npmrc`](.npmrc) setzt `legacy-peer-deps=true`. Das ist nötig, weil npm bei den optionalen Peer-Dependencies von vitest 5 sonst abstürzt. Kein zusätzliches Flag nötig.
 
 ### 3) Run in development
 
@@ -78,9 +82,53 @@ Vite proxiert `/ws`, `/sse` und `/health` an das Backend `http://localhost:8787`
 
 ---
 
+## Tests & Qualitätssicherung
+
+Vor und nach jedem Dependency-Update genügt ein Befehl:
+
+```sh
+npm run verify   # typecheck → lint → test:all → build:all
+```
+
+| Skript | Inhalt |
+|---|---|
+| `npm run typecheck` | baut `domain` + `p3parser`, dann `typecheck` in jedem Workspace (`tsc -b` bzw. `tsc --noEmit`) |
+| `npm run lint` | ESLint für `apps/frontend` |
+| `npm run test:all` | baut `domain` + `p3parser`, dann `test:run` in **jedem** Workspace, der das Skript hat |
+| `npm run build:all` | alle Pakete, Server, Worker und alle drei Frontends |
+
+Wo die Tests liegen:
+
+| Workspace | Tests | Runner |
+|---|---|---|
+| `packages/domain` | `src/**/*.test.ts` (Ergebnisse, Activities, Livetracking-Engine) | vitest |
+| `packages/p3parser` | `test/*.test.mjs` (Golden-Tests gegen `dist`) | `node --test` |
+| `apps/server` | `test/*.test.ts` (Static-Serving, DocStore/SQLite, Race-Result-Export, Worker-Manager) | vitest |
+| `apps/livetracking-worker` | `src/**/*.test.ts` | vitest |
+| `apps/frontend`, `apps/livetracking-frontend` | `src/**/*.test.ts` (reine Logik) | vitest |
+
+Hinweise:
+- Der Integrationstest `apps/livetracking-worker/src/ammcProcessManager.test.ts` braucht die AMMC-Programme unter `tools/ammc/` (nicht im Git). Fehlen sie, wird er übersprungen. Mit `RACEOFFICE_REQUIRE_AMMC=1` wird das Fehlen zum Fehler.
+- In ESLint stehen Regeln mit Altlasten (z.B. `no-explicit-any`, einige `react-hooks`-Regeln) vorerst auf `warn`, siehe [`apps/frontend/eslint.config.js`](apps/frontend/eslint.config.js). Alle anderen Regeln brechen den Lauf ab.
+
+---
+
+## CI & Releases
+
+| Workflow | Auslöser | Was passiert |
+|---|---|---|
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Push auf `main`, jeder Pull Request | Ubuntu, Node 22.21.1: `npm ci` → `typecheck` → `lint` → `test:all` → `build:all` |
+| [`.github/workflows/release.yml`](.github/workflows/release.yml) | Tag `v*` | Windows: `npm ci`, lädt WinSW, portables `node.exe` (22.21.1) und AMMC-Tools, `npm run deploy`, ZIP als GitHub-Release |
+
+[Dependabot](.github/dependabot.yml) öffnet wöchentlich (montags) Update-PRs. Gruppen: `dev-tooling`, `mui`, `react`. Major-Updates von `better-sqlite3` sind ausgenommen, weil v13 bei `npm ci` ohne C++-Toolchain scheitert. Jeder Dependabot-PR durchläuft `ci.yml`. Ein grüner Lauf heißt: Typecheck, Lint, Tests und Build sind mit der neuen Version in Ordnung.
+
+Details: [`doc/build-and-deploy.md`](doc/build-and-deploy.md#continuous-integration--releases).
+
+---
+
 ## Run in production mode
 
-Alle Artefakte bauen (Domain-Package wird automatisch zuerst gebaut):
+Alle Artefakte bauen (die Pakete `domain` und `p3parser` werden automatisch zuerst gebaut):
 
 ```sh
 npm run build:all
@@ -134,4 +182,6 @@ packages/
   p3parser/               MYLAPS P3 Protokoll-Parser und Client API
 
 doc/                      Projektdokumentation
+scripts/                  deploy.mjs (Deploy-Ordner für Windows-Service)
+.github/                  CI-/Release-Workflows und Dependabot
 ```
