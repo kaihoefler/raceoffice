@@ -16,20 +16,20 @@
   "license": "ISC",
   "dependencies": {
     "@fastify/cors": "^11.2.0",
-    "@fastify/static": "^9.0.0",
+    "@fastify/static": "^10.1.5",
     "@fastify/websocket": "^11.2.0",
     "@raceoffice/domain": "file:../../packages/domain",
     "@raceoffice/p3parser": "file:../../packages/p3parser",
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "^13.0.3",
     "fast-json-patch": "^3.1.1",
     "fastify": "^5.6.2",
     "fastify-sse-v2": "^4.2.1"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^25.9.2",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^5.0.3"
   }
 }

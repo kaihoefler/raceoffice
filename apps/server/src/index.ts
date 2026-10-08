@@ -18,7 +18,7 @@
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import { FastifySSEPlugin } from "fastify-sse-v2";
-import Database from "better-sqlite3";
+import { DocStore, type Doc } from "./services/docStore.js";
 import { applyPatch } from "fast-json-patch/index.mjs";
 import type { Operation } from "fast-json-patch/index.mjs";
 import cors from "@fastify/cors";
@@ -27,14 +27,14 @@ import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import fastifyStatic from "@fastify/static";
+
+import { registerStaticServing } from "./services/staticServing.js";
 
 import {
   buildCurrentRaceResultPayload,
   resolveCurrentRaceContext,
 } from "./services/currentRaceResultService.js";
 import {
-  createInitialLiveTrackingDocument,
   createLiveTrackingRuntimeDocument,
   isLiveTrackingRuntimeDocument,
   makeLiveTrackingRuntimeDocId,
@@ -61,16 +61,6 @@ import {
 
 
 
-
-/**
- * Generic persisted document envelope used by the server.
- * - `rev` increments on every successful patch write.
- * - `data` is document-specific payload (event, visualization, livetracking, ...).
- */
-type Doc = {
-  rev: number;
-  data: any; // TODO später sauber typisieren
-};
 
 /**
  * Canonical websocket error codes returned to patch clients.
@@ -132,17 +122,33 @@ await app.register(cors, {
   credentials: true,
 });
 
+// Public non-realtime endpoints for service discovery/fallback responses.
+const publicServiceEndpoints = [
+  {
+    path: "/health",
+    description: "Service health check",
+  },
+  {
+    path: "/current_race_result",
+    description: "Current active race result export",
+  },
+    {
+    path: "/p3test",
+    description: "Standalone P3 parser test frontend",
+  },
+  {
+    path: "/livetracking",
+    description: "Standalone LiveTracking frontend",
+  },
+
+  ...LIVE_TRACKING_WORKER_SERVICE_ENDPOINTS,
+  ...P3_TEST_CLIENT_SERVICE_ENDPOINTS,
+  ...P3_DISCOVERY_SERVICE_ENDPOINTS,
+] as const;
+
 const publicDir = path.resolve(__dirname, "../public");
-const p3TestUiIndex = path.join(publicDir, "p3test", "index.html");
-const liveTrackingUiIndex = path.join(publicDir, "livetracking", "index.html");
 
-
-
-
-await app.register(fastifyStatic, {
-  root: publicDir,
-  prefix: "/", // assets unter /
-});
+await registerStaticServing(app, { publicDir, serviceEndpoints: publicServiceEndpoints });
 
 // --- SQLite setup (single file, local/server friendly)
 // db path resolution order: CLI --db > RACEOFFICE_DB env > ./data/raceoffice.db
@@ -152,64 +158,16 @@ const dbPath =
   process.env.RACEOFFICE_DB ??
   path.resolve(process.cwd(), "data", "raceoffice.db");
 
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-
-
-const db = new Database(dbPath);
+const docStore = new DocStore(dbPath);
 app.log.info({ dbPath }, "Using sqlite db");
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS docs (
-    id TEXT PRIMARY KEY,
-    rev INTEGER NOT NULL,
-    json TEXT NOT NULL
-  );
-`);
-
-// Prepared statements for fast hot-path reads/writes.
-const getDocStmt = db.prepare("SELECT id, rev, json FROM docs WHERE id = ?");
-const upsertDocStmt = db.prepare(`
-  INSERT INTO docs (id, rev, json) VALUES (@id, @rev, @json)
-  ON CONFLICT(id) DO UPDATE SET rev=excluded.rev, json=excluded.json
-`);
-
 /**
- * Loads one persisted document by id.
- *
- * Bootstrap behavior (important for first access):
- * - `eventList` gets a dedicated default shape (legacy core document).
- * - known LiveTracking ids are initialized via domain defaults
- *   (`createInitialLiveTrackingDocument`) to keep setup/session/runtime/results
- *   strictly separated from the start.
- * - unknown ids fall back to an empty object for backward compatibility.
- *
- * Design note:
- * - Initialization is persisted immediately so all clients observe the same
- *   revisioned starting state (`rev: 0`).
+ * Loads one persisted document by id. Delegates to the DocStore bootstrap/persistence
+ * behavior (see docStore.ts for the per-doc-type default shapes).
  */
 function loadDoc(id: string): Doc {
-  const row = getDocStmt.get(id) as { rev: number; json: string } | undefined;
-
-  // Existing document path: return current revision + parsed JSON payload.
-  if (row) {
-    return { rev: row.rev, data: JSON.parse(row.json) };
-  }
-
-  // Missing document path: create and persist initial state once.
-  const liveTrackingInitial = createInitialLiveTrackingDocument(id);
-
-  const initial =
-    id === "eventList"
-      ? { rev: 0, data: { activeEventId: null, events: [] } } // dedicated core default
-      : liveTrackingInitial
-        ? { rev: 0, data: liveTrackingInitial } // typed LiveTracking default
-        : { rev: 0, data: {} }; // generic fallback for unknown ids
-
-  saveDoc(id, initial);
-  return initial;
+  return docStore.loadDoc(id);
 }
-
-
 
 /**
  * Persists one full document snapshot (id + rev + JSON payload).
@@ -218,8 +176,8 @@ function loadDoc(id: string): Doc {
  * - Revisions are managed by ws patch flow; this function is intentionally simple.
  * - Writes are idempotent for the same (id, rev, data) tuple.
  */
-function saveDoc(id: string, doc: Doc) {
-  upsertDocStmt.run({ id, rev: doc.rev, json: JSON.stringify(doc.data) });
+function saveDoc(id: string, doc: Doc): void {
+  docStore.saveDoc(id, doc);
 }
 
 /**
@@ -405,45 +363,12 @@ function broadcastPatch(docId: string, rev: number, patch: Operation[]) {
 
 
 
-// Public non-realtime endpoints for service discovery/fallback responses.
-const publicServiceEndpoints = [
-  {
-    path: "/health",
-    description: "Service health check",
-  },
-  {
-    path: "/current_race_result",
-    description: "Current active race result export",
-  },
-    {
-    path: "/p3test",
-    description: "Standalone P3 parser test frontend",
-  },
-  {
-    path: "/livetracking",
-    description: "Standalone LiveTracking frontend",
-  },
-
-  ...LIVE_TRACKING_WORKER_SERVICE_ENDPOINTS,
-  ...P3_TEST_CLIENT_SERVICE_ENDPOINTS,
-  ...P3_DISCOVERY_SERVICE_ENDPOINTS,
-] as const;
 
 
 
 
 
 
-/**
- * Standardized JSON body for unknown non-SPA endpoints.
- */
-function serviceDiscoveryBody() {
-  return {
-    error: "not_found",
-    message: "Unknown endpoint.",
-    availableServices: publicServiceEndpoints,
-  };
-}
 
 // --- Health
 app.get("/health", async () => ({ ok: true }));
@@ -456,69 +381,6 @@ registerP3TestClientRoutes(app, p3TestClientService);
 
 // --- P3 decoder network discovery scan
 registerP3DiscoveryRoutes(app);
-
-// --- Standalone P3 test UI (separate from race result management shell)
-// Important URL behavior:
-// - Vite build uses relative asset paths (./assets/...)
-// - Therefore the canonical URL must end with a trailing slash so browsers resolve
-//   assets under /p3test/assets instead of /assets.
-app.get("/p3test", async (_req, reply) => {
-  return reply.redirect("/p3test/", 308);
-});
-
-
-app.get("/p3test/", async (_req, reply) => {
-  if (!fs.existsSync(p3TestUiIndex)) {
-    return reply.code(404).send({
-      error: "p3test_ui_not_built",
-      message: "P3 test frontend not built. Run npm run build:p3test-frontend.",
-    });
-  }
-
-  return reply.type("text/html; charset=utf-8").send(fs.readFileSync(p3TestUiIndex, "utf8"));
-});
-
-// --- Standalone LiveTracking UI
-app.get("/livetracking", async (_req, reply) => {
-  return reply.redirect("/livetracking/", 308);
-});
-
-app.get("/livetracking/", async (_req, reply) => {
-  if (!fs.existsSync(liveTrackingUiIndex)) {
-    return reply.code(404).send({
-      error: "livetracking_ui_not_built",
-      message: "LiveTracking frontend not built. Run npm run build:livetracking-frontend.",
-    });
-  }
-
-  return reply.type("text/html; charset=utf-8").send(fs.readFileSync(liveTrackingUiIndex, "utf8"));
-});
-
-// Browser-router fallback for standalone LiveTracking frontend routes.
-// Important: keep this scoped to the client route namespace only.
-// Do NOT use a broad /livetracking/* matcher, otherwise JS/CSS asset requests under
-// /livetracking/assets/* would receive HTML and fail MIME checks.
-app.get("/livetracking/live-tracking", async (_req, reply) => {
-  if (!fs.existsSync(liveTrackingUiIndex)) {
-    return reply.code(404).send({
-      error: "livetracking_ui_not_built",
-      message: "LiveTracking frontend not built. Run npm run build:livetracking-frontend.",
-    });
-  }
-
-  return reply.type("text/html; charset=utf-8").send(fs.readFileSync(liveTrackingUiIndex, "utf8"));
-});
-
-app.get("/livetracking/live-tracking/*", async (_req, reply) => {
-  if (!fs.existsSync(liveTrackingUiIndex)) {
-    return reply.code(404).send({
-      error: "livetracking_ui_not_built",
-      message: "LiveTracking frontend not built. Run npm run build:livetracking-frontend.",
-    });
-  }
-
-  return reply.type("text/html; charset=utf-8").send(fs.readFileSync(liveTrackingUiIndex, "utf8"));
-});
 
 
 
@@ -645,45 +507,6 @@ app.get("/ws/:docId", { websocket: true }, (socket, req) => {
   });
 });
 
-// Not-found strategy:
-// - JSON discovery for API/non-HTML requests
-// - SPA fallback to index.html for browser navigation when built
-app.setNotFoundHandler((req, reply) => {
-  const discovery = serviceDiscoveryBody();
-
-  if (req.method !== "GET") return reply.code(404).send(discovery);
-
-  const accept = String(req.headers.accept ?? "");
-  if (!accept.includes("text/html")) return reply.code(404).send(discovery);
-
-  const indexPath = path.join(publicDir, "index.html");
-  if (!fs.existsSync(indexPath)) {
-    const servicesHtml = publicServiceEndpoints
-      .map((s) => `<li><a href="${s.path}">${s.path}</a> — ${s.description}</li>`)
-      .join("");
-
-    return reply
-      .code(404)
-      .type("text/html; charset=utf-8")
-      .send(`<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RaceOffice Server - Not Found</title>
-  </head>
-  <body style="font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5;">
-    <h1>Endpoint not found</h1>
-    <p>The requested address does not exist on this server.</p>
-    <p><strong>Available services:</strong></p>
-    <ul>${servicesHtml}</ul>
-    <p style="margin-top: 1rem; color: #666;">Frontend is not built. Run <code>npm run build</code> to serve the SPA.</p>
-  </body>
-</html>`);
-  }
-
-  return reply.type("text/html").sendFile("index.html");
-});
 
 
 /**
