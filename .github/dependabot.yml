@@ -8,6 +8,13 @@ updates:
       time: "09:00"
       timezone: "Europe/Berlin"
     open-pull-requests-limit: 5
+    ignore:
+      # v13 ships prebuilt binaries but `npm ci` still runs node-gyp, which fails
+      # on machines without a C++ toolchain. Revisit once installs work without it.
+      - dependency-name: "better-sqlite3"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/better-sqlite3"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-tooling:
         patterns:

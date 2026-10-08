@@ -324,7 +324,7 @@ export default function RaceActivitiesList({ race, onUpdateActivity, onReplaceAc
 
   // Soft-Delete / Undelete einer Activity (isDeleted toggeln + History-Eintrag).
   function toggleDelete(a: RaceActivity) {
-    const nextDeleted = !Boolean((a as any)?.data?.isDeleted);
+    const nextDeleted = !(a as any)?.data?.isDeleted;
 
     if (isPointsSprint(a)) {
       const prevSnapshot = {

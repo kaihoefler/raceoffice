@@ -16,7 +16,7 @@ vi.mock("node:child_process", () => ({
   spawn: (...args: unknown[]) => spawnMock(...args),
 }));
 
-import { LiveTrackingWorkerManager } from "./liveTrackingWorkerManager.js";
+import { LiveTrackingWorkerManager } from "../src/services/liveTrackingWorkerManager.js";
 
 class FakeChildProcess extends EventEmitter {
   pid: number | undefined;

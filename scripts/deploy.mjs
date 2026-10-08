@@ -62,7 +62,8 @@ async function main() {
   const deployDir = path.join(repoRoot, "deploy");
     const serverSrcDir = path.join(repoRoot, "apps", "server");
   const workerSrcDir = path.join(repoRoot, "apps", "livetracking-worker");
-  const domainSrcDir = path.join(repoRoot, "packages", "domain");
+  // Local workspace packages the server/worker depend on via file: references.
+  const localPackages = ["domain", "p3parser"];
   const serverOutDir = path.join(deployDir, "server");
   const workerOutDir = path.join(deployDir, "apps", "livetracking-worker");
 
@@ -84,11 +85,13 @@ async function main() {
   await copyFileIfExists(path.join(serverSrcDir, "package.json"), path.join(serverOutDir, "package.json"));
   await copyFileIfExists(path.join(serverSrcDir, "package-lock.json"), path.join(serverOutDir, "package-lock.json"));
 
-  // Server depends on @raceoffice/domain via local file reference.
-  // Mirror the package into deploy/packages/domain so npm can resolve
-  // "file:../../packages/domain" from deploy/server/package.json.
-  await copyFileIfExists(path.join(domainSrcDir, "package.json"), path.join(deployDir, "packages", "domain", "package.json"));
-  await copyDir(path.join(domainSrcDir, "dist"), path.join(deployDir, "packages", "domain", "dist"));
+  // Mirror local packages (package.json + dist) into deploy/packages/<name> so the
+  // worker's "file:../../packages/<name>" references resolve inside the deploy tree.
+  for (const name of localPackages) {
+    const srcDir = path.join(repoRoot, "packages", name);
+    await copyFileIfExists(path.join(srcDir, "package.json"), path.join(deployDir, "packages", name, "package.json"));
+    await copyDir(path.join(srcDir, "dist"), path.join(deployDir, "packages", name, "dist"));
+  }
 
     // 4) Install production dependencies into deploy/server/node_modules.
   // Prefer npm ci when lockfile exists for deterministic installs.
@@ -96,13 +99,15 @@ async function main() {
   run(serverLockPresent ? "npm ci --omit=dev" : "npm install --omit=dev", { cwd: serverOutDir });
 
   // IMPORTANT (release ZIP reliability):
-  // Ensure @raceoffice/domain is materialized as real files inside
-  // deploy/server/node_modules. This avoids issues where a local-file dependency
-  // might end up as a link that is not preserved in ZIP extraction.
-  await copyDir(
-    path.join(deployDir, "packages", "domain"),
-    path.join(serverOutDir, "node_modules", "@raceoffice", "domain")
-  );
+  // Ensure local packages are materialized as real files inside
+  // deploy/server/node_modules. npm installs file: dependencies as links, which
+  // are not preserved in ZIP extraction.
+  for (const name of localPackages) {
+    await copyDir(
+      path.join(deployDir, "packages", name),
+      path.join(serverOutDir, "node_modules", "@raceoffice", name)
+    );
+  }
 
   // 4b) Copy livetracking-worker runtime artifacts.
   // The server's worker manager resolves worker entry relative to repo root:

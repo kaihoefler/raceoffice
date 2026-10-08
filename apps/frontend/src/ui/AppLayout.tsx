@@ -58,7 +58,7 @@ export default function AppLayout() {
           {/* spacer */}
           <Box sx={{ flexGrow: 1 }} />
 
-          {/* global status indicator */}
+          {/* app-wide status indicator */}
           <Tooltip title={error ?? ""} arrow disableHoverListener={!error}>
             <Chip size="small" variant="outlined" label={label} color={color} sx={{ mr: 2 }} />
           </Tooltip>

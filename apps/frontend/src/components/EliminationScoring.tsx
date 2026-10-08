@@ -180,7 +180,6 @@ export default function EliminationScoring({
   liveLapCount = null,
   liveLastEligibleBibs = { lastBib: null, secondLastBib: null },
   liveZeroLapBibs = [],
-  liveDnfSuggestedBibs: _liveDnfSuggestedBibs = [],
   lappedIndicationByBib,
   lappedIndicationBibs,
 }: Props) {

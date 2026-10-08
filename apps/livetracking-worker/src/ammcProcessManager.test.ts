@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
@@ -58,7 +59,14 @@ function waitForWebsocketMessage(url: string, timeoutMs = 10000): Promise<string
   });
 }
 
-describe("AmmcProcessManager integration (AMB + simulator)", () => {
+// AMMC binaries are gitignored (downloaded in the release workflow). Skip when absent,
+// unless RACEOFFICE_REQUIRE_AMMC=1 demands they are present.
+const ammcAvailable = fs.existsSync(resolveAmmcBinary("amb")) && fs.existsSync(resolveAmmcBinary("sim"));
+if (!ammcAvailable && process.env.RACEOFFICE_REQUIRE_AMMC === "1") {
+  throw new Error(`RACEOFFICE_REQUIRE_AMMC=1 but AMMC binaries are missing: ${resolveAmmcBinary("amb")}`);
+}
+
+describe.skipIf(!ammcAvailable)("AmmcProcessManager integration (AMB + simulator)", () => {
   const children: ChildProcess[] = [];
 
   afterEach(() => {
