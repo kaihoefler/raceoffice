@@ -42,13 +42,14 @@ import { alpha, useTheme } from "@mui/material/styles";
 import PauseIcon from "@mui/icons-material/Pause";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 
-import { useRaceStatus, type RaceStatusCompetitor } from "../providers/RaceStatusProvider";
+import { useRaceStatus } from "../providers/RaceStatusProvider";
 
-import type { AgeGroup, Athlete, Race, RaceResult } from "@raceoffice/domain";
+import type { AgeGroup, Athlete, Race, RaceResult, RaceStatusCompetitor } from "@raceoffice/domain";
 
 
 
 import { buildStartersFromLiveCompetitors, inferRaceDraftFromLiveName } from "../domain/liveRaceActions";
+import { formatDeltaSeconds, parseTimeToSeconds } from "../domain/liveTime";
 
 // Reuse the existing RaceEditor UI to let the user fill in missing race metadata
 // (distance, stage, etc.) while we prefill what we can from the live feed.
@@ -57,89 +58,6 @@ import RaceEditor, { type RaceDraft } from "./RaceEditor";
 
 
 
-
-/**
- * Parsed Zeitstring in Sekunden (number).
- * Unterstützt:
- * - "ss(.fff)"
- * - "m:ss(.fff)"
- * - "h:mm:ss(.fff)"
- * Außerdem:
- * - Komma als Dezimaltrenner wird akzeptiert (de-Style), z.B. "0:15,032"
- */
-function parseTimeToSeconds(input: string): number | null {
-  const s = String(input ?? "").trim();
-  if (!s) return null;
-
-  const parts = s.split(":");
-
-  // Sekunden-Teil, erlaubt Dezimalpunkt oder Komma
-  const parseSecondsPart = (p: string) => {
-    const norm = p.replace(",", ".");
-    const n = Number(norm);
-    return Number.isFinite(n) ? n : null;
-  };
-
-  // "ss(.fff)"
-  if (parts.length === 1) {
-    return parseSecondsPart(parts[0]);
-  }
-
-  // "m:ss(.fff)"
-  if (parts.length === 2) {
-    const mm = Number(parts[0]);
-    const ss = parseSecondsPart(parts[1]);
-    if (!Number.isFinite(mm) || ss === null) return null;
-    return mm * 60 + ss;
-  }
-
-  // "h:mm:ss(.fff)"
-  if (parts.length === 3) {
-    const hh = Number(parts[0]);
-    const mm = Number(parts[1]);
-    const ss = parseSecondsPart(parts[2]);
-    if (!Number.isFinite(hh) || !Number.isFinite(mm) || ss === null) return null;
-    return hh * 3600 + mm * 60 + ss;
-  }
-
-  return null;
-}
-
-/**
- * Formatiert Zeitdifferenz in Sekunden als String:
- * - Vorzeichen +/-
- * - mit 3 Nachkommastellen
- * - unter 60s: "+0,032"
- * - ab 60s: "+m:ss,fff"
- */
-function formatDeltaSeconds(deltaSeconds: number): string {
-  const sign = deltaSeconds < 0 ? "-" : "+";
-  const d = Math.abs(deltaSeconds);
-
-  // auf Millisekunden runden, um "wackelige" floats zu vermeiden
-  const ms = Math.round(d * 1000);
-  const totalSeconds = ms / 1000;
-
-  // unter 1 Minute => nur Sekunden mit 3 Dezimalstellen
-  if (totalSeconds < 60) {
-    const s = new Intl.NumberFormat("de-DE", {
-      minimumFractionDigits: 3,
-      maximumFractionDigits: 3,
-    }).format(totalSeconds);
-    return `${sign}${s}`;
-  }
-
-  // ab 1 Minute => m:ss,fff
-  const minutes = Math.floor(totalSeconds / 60);
-  const rest = totalSeconds - minutes * 60;
-  const restStr = new Intl.NumberFormat("de-DE", {
-    minimumIntegerDigits: 2,
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
-  }).format(rest);
-
-  return `${sign}${minutes}:${restStr}`;
-}
 
 /**
  * Darstellung für Leader:

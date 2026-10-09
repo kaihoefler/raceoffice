@@ -118,7 +118,6 @@ export default function ScoringLiveColumns({
               liveLapCount={vm.liveLapCount}
               liveLastEligibleBibs={vm.liveLastEligibleBibs}
               liveZeroLapBibs={vm.liveZeroLapBibs}
-              liveDnfSuggestedBibs={vm.liveDnfSuggestedBibs}
               lappedIndicationByBib={vm.lappedIndicationByBib}
               lappedIndicationBibs={vm.lappedIndicationBibs}
             />

@@ -31,6 +31,7 @@ import { createFilterOptions } from "@mui/material/useAutocomplete";
 
 import PointsBibField, { type AthleteFilterOptions } from "./PointsBibField";
 import ScoringStarterList from "./ScoringStarterList";
+import { dnfLapForDeficit, suggestDnfGroup, suggestDnsBibs } from "../domain/liveScoring";
 
 import type {
   Athlete,
@@ -75,11 +76,8 @@ type Props = {
    */
   liveLastEligibleBibs?: { lastBib: number | null; secondLastBib: number | null };
 
-  /** Bibs with 0 lapsComplete in live feed (typically DNS candidates). */
+  /** Bibs with 0 lapsComplete in live feed; prefilled as DNS candidates (see suggestDnsBibs). */
   liveZeroLapBibs?: number[];
-
-  /** Suggested DNF candidates from live feed (same positive lap gap bucket). */
-  liveDnfSuggestedBibs?: number[];
 
   /** Live lap deficit per bib (positive values only), used for lapped indication in starter list. */
   lappedIndicationByBib?: ReadonlyMap<number, number>;
@@ -214,6 +212,7 @@ export default function EliminationScoring({
   const isElim1 = mode === "elim1";
   const isElim2 = mode === "elim2";
   const isDnf = mode === "DNF";
+  const isDns = mode === "DNS";
   const isFixedElimMode = isElim1 || isElim2;
   const elimBibCount = isElim2 ? 2 : 1;
 
@@ -226,9 +225,10 @@ export default function EliminationScoring({
   const [rows, setRows] = useState<Array<{ sel: Athlete | null; input: string }>>([{ sel: null, input: "" }]);
   const [error, setError] = useState<string | null>(null);
 
-  // DNF bibs saved in this session are temporarily suppressed from live DNF prefill
-  // until the backend roundtrip marks them as blocked in raceResults.
-  const [suppressedDnfBibs, setSuppressedDnfBibs] = useState<Set<number>>(new Set());
+  // DNF/DNS bibs saved in this session are excluded from the live prefill until the
+  // backend roundtrip marks them as blocked in raceResults (otherwise they would be
+  // proposed again right after saving).
+  const [recentlySavedBibs, setRecentlySavedBibs] = useState<Set<number>>(new Set());
 
   // Beim Wechsel auf DNF/DNS/DSQ Eingaben immer leeren.
   useEffect(() => {
@@ -287,13 +287,13 @@ export default function EliminationScoring({
     if (!syncEnabled) return;
     syncOverwriteBlockedRef.current = false;
     autoPrefillBibsRef.current = { bib0: null, bib1: null };
-    autoPrefillDnfBibsRef.current = [];
+    autoPrefillListBibsRef.current = [];
     setSyncResumeNonce((n) => n + 1);
   }
 
   // Once backend roundtrip marks bibs as blocked, remove them from temporary suppression.
   useEffect(() => {
-    setSuppressedDnfBibs((prev) => {
+    setRecentlySavedBibs((prev) => {
       if (prev.size === 0) return prev;
 
       let changed = false;
@@ -350,7 +350,7 @@ export default function EliminationScoring({
     setLap(1);
     setRows([{ sel: null, input: "" }]);
     setError(null);
-    setSuppressedDnfBibs(new Set());
+    setRecentlySavedBibs(new Set());
 
     closeMissingStartersDialog();
     pendingSaveRef.current = null;
@@ -360,7 +360,7 @@ export default function EliminationScoring({
     prevLiveLapRef.current = null;
     syncOverwriteBlockedRef.current = false;
     autoPrefillBibsRef.current = { bib0: null, bib1: null };
-    autoPrefillDnfBibsRef.current = [];
+    autoPrefillListBibsRef.current = [];
 
     setTimeout(() => inputRefs.current[0]?.focus(), 0);
   }, [race.id, resetKey]);
@@ -396,38 +396,28 @@ export default function EliminationScoring({
     return parsedBibs.length > 0;
   }, [mode, parsedBibs.length, hasBlockedSelection]);
 
-  // DNF suggestions are derived from live lap deficits directly:
-  // - bibs: all riders with the greatest positive lap deficit (+x laps)
-  // - deficit: that exact shared +laps value for this proposed group
-  //
-  // This keeps lap prefill and bib prefill coupled to the same group.
-  const suggestedMostBehindDnfGroup = useMemo(() => {
-    const entries = Array.from(lappedIndicationByBib?.entries?.() ?? []).filter(([bib, deficit]) => {
-      return bib > 0 && Number.isFinite(deficit) && deficit > 0 && !isBibBlocked(bib) && !suppressedDnfBibs.has(bib);
-    });
+  // DNF proposal from the live feed: the riders furthest behind (rule: suggestDnfGroup in
+  // domain/liveScoring.ts). Riders recorded in this session are excluded until the
+  // server roundtrip marks them as blocked, so the next group is proposed right away.
+  // Bib prefill and lap prefill both use this one group, so they always match.
+  const suggestedMostBehindDnfGroup = useMemo(
+    () => suggestDnfGroup(lappedIndicationByBib ?? new Map(), new Set([...(blockedBibs ?? []), ...recentlySavedBibs])),
+    [lappedIndicationByBib, blockedBibs, recentlySavedBibs],
+  );
 
-    if (!entries.length) return { bibs: [] as number[], deficit: null as number | null };
-
-    const maxDeficit = entries.reduce((max, [, deficit]) => (deficit > max ? deficit : max), 0);
-    if (maxDeficit <= 0) return { bibs: [] as number[], deficit: null as number | null };
-
-    const bibs = entries
-      .filter(([, deficit]) => deficit === maxDeficit)
-      .map(([bib]) => bib)
-      .sort((a, b) => a - b);
-
-    return {
-      bibs,
-      deficit: bibs.length ? maxDeficit : null,
-    };
-  }, [lappedIndicationByBib, blockedBibs, suppressedDnfBibs]);
+  // DNS proposal from the live feed: riders without a completed lap, from live lap 2 on
+  // (rule: suggestDnsBibs in domain/liveScoring.ts).
+  const suggestedDnsBibs = useMemo(
+    () => suggestDnsBibs(liveZeroLapBibs, liveLapCount ?? null, new Set([...(blockedBibs ?? []), ...recentlySavedBibs])),
+    [liveZeroLapBibs, liveLapCount, blockedBibs, recentlySavedBibs],
+  );
 
   // ---------------------------------------------------------------------------
   // Live sync handling (lap + prefill)
   // ---------------------------------------------------------------------------
   const prevLiveLapRef = useRef<number | null>(null);
   const autoPrefillBibsRef = useRef<{ bib0: number | null; bib1: number | null }>({ bib0: null, bib1: null });
-  const autoPrefillDnfBibsRef = useRef<number[]>([]);
+  const autoPrefillListBibsRef = useRef<number[]>([]);
 
   function areNumberArraysEqual(a: number[], b: number[]): boolean {
     if (a === b) return true;
@@ -455,7 +445,7 @@ export default function EliminationScoring({
     prevLiveLapRef.current = null;
     syncOverwriteBlockedRef.current = false;
     autoPrefillBibsRef.current = { bib0: null, bib1: null };
-    autoPrefillDnfBibsRef.current = [];
+    autoPrefillListBibsRef.current = [];
   }, [syncEnabled]);
 
   // If sync is enabled: always align lap with the live lap count.
@@ -543,15 +533,13 @@ export default function EliminationScoring({
     if (!isDnf) return;
     if (liveLapCount == null) return;
 
-    const liveLapInt = Math.max(1, Math.floor(Number(liveLapCount)));
-
     // Couple lap calculation to the actually proposed group.
     // Primary source: current computed suggestion group.
     // Fallback source: last auto-prefilled DNF bib group currently shown in inputs
     // (useful during transient backend/sync gaps).
     const sourceBibs = suggestedMostBehindDnfGroup.bibs.length
       ? suggestedMostBehindDnfGroup.bibs
-      : autoPrefillDnfBibsRef.current;
+      : autoPrefillListBibsRef.current;
 
     if (!sourceBibs.length) return;
 
@@ -567,19 +555,21 @@ export default function EliminationScoring({
     if (deficits.length !== 1) return;
 
     const sharedDeficit = deficits[0];
-    const dnfLap = Math.max(1, liveLapInt - sharedDeficit);
+    const dnfLap = dnfLapForDeficit(liveLapCount, sharedDeficit);
     setLap((prev) => (prev === dnfLap ? prev : dnfLap));
   }, [syncEnabled, isDnf, liveLapCount, suggestedMostBehindDnfGroup, lappedIndicationByBib, syncResumeNonce]);
 
-  // Prefill DNF rows from the shared live lap-gap group (computed in ScoringViewModel).
+  // Prefill the bib rows in DNF and DNS mode from the live proposals (sync on):
+  // - DNF: the riders furthest behind (suggestedMostBehindDnfGroup)
+  // - DNS: the riders without a completed lap (suggestedDnsBibs)
   // UX rule: never override manual input. We only replace rows when they are empty
-  // or still equal to the previous auto suggestion.
+  // or still equal to the previous auto suggestion, so the list follows the feed.
   useEffect(() => {
     if (!syncEnabled) return;
     if (syncOverwriteBlockedRef.current) return;
-    if (!isDnf) return;
 
-    const suggested = suggestedMostBehindDnfGroup.bibs;
+    const suggested = isDnf ? suggestedMostBehindDnfGroup.bibs : isDns ? suggestedDnsBibs : null;
+    if (suggested == null) return;
 
     if (!suggested.length) {
       setRows((prev) => {
@@ -587,9 +577,9 @@ export default function EliminationScoring({
           new Set(prev.map((r) => r.sel?.bib ?? bibToInt(r.input)).filter((b): b is number => b != null)),
         );
 
-        if (!areNumberArraysEqual(currentBibs, autoPrefillDnfBibsRef.current)) return prev;
+        if (!areNumberArraysEqual(currentBibs, autoPrefillListBibsRef.current)) return prev;
 
-        autoPrefillDnfBibsRef.current = [];
+        autoPrefillListBibsRef.current = [];
         return [{ sel: null, input: "" }];
       });
       return;
@@ -601,7 +591,7 @@ export default function EliminationScoring({
       );
 
       const canOverride =
-        currentBibs.length === 0 || areNumberArraysEqual(currentBibs, autoPrefillDnfBibsRef.current);
+        currentBibs.length === 0 || areNumberArraysEqual(currentBibs, autoPrefillListBibsRef.current);
       if (!canOverride) return prev;
 
       const prefilled = suggested
@@ -610,7 +600,7 @@ export default function EliminationScoring({
         .map((x) => ({ sel: x.sel, input: String(x.bib) }));
 
       const nextBibs = prefilled.map((x) => x.sel.bib).filter((b): b is number => b != null);
-      autoPrefillDnfBibsRef.current = nextBibs;
+      autoPrefillListBibsRef.current = nextBibs;
 
       const hasTrailingEmpty =
         prev.length > 0 && !prev[prev.length - 1]?.sel && !String(prev[prev.length - 1]?.input ?? "").trim();
@@ -618,7 +608,7 @@ export default function EliminationScoring({
 
       return [...prefilled, { sel: null, input: "" }];
     });
-  }, [syncEnabled, isDnf, suggestedMostBehindDnfGroup, starterByBib, blockedBibs, syncResumeNonce]);
+  }, [syncEnabled, isDnf, isDns, suggestedMostBehindDnfGroup, suggestedDnsBibs, starterByBib, blockedBibs, syncResumeNonce]);
 
   const selectedIds = useMemo(() => {
     const ids = new Set<string>();
@@ -761,37 +751,9 @@ export default function EliminationScoring({
 
   function clearNow() {
     requestSyncResume();
-    setSuppressedDnfBibs(new Set());
+    setRecentlySavedBibs(new Set());
     setError(null);
     resetRows();
-  }
-
-  /**
-   * DNS helper: prefill rows with all bibs that still have 0 laps in the live feed.
-   * (These bibs are computed in the page view model and passed in via `liveZeroLapBibs`.)
-   */
-  function insertZeroLapBibs() {
-    const list = Array.from(
-      new Set(
-        (Array.isArray(liveZeroLapBibs) ? liveZeroLapBibs : [])
-          .map((b) => Math.floor(Number(b)))
-          .filter((b) => b > 0 && !isBibBlocked(b)),
-      ),
-    ).sort((a, b) => a - b);
-
-    if (!list.length) return;
-
-    setError(null);
-    setRows(() => {
-      const prefilled = list
-        .map((bib) => ({ bib, sel: resolveOrPlaceholder(String(bib)) }))
-        .filter((x) => x.sel != null)
-        .map((x) => ({ sel: x.sel, input: String(x.bib) }));
-
-      return [...prefilled, { sel: null, input: "" }];
-    });
-
-    focusIndex(0);
   }
 
   function getMissingStarterBibs(bibs: number[]): number[] {
@@ -837,7 +799,7 @@ export default function EliminationScoring({
       onAddRaceActivity(toDnfActivity(lapNum, bibs));
 
       // Prevent immediate re-prefill of just-saved bibs before raceResults/blockedBibs update arrives.
-      setSuppressedDnfBibs((prev) => {
+      setRecentlySavedBibs((prev) => {
         const next = new Set(prev);
         for (const bib of bibs) next.add(bib);
         return next;
@@ -852,6 +814,8 @@ export default function EliminationScoring({
       const acts = bibs.map((bib) => toDnsActivity(bib));
       if (onAddRaceActivities) onAddRaceActivities(acts);
       else for (const a of acts) onAddRaceActivity(a);
+
+      setRecentlySavedBibs((prev) => new Set([...prev, ...bibs]));
 
       setError(null);
       resetRows();
@@ -966,8 +930,8 @@ export default function EliminationScoring({
       return;
     }
 
-    if (isDnf) {
-      autoPrefillDnfBibsRef.current = [];
+    if (isDnf || isDns) {
+      autoPrefillListBibsRef.current = [];
     }
 
     focusIndex(targetIndex + 1);
@@ -1050,13 +1014,6 @@ export default function EliminationScoring({
           const isEmpty = !row.sel && !String(row.input ?? "").trim();
           if (allowAutoGrow && !isLast && isEmpty) return null;
 
-          // Show DNS helper only:
-          // - next to the FIRST bib field
-          // - when DNS mode is active
-          // - when live sync is enabled and the race already progressed (lapsComplete > 0)
-          const showInsertZeroLapButton =
-            idx === 0 && mode === "DNS" && syncEnabled && Number(liveLapCount ?? 0) > 0;
-
           const rowBib = row.sel?.bib ?? bibToInt(row.input);
           const rowIsBlocked = isBibBlocked(rowBib);
 
@@ -1086,8 +1043,8 @@ export default function EliminationScoring({
                     if (isFixedElimMode && idx <= 1 && reason === "input") {
                       clearAutoPrefillBib(idx as 0 | 1);
                     }
-                    if (isDnf && reason === "input") {
-                      autoPrefillDnfBibsRef.current = [];
+                    if ((isDnf || isDns) && reason === "input") {
+                      autoPrefillListBibsRef.current = [];
                     }
 
                     setRows((prev) => {
@@ -1132,8 +1089,8 @@ export default function EliminationScoring({
                     if (isFixedElimMode && idx <= 1) {
                       clearAutoPrefillBib(idx as 0 | 1);
                     }
-                    if (isDnf) {
-                      autoPrefillDnfBibsRef.current = [];
+                    if (isDnf || isDns) {
+                      autoPrefillListBibsRef.current = [];
                     }
 
                     setRows((prev) => {
@@ -1170,8 +1127,8 @@ export default function EliminationScoring({
                       return;
                     }
 
-                    if (isDnf) {
-                      autoPrefillDnfBibsRef.current = [];
+                    if (isDnf || isDns) {
+                      autoPrefillListBibsRef.current = [];
                     }
 
                     setRows((prev) => {
@@ -1192,17 +1149,6 @@ export default function EliminationScoring({
                 />
               </Box>
 
-              {showInsertZeroLapButton ? (
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={insertZeroLapBibs}
-                  disabled={!liveZeroLapBibs.length}
-                  sx={{ whiteSpace: "nowrap" }}
-                >
-                  Insert Bib with 0 Laps
-                </Button>
-              ) : null}
             </Box>
           );
         })}

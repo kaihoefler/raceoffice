@@ -12,43 +12,18 @@
 // - Kann pausiert werden (paused)
 // - Exponentielles/defensives Verhalten bei Ausfällen: nach 10 Fehlern Polling um Faktor 10 verlangsamen
 // - updatedAt wird NUR bei erfolgreichem Update gesetzt (Signal für "zuletzt erfolgreich verbunden")
+// - Request-Timeout (3x Poll-Intervall, mind. 2 s): eine hängende Anfrage zählt als Fehler
+//   und blockiert das Polling nicht dauerhaft
+//
+// Abgrenzung (bitte beibehalten):
+// - Dieser Provider ist reine Transportschicht: Abfrage, Fehler, Backoff, Pause.
+//   Er liefert das rohe `currentRace` und enthält KEINE fachlichen Scoring-Regeln.
+// - Vertrag des Feeds (Typen, pickCurrentRace): @raceoffice/domain, raceStatusFeed.ts
+// - Fachliche Auswertung (Runde, Ausscheidung, Überrundung, Zielreihenfolge):
+//   src/domain/liveScoring.ts, angebunden über pages/scoring/ScoringViewModel.tsx
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-
-/**
- * Flag-Status aus dem Live-System.
- * Hinweis: hier ist "Purple" auffällig gemischt geschrieben; evtl. kommt es so aus dem Backend.
- * `string` erlaubt unbekannte/weitere Flags ohne Type-Änderungen.
- */
-export type RaceStatusFlag = "GREEN" | "Purple" | "FINISH" | string;
-
-/**
- * Ein einzelner Fahrer/Starter im Live-Status-Feed.
- * `number` ist der Bib als String (kommt so aus dem Feed), z.B. "12".
- */
-export type RaceStatusCompetitor = {
-  number: string; // bib
-  position: number;
-  lapsComplete: number;
-  firstName: string;
-  lastName: string;
-  totalTime: string; // e.g. "0:15" or "0:15.032"
-};
-
-/**
- * Live-Rennstatus für ein Rennen.
- * Wird aus dem REST-Feed übernommen.
- */
-export type RaceStatusRace = {
-  raceName: string;
-  raceID: number;
-  flagStatus: RaceStatusFlag;
-  elapsedTime?: string;
-  timeOfDay?: string;
-  lapsComplete?: number;
-  lapsToGo?: number;
-  competitors: RaceStatusCompetitor[];
-};
+import { pickCurrentRace, type RaceStatusRace } from "@raceoffice/domain";
 
 /**
  * Interner State des Providers.
@@ -106,34 +81,10 @@ const RaceStatusContext = createContext<RaceStatusContextValue | null>(null);
  */
 type Props = {
   children: React.ReactNode;
-  /** Override the REST endpoint. Default: LIVE_RACE_STATUS_URL or http://localhost:8080/races?filter=current */
+  /** Override the REST endpoint. Default: VITE_RACE_STATUS_URL or http://localhost:8080/races?filter=current */
   url?: string;
   pollIntervalMs?: number;
 };
-
-/**
- * Extrahiert aus dem REST-Payload das "current" race.
- *
- * Erwartung:
- * - payload ist ein Array mit Race-Objekten (Backend liefert Liste)
- * Strategie:
- * - nimm das erste Element, das ein nicht-leeres flagStatus hat
- * - wenn nichts passt: null
- *
- * (Damit kann der Provider auch mit Feeds umgehen, die mehrere Rennen liefern.)
- */
-function pickCurrentRace(payload: unknown): RaceStatusRace | null {
-  const arr = Array.isArray(payload) ? (payload as any[]) : [];
-  if (!arr.length) return null;
-
-  // Prefer the first entry that actually has a flagStatus
-  for (const item of arr) {
-    const flag = String(item?.flagStatus ?? "");
-    if (flag.trim()) return item as RaceStatusRace;
-  }
-
-  return null;
-}
 
 export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Props) {
   /**
@@ -247,6 +198,15 @@ export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Pro
       const ac = new AbortController();
       inFlightRef.current = ac;
 
+      // A request the timing system never answers must not stall the feed: polls are skipped
+      // while a request is in flight, so without a timeout one hanging request would stop all
+      // further updates. The timeout counts as a normal error (errorCount, backoff).
+      const timeoutMs = Math.max(2000, effectivePollIntervalMs * 3);
+      const timeout = setTimeout(
+        () => ac.abort(new DOMException(`Timeout after ${timeoutMs} ms`, "TimeoutError")),
+        timeoutMs,
+      );
+
       try {
         const res = await fetch(resolvedUrl, { signal: ac.signal, headers: { Accept: "application/json" } });
 
@@ -293,6 +253,7 @@ export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Pro
         }));
       } finally {
         // Mark request as finished
+        clearTimeout(timeout);
         inFlightRef.current = null;
       }
     }

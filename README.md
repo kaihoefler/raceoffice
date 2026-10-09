@@ -105,7 +105,21 @@ Wo die Tests liegen:
 | `packages/p3parser` | `test/*.test.mjs` (Golden-Tests gegen `dist`) | `node --test` |
 | `apps/server` | `test/*.test.ts` (Realtime-Protokoll über echte WebSocket-/SSE-Verbindungen, Static-Serving, DocStore/SQLite, Race-Result-Export, Worker-Manager) | vitest |
 | `apps/livetracking-worker` | `src/**/*.test.ts` | vitest |
-| `apps/frontend`, `apps/livetracking-frontend` | `src/**/*.test.ts` (reine Logik) | vitest |
+| `apps/frontend` | `src/**/*.test.ts` (reine Logik, u.a. Live-Scoring-Regeln aus dem Zeitmess-Feed) | vitest |
+| `apps/livetracking-frontend` | `src/**/*.test.ts` (reine Logik) | vitest |
+| `packages/race-status-mock` | `test/*.test.ts` (Mock des Zeitmess-Feeds) | vitest |
+
+### Zeitmess-Feed ohne Zeitmessanlage
+
+Das Scoring hängt stark am Live-Feed der Zeitmessung (`http://localhost:8080/races?filter=current`). Für Entwicklung und manuelle Tests:
+
+```sh
+npm run mock:race-status                                      # Port 8080, "kein aktives Rennen"
+npm run mock:race-status -- --recording <datei.jsonl> --speed 4   # aufgezeichnetes Rennen abspielen
+npm run record:race-status -- --url http://<zeitmessung>:8080/races?filter=current --out packages/race-status-mock/recordings/<name>.jsonl --anonymize
+```
+
+Einen Stand setzt man per `PUT http://127.0.0.1:8080/__mock/frame` mit `{"race": {...}}`. Details: [`doc/architecture.md`](doc/architecture.md) (Abschnitt 6) und [`packages/race-status-mock/recordings/README.md`](packages/race-status-mock/recordings/README.md).
 
 Hinweise:
 - Der Integrationstest `apps/livetracking-worker/src/ammcProcessManager.test.ts` braucht die AMMC-Programme unter `tools/ammc/` (nicht im Git). Fehlen sie, wird er übersprungen. Mit `RACEOFFICE_REQUIRE_AMMC=1` wird das Fehlen zum Fehler.
@@ -180,6 +194,7 @@ apps/
 packages/
   domain/                 Gemeinsame Typen und Logik (Events, Races, Livetracking)
   p3parser/               MYLAPS P3 Protokoll-Parser und Client API
+  race-status-mock/       Mock + Recorder für den Live-Feed der Zeitmessung (Tests, manuelles Testen)
 
 doc/                      Projektdokumentation
 scripts/                  deploy.mjs (Deploy-Ordner für Windows-Service)

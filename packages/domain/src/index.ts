@@ -68,6 +68,14 @@ export {
   parseDelimitedText,
 } from "./starterImport.js";
 
+// External live race status feed (timing system) contract.
+export type {
+  RaceStatusCompetitor,
+  RaceStatusFlag,
+  RaceStatusRace,
+} from "./raceStatusFeed.js";
+export { pickCurrentRace } from "./raceStatusFeed.js";
+
 // LiveTracking domain model (phase 0 baseline).
 export * from "./livetracking/index.js";
 

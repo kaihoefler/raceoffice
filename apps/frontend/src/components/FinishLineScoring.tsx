@@ -38,6 +38,7 @@ import PointsBibField, { type AthleteFilterOptions } from "./PointsBibField";
 import ScoringStarterList from "./ScoringStarterList";
 
 import { useRaceStatus } from "../providers/RaceStatusProvider";
+import { buildFinishResultsFromLive } from "../domain/liveScoring";
 
 import type { Athlete, Race, RaceResult } from "@raceoffice/domain";
 
@@ -287,7 +288,6 @@ export default function FinishLineScoring({
   // Live race status (Fill from Live)
   // -------------------------
   const { currentRace } = useRaceStatus();
-  const liveCompetitors = Array.isArray(currentRace?.competitors) ? currentRace.competitors : [];
 
   const canFillFromLive = true;
   //const canFillFromLive = Number(liveMeta.lapsToGo ?? NaN) === 0;
@@ -307,49 +307,8 @@ export default function FinishLineScoring({
   function handleFillFromLive() {
     if (!canFillFromLive) return;
 
-    const raceLap = currentRace?.lapsComplete ?? null;
-
-    // Für stabile Verarbeitung sortieren wir nach Live-Position.
-    const sortedLiveCompetitors = Array.isArray(liveCompetitors)
-      ? [...liveCompetitors].sort((a, b) => (Number(a.position ?? 9999) || 9999) - (Number(b.position ?? 9999) || 9999))
-      : [];
-
-    // Build RaceResults from live competitors. This overwrites previous results.
-    const seen = new Set<number>();
-    const nextRaceResults: RaceResult[] = [];
-
-    for (let i = 0; i < sortedLiveCompetitors.length; i++) {
-      const c = sortedLiveCompetitors[i];
-      const bib = bibToInt(String(c.number ?? ""));
-      if (bib == null) continue;
-      if (seen.has(bib)) continue;
-      seen.add(bib);
-
-      const lapsCompleted = Number.isFinite(Number(c.lapsComplete)) ? Number(c.lapsComplete) : 0;
-
-      // Live-Import-Regeln für finishRank:
-      // - ohne absolvierte Runde => kein Finish-Rank
-      // - ohne gültige Position  => kein Finish-Rank
-      const hasCompletedLaps = lapsCompleted > 0;
-      const hasLivePosition = Number(c.position ?? 0) > 0;
-      const finishRank = hasCompletedLaps && hasLivePosition ? Number(c.position) : 0;
-
-      const shouldCopyTime = raceLap != null && Number.isFinite(Number(raceLap)) && lapsCompleted === Number(raceLap);
-      const finishTime = shouldCopyTime ? String(c.totalTime ?? "") : "";
-
-      nextRaceResults.push({
-        bib,
-        rank: 0,
-        points: 0,
-        dnf: false,
-        dnfLap: 0,
-        dns: false,
-        dsq: false,
-        lapsCompleted,
-        finishTime,
-        finishRank,
-      });
-    }
+    // Replaces all RaceResults with the live snapshot (see buildFinishResultsFromLive).
+    const nextRaceResults = buildFinishResultsFromLive(currentRace);
 
     if (nextRaceResults.length === 0) {
       setError("Keine Live-Ergebnisse verfügbar (keine Competitors).");

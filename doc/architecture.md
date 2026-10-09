@@ -25,11 +25,34 @@ This document focuses on the realtime document model shared by frontend and serv
 ### UI
 - Material UI theme configuration lives in `apps/frontend/src/theme.ts` (`createTheme(...)`).
 
-### Live status provider model
-- The app now uses a **single** live provider: `RaceStatusProvider`.
-- `RouterProvider` is mounted directly inside `RaceStatusProvider` (`apps/frontend/src/main.tsx`).
-- Components/hooks consume live data directly via `useRaceStatus()`.
-- Older split providers (`RaceStatusMetaProvider`, `RaceStatusCompetitorsProvider`, `RaceStatusBibProvider`, `RaceStatusTimeProvider`) were removed to simplify dependency flow.
+### Live race status feed (timing system)
+The timing system exposes the running race (laps, positions, flag, times) as a REST endpoint (default `http://localhost:8080/races?filter=current`, override with `VITE_RACE_STATUS_URL` or in the LiveRaceStatus settings dialog). The browser polls it directly every second; the RaceOffice server is not involved.
+
+The feed drives large parts of scoring:
+- lap sync
+- P1–P3 prefill in points sprints
+- elimination candidates
+- lapped riders: riders ≥ 2 laps down are marked in the starter list with "+N Laps"
+- DNF suggestions: the group furthest behind, with the DNF lap derived from it
+- DNS candidates: riders with 0 laps, prefilled in DNS mode from live lap 2 on
+- finish order
+- warnings for unknown or missing bibs
+
+It is split into layers so that the scoring rules can be tested without React, network or clock:
+
+| Layer | Where | Responsibility |
+|---|---|---|
+| Feed contract | `packages/domain/src/raceStatusFeed.ts` | `RaceStatusRace` / `RaceStatusCompetitor` types, `pickCurrentRace(payload)`. Real sample: `examples/race_status.json` |
+| Transport | `apps/frontend/src/providers/RaceStatusProvider.tsx` | polling, request timeout (3× interval, min. 2 s), error count, backoff ×10 after 10 errors, pause, URL. Exposes the raw `currentRace` via `useRaceStatus()`. **No scoring rules.** |
+| Scoring rules | `apps/frontend/src/domain/liveScoring.ts` | pure: `deriveLiveScoring(race, currentRace)`, `suggestDnfGroup` + `dnfLapForDeficit` (DNF proposal), `suggestDnsBibs` (DNS proposal), `buildStartersForBibs`, `buildFinishResultsFromLive`. Time display helpers in `domain/liveTime.ts` |
+| React adapter | `apps/frontend/src/pages/scoring/ScoringViewModel.tsx` | `useScoringViewModel`: calls `deriveLiveScoring`, keeps Set identities stable, adds UI state (`syncEnabled`) |
+| UI | `ScoringLiveColumns`, `LiveRaceStatus`, `PointsScoring`, `EliminationScoring`, `FinishLineScoring` | decide *when* to apply a hint (prefill, lap sync), record the officials' decisions |
+
+Rule of thumb: "what does the feed mean for scoring?" belongs in `liveScoring.ts`; "when does the UI react?" belongs in the components.
+
+`RouterProvider` is mounted inside `RaceStatusProvider` (`apps/frontend/src/main.tsx`), so every page can use `useRaceStatus()`. It is the only live provider; older split providers were removed.
+
+Testing the feed: see section 6 (`@raceoffice/race-status-mock`).
 
 ### Scoring page render isolation
 - `ScoringPage` was split so live subscriptions are localized in `apps/frontend/src/pages/scoring/ScoringLiveColumns.tsx`.
@@ -274,7 +297,10 @@ Main goal: show reliably after every dependency update (Dependabot) that the app
 | Server modules | `apps/server/test/*.test.ts` | static serving + SPA fallbacks (`fastify.inject()`), `DocStore` against a temp SQLite file, protocol rules (`realtimeProtocol.test.ts`), race result export, worker manager (mocked process) |
 | Server end-to-end | `apps/server/test/realtimeServer.test.ts` | real `buildApp()` on a random port with real WebSocket/SSE clients: snapshot, ack + broadcast, `rev_mismatch`, invalid frames, failed patches, persistence across restart, server-originated updates, `/current_race_result` |
 | Worker | `apps/livetracking-worker/src/**/*.test.ts` | AMM parsing, session loop status check, AMMC integration (only with binaries in `tools/ammc/`) |
-| Frontend logic | `apps/frontend`, `apps/livetracking-frontend` `src/**/*.test.ts` | pure helpers (no component rendering yet) |
+| Live scoring rules | `apps/frontend/src/domain/liveScoring.test.ts`, `liveTime.test.ts` | one block per scoring situation: no active race, before start, points race, elimination, lapped riders, unknown/missing bibs, finish order |
+| Recorded real races | `apps/frontend/src/domain/liveScoring.recordings.test.ts` | every state of every recording in `packages/race-status-mock/recordings/` must satisfy the invariants; skipped while there are no recordings |
+| Feed mock | `packages/race-status-mock/test/*.test.ts` | the mock itself: hold-until-next-set semantics, failure modes, HTTP server + CORS, replay, recordings |
+| Frontend logic | `apps/frontend`, `apps/livetracking-frontend` `src/**/*.test.ts` | other pure helpers (no component rendering yet) |
 
 Conventions:
 - Test logic as pure functions (preferably in `packages/domain`) rather than through the UI.
@@ -282,10 +308,24 @@ Conventions:
 - `apps/server/test/helpers/realtimeClient.ts` (`connectDoc(baseUrl, docId)`) is the reusable protocol client for tests (Node's global `WebSocket`, no extra dependency).
 - Regression tests for an upgrade are written **before** the version bump, run green on the old version, then on the new one.
 
+### Mocking the live race status feed (`@raceoffice/race-status-mock`)
+Model: a test **sets** what the timing system reports next. The mock answers **every** poll with that state until the next one is set. Tests describe a race as the few states their case needs and never depend on the 1-second polling.
+
+- Feed states come from the builder (`buildRace`, `competitor`, `startField`) or from recorded real races (`findRace(loadRecording(file), …)`).
+- `RaceStatusFeed`:
+  - `set(race | null)` sets the next state; `setResponse(...)` sets a failure mode instead: `httpError`, `malformedJson` or `hang`.
+  - `waitUntilServed()` waits until the client has picked up the state set last.
+- Transports, all backed by the same feed:
+  - `createFetchStub(feed)`: in-process, for component tests.
+  - `startRaceStatusMockServer()` / `HttpRaceStatusFeed`: real HTTP with CORS, for E2E.
+  - `npm run mock:race-status -- [--recording <file>]`: manual testing without a timing system, on port 8080 = the frontend's default URL.
+- `npm run record:race-status -- --url <feed> --out <file> [--anonymize]` records a real race (changed states only). See `packages/race-status-mock/recordings/README.md`.
+
 ### Gates
 - Local: `npm run verify` (typecheck → lint → `test:all` → `build:all`).
 - CI: `.github/workflows/ci.yml` runs the same checks on every push to `main` and every pull request, Dependabot PRs included. Details: `doc/build-and-deploy.md` → "Continuous Integration & Releases".
 
 ### Known gaps (planned)
-- No component tests for the React frontends (no jsdom/Testing Library yet) and no browser E2E tests. MUI upgrades are therefore only verified by `typecheck` and `build`.
+- No component tests for the React frontends (no jsdom/Testing Library yet) and no browser E2E tests. MUI upgrades are therefore only verified by `typecheck` and `build`. This includes the `RaceStatusProvider` polling behaviour (timeout, backoff, pause) and the UI reactions to the feed (lap sync, prefill).
+- No recordings of real races yet; `liveScoring.recordings.test.ts` is skipped until the first one is added.
 - The release workflow does not yet smoke-test the packaged ZIP.
