@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -7,6 +8,11 @@ export default defineConfig({
   base: "/livetracking/",
 
   plugins: [react()],
+  test: {
+    // Component tests render real pages in a browser-like DOM (see src/test/renderApp.tsx).
+    environment: "jsdom",
+    setupFiles: ["@raceoffice/test-utils/setup"],
+  },
   build: {
 
     outDir: "../server/public/livetracking",

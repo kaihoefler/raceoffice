@@ -1,6 +1,22 @@
+/**
+ * realtimeProtocol
+ * ----------------
+ * Rules of the realtime document protocol (client writes over WebSocket `/ws/:docId`):
+ * frame validation, optimistic concurrency via `baseRev`, JSON-Patch application.
+ *
+ * Pure (no I/O): the server (apps/server, RealtimeHub) persists and broadcasts around it,
+ * and the in-memory fake server used by frontend component tests applies the same rules,
+ * so both behave identically.
+ */
+
 import { applyPatch } from "fast-json-patch/index.mjs";
-import type { Operation } from "fast-json-patch/index.mjs";
-import type { Doc } from "./docStore.js";
+import type { Operation } from "fast-json-patch";
+
+/** A revisioned document: `rev` increments with every accepted write. */
+export type RealtimeDoc = {
+  rev: number;
+  data: any;
+};
 
 /**
  * Canonical websocket error codes returned to patch clients.
@@ -68,7 +84,7 @@ export function parseClientWrite(raw: string): ({ ok: true } & ClientWrite) | Pr
  * - operations are validated by fast-json-patch; invalid/failed ops reject the whole write
  * - an accepted write yields `rev + 1`
  */
-export function applyClientWrite(current: Doc, write: ClientWrite): { ok: true; next: Doc } | ProtocolRejection {
+export function applyClientWrite(current: RealtimeDoc, write: ClientWrite): { ok: true; next: RealtimeDoc } | ProtocolRejection {
   if (current.rev !== write.baseRev) {
     return { ok: false, code: "rev_mismatch", message: "Client baseRev is stale", resync: true, rev: current.rev };
   }
@@ -100,4 +116,18 @@ export function applyClientWrite(current: Doc, write: ClientWrite): { ok: true; 
   }
 
   return { ok: true, next: { rev: current.rev + 1, data: newDocument } };
+}
+
+/**
+ * Error frame sent to the writing client for a rejected write. `rev` and `retryable` are
+ * only included when the client has to re-sync (a fresh snapshot follows the frame).
+ */
+export function toErrorFrame(docId: string, rejection: ProtocolRejection): WsErrorPayload {
+  return {
+    type: "error",
+    docId,
+    code: rejection.code,
+    message: rejection.message,
+    ...(rejection.resync ? { rev: rejection.rev ?? null, retryable: true } : {}),
+  };
 }

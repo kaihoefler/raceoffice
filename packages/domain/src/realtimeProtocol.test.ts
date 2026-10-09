@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyClientWrite, parseClientWrite } from "../src/services/realtimeProtocol";
+import { applyClientWrite, parseClientWrite } from "./realtimeProtocol";
 
 describe("parseClientWrite", () => {
   it("accepts { baseRev, patch }", () => {

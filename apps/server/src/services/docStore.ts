@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { createInitialLiveTrackingDocument } from "@raceoffice/domain";
+import { initialDocumentData } from "@raceoffice/domain";
 
 /**
  * Generic persisted document envelope used by the server.
@@ -47,12 +47,10 @@ export class DocStore {
   /**
    * Loads one persisted document by id.
    *
-   * Bootstrap behavior (important for first access):
-   * - `eventList` gets a dedicated default shape (legacy core document).
-   * - known LiveTracking ids are initialized via domain defaults
-   *   (`createInitialLiveTrackingDocument`) to keep setup/session/runtime/results
-   *   strictly separated from the start.
-   * - unknown ids fall back to an empty object for backward compatibility.
+   * Bootstrap behavior (important for first access): a document that was never written
+   * starts with `initialDocumentData(id)` from @raceoffice/domain (eventList default,
+   * typed LiveTracking defaults, otherwise `{}`). The same rule is used by the fake server
+   * in frontend component tests.
    *
    * Design note:
    * - Initialization is persisted immediately so all clients observe the same
@@ -67,15 +65,7 @@ export class DocStore {
     }
 
     // Missing document path: create and persist initial state once.
-    const liveTrackingInitial = createInitialLiveTrackingDocument(id);
-
-    const initial =
-      id === "eventList"
-        ? { rev: 0, data: { activeEventId: null, events: [] } } // dedicated core default
-        : liveTrackingInitial
-          ? { rev: 0, data: liveTrackingInitial } // typed LiveTracking default
-          : { rev: 0, data: {} }; // generic fallback for unknown ids
-
+    const initial: Doc = { rev: 0, data: initialDocumentData(id) };
     this.saveDoc(id, initial);
     return initial;
   }

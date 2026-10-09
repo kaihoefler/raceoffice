@@ -1,12 +1,12 @@
 import type { FastifyBaseLogger, FastifyInstance } from "fastify";
-import type { Operation } from "fast-json-patch/index.mjs";
-import type { Doc, DocStore } from "./docStore.js";
+import type { Operation } from "fast-json-patch";
 import {
   applyClientWrite,
   parseClientWrite,
+  toErrorFrame,
   type ProtocolRejection,
-  type WsErrorPayload,
-} from "./realtimeProtocol.js";
+} from "@raceoffice/domain";
+import type { Doc, DocStore } from "./docStore.js";
 
 // SSE keeps Fastify reply handles, WS keeps raw socket handles.
 type SSEClient = { id: string; reply: any };
@@ -138,14 +138,7 @@ export class RealtimeHub {
   }
 
   private sendRejection(socket: any, docId: string, rejection: ProtocolRejection): void {
-    const payload: WsErrorPayload = {
-      type: "error",
-      docId,
-      code: rejection.code,
-      message: rejection.message,
-      ...(rejection.resync ? { rev: rejection.rev ?? null, retryable: true } : {}),
-    };
-    safeSocketSend(socket, payload);
+    safeSocketSend(socket, toErrorFrame(docId, rejection));
 
     if (rejection.resync) {
       try {

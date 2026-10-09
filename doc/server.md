@@ -192,7 +192,7 @@ When receiving `type: "error"`:
 
 ## Notes
 
-- Implementation: `apps/server/src/services/realtimeHub.ts` (transport, persistence, broadcast) and `apps/server/src/services/realtimeProtocol.ts` (pure validation/patch rules). Tested end-to-end in `apps/server/test/realtimeServer.test.ts`.
+- Implementation: `apps/server/src/services/realtimeHub.ts` (transport, persistence, broadcast) and `packages/domain/src/realtimeProtocol.ts` (pure validation/patch rules, shared with the frontend test fake). Tested end-to-end in `apps/server/test/realtimeServer.test.ts`.
 - A `remove` operation on the root path (`""`) is accepted and replaces the document with `null`. There is no per-document schema validation yet.
 - The frontend currently supports both old and new error formats for compatibility.
 - Preferred format is the unified `type: "error"` structure above.

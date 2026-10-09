@@ -13,7 +13,7 @@
   "scripts": {
     "dev": "npm --workspace @raceoffice/frontend run dev",
     "build": "npm run build:packages && npm --workspace @raceoffice/frontend run build",
-    "build:packages": "npm run build:domain && npm --workspace @raceoffice/p3parser run build && npm --workspace @raceoffice/race-status-mock run build",
+    "build:packages": "npm run build:domain && npm --workspace @raceoffice/p3parser run build && npm --workspace @raceoffice/race-status-mock run build && npm --workspace @raceoffice/test-utils run build",
     "mock:race-status": "npm run build:domain && npm --workspace @raceoffice/race-status-mock run build && node packages/race-status-mock/dist/cli/raceStatusMock.js",
     "record:race-status": "npm run build:domain && npm --workspace @raceoffice/race-status-mock run build && node packages/race-status-mock/dist/cli/recordRaceStatus.js",
     "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",

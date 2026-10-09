@@ -1,0 +1,5 @@
+{
+  // Build output (dist) without tests; `typecheck` uses tsconfig.json and still checks them.
+  "extends": "./tsconfig.json",
+  "exclude": ["src/**/*.test.ts"]
+}

@@ -1,12 +1,9 @@
 // src/main.tsx
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { CssBaseline, ThemeProvider } from "@mui/material";
 import { RouterProvider } from "react-router-dom";
 import { router } from "./router";
-import { LiveTrackingVisualizationListProvider } from "./providers/LiveTrackingVisualizationListProvider";
-import { RealtimeConnectionProvider } from "./realtime/RealtimeConnectionProvider";
-import { theme } from "./theme";
+import { AppProviders } from "./AppProviders";
 
 
 type CryptoWithOptionalRandomUUID = Crypto & {
@@ -47,14 +44,9 @@ installRandomUuidPolyfill();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <RealtimeConnectionProvider>
-        <LiveTrackingVisualizationListProvider>
-          <RouterProvider router={router} />
-        </LiveTrackingVisualizationListProvider>
-      </RealtimeConnectionProvider>
-    </ThemeProvider>
+    <AppProviders>
+      <RouterProvider router={router} />
+    </AppProviders>
   </React.StrictMode>
 );
 

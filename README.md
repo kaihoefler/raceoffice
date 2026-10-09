@@ -105,8 +105,9 @@ Wo die Tests liegen:
 | `packages/p3parser` | `test/*.test.mjs` (Golden-Tests gegen `dist`) | `node --test` |
 | `apps/server` | `test/*.test.ts` (Realtime-Protokoll über echte WebSocket-/SSE-Verbindungen, Static-Serving, DocStore/SQLite, Race-Result-Export, Worker-Manager) | vitest |
 | `apps/livetracking-worker` | `src/**/*.test.ts` | vitest |
-| `apps/frontend` | `src/**/*.test.ts` (reine Logik, u.a. Live-Scoring-Regeln aus dem Zeitmess-Feed) | vitest |
-| `apps/livetracking-frontend` | `src/**/*.test.ts` (reine Logik) | vitest |
+| `apps/frontend` | `src/**/*.test.ts(x)`: reine Logik (u.a. Live-Scoring-Regeln) und Komponententests echter Seiten (jsdom) | vitest |
+| `apps/livetracking-frontend` | `src/**/*.test.ts(x)`: reine Logik und Komponententests (jsdom) | vitest |
+| `packages/test-utils` | – (Hilfen für Komponententests: Fake-Realtime-Server, Live-Feed-Schritte, Setup) | – |
 | `packages/race-status-mock` | `test/*.test.ts` (Mock des Zeitmess-Feeds) | vitest |
 
 ### Zeitmess-Feed ohne Zeitmessanlage
@@ -195,6 +196,7 @@ packages/
   domain/                 Gemeinsame Typen und Logik (Events, Races, Livetracking)
   p3parser/               MYLAPS P3 Protokoll-Parser und Client API
   race-status-mock/       Mock + Recorder für den Live-Feed der Zeitmessung (Tests, manuelles Testen)
+  test-utils/             Hilfen für Komponententests der Frontends (Fake-Realtime-Server, Setup)
 
 doc/                      Projektdokumentation
 scripts/                  deploy.mjs (Deploy-Ordner für Windows-Service)

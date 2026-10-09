@@ -182,7 +182,6 @@ Feature logic lives in `apps/server/src/services/`:
 | Module | Responsibility |
 |---|---|
 | `realtimeHub.ts` | `RealtimeHub`: per-doc subscriber registries, `/ws/:docId` write pipeline, `/sse/:docId`, patch broadcast, `commitServerDocUpdate` for server-originated changes |
-| `realtimeProtocol.ts` | pure protocol rules: `parseClientWrite` (frame validation) and `applyClientWrite` (rev check + JSON-Patch apply), error codes |
 | `docStore.ts` | `DocStore` class: SQLite file, `docs` table, prepared statements, `loadDoc` (incl. bootstrap defaults) and `saveDoc` |
 | `staticServing.ts` | `registerStaticServing(app, { publicDir, serviceEndpoints })`: `@fastify/static`, SPA shells for `/p3test/` and `/livetracking/`, not-found handler (JSON service discovery vs. SPA `index.html`) |
 | `currentRaceResultService.ts` | payload for `GET /current_race_result` |
@@ -239,7 +238,7 @@ When a client sends an update:
   { "baseRev": number, "patch": Operation[] }
   ```
 
-Server flow (validation and patch rules are pure functions in `realtimeProtocol.ts`):
+Server flow (validation and patch rules are pure functions in `packages/domain/src/realtimeProtocol.ts`: `parseClientWrite`, `applyClientWrite`, `toErrorFrame`; shared with the fake server of the component tests):
 0. Validate the frame (`parseClientWrite`): non-JSON → `invalid_json`; anything but `{ baseRev: number, patch: [] }` (including `null`) → `invalid_payload`
 1. Load current doc (`docStore.loadDoc(docId)`)
 2. Reject if `current.rev !== baseRev` (`applyClientWrite`):
@@ -294,13 +293,15 @@ Main goal: show reliably after every dependency update (Dependabot) that the app
 |---|---|---|
 | Pure domain logic | `packages/domain/src/**/*.test.ts` | race results/ranking, activities, LiveTracking session/setup/timing engine |
 | Protocol parser | `packages/p3parser/test/*.test.mjs` (`node --test` against `dist`) | P3 binary encode/decode (golden bytes) |
-| Server modules | `apps/server/test/*.test.ts` | static serving + SPA fallbacks (`fastify.inject()`), `DocStore` against a temp SQLite file, protocol rules (`realtimeProtocol.test.ts`), race result export, worker manager (mocked process) |
+| Server modules | `apps/server/test/*.test.ts` | static serving + SPA fallbacks (`fastify.inject()`), `DocStore` against a temp SQLite file, race result export, worker manager (mocked process) |
 | Server end-to-end | `apps/server/test/realtimeServer.test.ts` | real `buildApp()` on a random port with real WebSocket/SSE clients: snapshot, ack + broadcast, `rev_mismatch`, invalid frames, failed patches, persistence across restart, server-originated updates, `/current_race_result` |
 | Worker | `apps/livetracking-worker/src/**/*.test.ts` | AMM parsing, session loop status check, AMMC integration (only with binaries in `tools/ammc/`) |
 | Live scoring rules | `apps/frontend/src/domain/liveScoring.test.ts`, `liveTime.test.ts` | one block per scoring situation: no active race, before start, points race, elimination, lapped riders, unknown/missing bibs, finish order |
 | Recorded real races | `apps/frontend/src/domain/liveScoring.recordings.test.ts` | every state of every recording in `packages/race-status-mock/recordings/` must satisfy the invariants; skipped while there are no recordings |
 | Feed mock | `packages/race-status-mock/test/*.test.ts` | the mock itself: hold-until-next-set semantics, failure modes, HTTP server + CORS, replay, recordings |
-| Frontend logic | `apps/frontend`, `apps/livetracking-frontend` `src/**/*.test.ts` | other pure helpers (no component rendering yet) |
+| Protocol rules | `packages/domain/src/realtimeProtocol.test.ts` | frame validation, rev check, JSON-Patch apply, error codes |
+| Frontend logic | `apps/frontend`, `apps/livetracking-frontend` `src/**/*.test.ts` | other pure helpers |
+| Frontend components | `apps/*/src/**/*.test.tsx` (jsdom + Testing Library) | real pages with the real provider tree via `src/test/renderApp.tsx`; realtime documents from a fake server, live feed from the race status mock |
 
 Conventions:
 - Test logic as pure functions (preferably in `packages/domain`) rather than through the UI.
@@ -321,11 +322,18 @@ Model: a test **sets** what the timing system reports next. The mock answers **e
   - `npm run mock:race-status -- [--recording <file>]`: manual testing without a timing system, on port 8080 = the frontend's default URL.
 - `npm run record:race-status -- --url <feed> --out <file> [--anonymize]` records a real race (changed states only). See `packages/race-status-mock/recordings/README.md`.
 
+### Component tests (frontends)
+- Run in jsdom with Testing Library; setup: `@raceoffice/test-utils/setup` (jest-dom matchers, cleanup, browser API stubs MUI needs).
+- `renderApp({ route, docs, feed })` in `apps/*/src/test/renderApp.tsx` renders the real provider tree (`src/AppProviders.tsx`, also used by `main.tsx`) and the real routes (`src/router.tsx` exports `routes`) at a URL.
+- Realtime documents: `installFakeRealtime()` (`@raceoffice/test-utils`) replaces the global WebSocket with an in-memory server that applies the same protocol rules and bootstrap defaults (`initialDocumentData`) as the real server. Seed documents via `docs` (fixtures in `apps/frontend/src/test/fixtures.ts`), push server-side changes with `server.update(...)`.
+- Live feed: the provider polls the race status mock every 20 ms with real timers; `await feedStep(feed, nextState)` moves the race on. Fake timers only where time itself is tested (timeout, backoff, stale indicator).
+- Query by role/label/visible text, use `userEvent`, no snapshots, no `.Mui*` class selectors, so tests survive MUI upgrades.
+
 ### Gates
 - Local: `npm run verify` (typecheck → lint → `test:all` → `build:all`).
 - CI: `.github/workflows/ci.yml` runs the same checks on every push to `main` and every pull request, Dependabot PRs included. Details: `doc/build-and-deploy.md` → "Continuous Integration & Releases".
 
 ### Known gaps (planned)
-- No component tests for the React frontends (no jsdom/Testing Library yet) and no browser E2E tests. MUI upgrades are therefore only verified by `typecheck` and `build`. This includes the `RaceStatusProvider` polling behaviour (timeout, backoff, pause) and the UI reactions to the feed (lap sync, prefill).
+- Component test infrastructure is in place (see "Component tests" above), but apart from smoke tests there are no component tests yet: the `RaceStatusProvider` polling behaviour (timeout, backoff, pause), the UI reactions to the feed (lap sync, prefill) and the MUI-heavy inputs (`PointsBibField`) are still only covered by `typecheck` and `build`. No browser E2E tests.
 - No recordings of real races yet; `liveScoring.recordings.test.ts` is skipped until the first one is added.
 - The release workflow does not yet smoke-test the packaged ZIP.

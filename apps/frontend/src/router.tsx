@@ -1,5 +1,5 @@
 // src/router.tsx
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, type RouteObject } from "react-router-dom";
 
 import ActiveEventPage from "./pages/ActiveEventPage";
 import AboutPage from "./pages/AboutPage";
@@ -11,7 +11,8 @@ import VisualizerPage from "./pages/VisualizerPage";
 import AppLayout from "./ui/AppLayout";
 import VisualizationLayout from "./ui/VisualizationLayout";
 
-export const router = createBrowserRouter([
+/** Route table; component tests mount it with createMemoryRouter (src/test/renderApp.tsx). */
+export const routes: RouteObject[] = [
   {
     element: <AppLayout />,
     children: [
@@ -33,5 +34,7 @@ export const router = createBrowserRouter([
       { path: "/visualizer/:visualizationId", element: <VisualizerPage /> },
     ],
   },
-]);
+];
+
+export const router = createBrowserRouter(routes);
 

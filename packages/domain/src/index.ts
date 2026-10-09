@@ -68,6 +68,19 @@ export {
   parseDelimitedText,
 } from "./starterImport.js";
 
+// Realtime document protocol rules and document bootstrap (shared by server and test fakes).
+export {
+  applyClientWrite,
+  parseClientWrite,
+  toErrorFrame,
+  type ClientWrite,
+  type ProtocolRejection,
+  type RealtimeDoc,
+  type WsErrorCode,
+  type WsErrorPayload,
+} from "./realtimeProtocol.js";
+export { initialDocumentData } from "./documentBootstrap.js";
+
 // External live race status feed (timing system) contract.
 export type {
   RaceStatusCompetitor,
