@@ -1,6 +1,9 @@
 import React, { Fragment, useEffect, useMemo, useState } from "react";
 
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Autocomplete,
   Box,
   Button,
@@ -32,6 +35,7 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import TuneIcon from "@mui/icons-material/Tune";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
   canIssueLiveTrackingCommand,
   createLiveTrackingCommand,
@@ -306,7 +310,47 @@ function ManageListDialog({
   );
 }
 
-type SetupOption = LiveTrackingSetupEntry & { inputValue?: string };
+/**
+ * Collapsible debug view of a realtime document. Collapsed by default and unmounted while
+ * collapsed: session and runtime change several times per second during a race, and
+ * stringifying and re-rendering their JSON on every update is wasted work while nobody looks.
+ */
+function DocumentJsonAccordion({ title, value }: { title: string; value: unknown }) {
+  return (
+    <Accordion disableGutters variant="outlined" slotProps={{ transition: { unmountOnExit: true } }} sx={{ mt: 1 }}>
+      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+        <Typography variant="subtitle2">{title}</Typography>
+      </AccordionSummary>
+      <AccordionDetails>
+        <DocumentJson value={value} />
+      </AccordionDetails>
+    </Accordion>
+  );
+}
+
+// Separate component so JSON.stringify only runs while the accordion content is mounted.
+function DocumentJson({ value }: { value: unknown }) {
+  const json = useMemo(() => (value ? JSON.stringify(value, null, 2) : "—"), [value]);
+  return (
+    <Box
+      component="pre"
+      sx={{
+        m: 0,
+        p: 1,
+        borderRadius: 1,
+        bgcolor: "grey.100",
+        fontFamily: "monospace",
+        fontSize: 12,
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+      }}
+    >
+      {json}
+    </Box>
+  );
+}
+
+type SetupOption =LiveTrackingSetupEntry & { inputValue?: string };
 
 const filterSetupOptions = createFilterOptions<SetupOption>({ stringify: (o) => `${o.name} ${o.setupId}` });
 
@@ -336,8 +380,6 @@ export default function LiveTrackingControlPage() {
     () => (session ? { ...session, commandQueue: (session.commandQueue ?? []).slice(-2) } : null),
     [session],
   );
-  const sessionJson = useMemo(() => (sessionForDebug ? JSON.stringify(sessionForDebug, null, 2) : "—"), [sessionForDebug]);
-  const runtimeJson = useMemo(() => (runtime ? JSON.stringify(runtime, null, 2) : "—"), [runtime]);
 
 
   const invalidReasonCounts = useMemo(() => {
@@ -393,7 +435,6 @@ export default function LiveTrackingControlPage() {
     }
     return map;
   }, [participantPoolDoc]);
-  const setupJson = useMemo(() => (setupDoc ? JSON.stringify(setupDoc, null, 2) : "—"), [setupDoc]);
 
   const [setupDraft, setSetupDraft] = useState<SetupDraft | null>(null);
   const [workerControlBusy, setWorkerControlBusy] = useState(false);
@@ -1289,61 +1330,10 @@ export default function LiveTrackingControlPage() {
             </Stack>
           )}
 
-          <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>
-            Session Document
-          </Typography>
-          <Box
-            component="pre"
-            sx={{
-              m: 0,
-              p: 1,
-              borderRadius: 1,
-              bgcolor: "grey.100",
-              fontFamily: "monospace",
-              fontSize: 12,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-            }}
-          >
-            {sessionJson}
-          </Box>
-
-          <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>
-            Setup Document
-          </Typography>
-          <Box
-            component="pre"
-            sx={{
-              m: 0,
-              p: 1,
-              borderRadius: 1,
-              bgcolor: "grey.100",
-              fontFamily: "monospace",
-              fontSize: 12,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-            }}
-          >
-            {setupJson}
-          </Box>
-
-          <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>
-            Runtime Document
-          </Typography>
-          <Box
-            component="pre"
-            sx={{
-              m: 0,
-              p: 1,
-              borderRadius: 1,
-              bgcolor: "grey.100",
-              fontFamily: "monospace",
-              fontSize: 12,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-            }}
-          >
-            {runtimeJson}
+          <Box sx={{ mt: 2 }}>
+            <DocumentJsonAccordion title="Session Document" value={sessionForDebug} />
+            <DocumentJsonAccordion title="Setup Document" value={setupDoc} />
+            <DocumentJsonAccordion title="Runtime Document" value={runtime} />
           </Box>
 
         </CardContent>

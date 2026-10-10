@@ -84,6 +84,20 @@ describe("LiveTrackingControlPage setup editor", () => {
     expect(storedSetup().track.timingPoints.find((p) => p.id === "p1")?.decoderTimestampOffsetSecs).toBe(-1.25);
   });
 
+  it("renders the debug document JSON only while its accordion is expanded", async () => {
+    const { user } = renderSetupEditor();
+
+    const setupToggle = await screen.findByRole("button", { name: "Setup Document" });
+    expect(setupToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/"name": "Test track"/)).not.toBeInTheDocument();
+
+    await user.click(setupToggle);
+    expect(await screen.findByText(/"name": "Test track"/)).toBeInTheDocument();
+
+    await user.click(setupToggle);
+    await waitFor(() => expect(screen.queryByText(/"name": "Test track"/)).not.toBeInTheDocument());
+  });
+
   it("shows the derived simulator delays of a simulated timing point read-only", async () => {
     renderSetupEditor();
 
