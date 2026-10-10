@@ -1089,7 +1089,7 @@ export default function FinishLineScoring({
           </DialogContentText>
 
           {/* Liste der Bibs als Chips */}
-          <Stack direction="row" flexWrap="wrap" gap={1}>
+          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
             {missingDialogBibs.map((bib) => (
               <Chip key={bib} label={bib} />
             ))}

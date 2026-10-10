@@ -394,7 +394,7 @@ export default function ActiveEventPage() {
         <Divider />
         <CardContent>
           {/* Titelzeile + Action “New race” */}
-          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+          <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 2 }}>
             <Typography variant="h6">Races</Typography>
 
             {/* “New race” IconButton (Tooltip + span Wrapper ist MUI-Pattern, falls disabled) */}

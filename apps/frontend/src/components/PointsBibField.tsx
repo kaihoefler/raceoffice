@@ -95,11 +95,11 @@ export default function PointsBibField({
       autoHighlight
       openOnFocus={false}
       freeSolo
-      isOptionEqualToValue={(o, v) => o.id === v.id}
+      isOptionEqualToValue={(o, v) => typeof v !== "string" && o.id === v.id}
       getOptionLabel={(o) => (typeof o === "string" ? o : String(o.bib ?? ""))}
       renderOption={(props, o) => <li {...props}>{formatOption(o)}</li>}
       renderInput={(params) => {
-        const { inputProps, InputProps, InputLabelProps, ...rest } = params;
+        const { slotProps, ...rest } = params;
 
         return (
           <TextField
@@ -151,25 +151,25 @@ export default function PointsBibField({
             }
             slotProps={{
               input: {
-                ...InputProps,
+                ...slotProps.input,
                 endAdornment: (
                   <>
                     {nameAdornment}
-                    {InputProps?.endAdornment}
+                    {slotProps.input.endAdornment}
                   </>
                 ),
               },
-              inputLabel: InputLabelProps,
+              inputLabel: slotProps.inputLabel,
               htmlInput: {
-                ...inputProps,
+                ...slotProps.htmlInput,
                 inputMode: "numeric",
                 "aria-label": ariaLabel,
                 onFocus: (e: FocusEvent<HTMLInputElement>) => {
-                  inputProps.onFocus?.(e);
+                  slotProps.htmlInput.onFocus?.(e);
                   setIsFocused(true);
                 },
                 onBlur: (e: FocusEvent<HTMLInputElement>) => {
-                  inputProps.onBlur?.(e);
+                  slotProps.htmlInput.onBlur?.(e);
                   setIsFocused(false);
                 },
               },

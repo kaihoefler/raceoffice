@@ -974,7 +974,7 @@ export default function LiveTrackingControlPage() {
               </Stack>
 
               {/* Decoder-Backend */}
-              <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems="flex-start">
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ alignItems: "flex-start" }}>
                 <TextField
                   size="small"
                   select
@@ -995,7 +995,7 @@ export default function LiveTrackingControlPage() {
               {/* P3 Discovery (nur bei p3parser) */}
               {setupDraft.decoderBackend === "p3parser" && (
                 <Stack spacing={1}>
-                  <Stack direction="row" spacing={1} alignItems="center">
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                     <Button variant="outlined" size="small" onClick={() => { void scanP3Decoders(); }} disabled={p3ScanLoading}>
                       {p3ScanLoading ? "Scanning…" : "P3 Decoder scannen"}
                     </Button>
@@ -1199,7 +1199,7 @@ export default function LiveTrackingControlPage() {
               {/* Verknüpfte Pools: Namensanzeige aus liveTrackingList, aktiver Pool markiert */}
               <Stack spacing={0.5}>
                 <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <Typography variant="body2" color="text.secondary" fontWeight="medium">
+                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: "medium" }}>
                     Participant Pools
                   </Typography>
                   <Button

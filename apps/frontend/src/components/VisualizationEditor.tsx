@@ -28,7 +28,7 @@ import {
   Typography,
 } from "@mui/material";
 
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutlineOutlined";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
@@ -662,7 +662,7 @@ export default function VisualizationEditor({ open, mode, visualizationId, onCan
 
             <Stack spacing={1.5}>
               {columns.map((column, idx) => (
-                <Stack key={idx} direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ md: "flex-start" }}>
+                <Stack key={idx} direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ alignItems: { md: "flex-start" } }}>
                   <Stack direction={{ xs: "row", md: "column" }} spacing={1} sx={{ pt: { md: 0.5 } }}>
                     <IconButton
                       size="small"

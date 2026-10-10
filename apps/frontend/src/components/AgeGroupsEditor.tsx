@@ -126,7 +126,7 @@ export default function AgeGroupsEditor({ value, onChange, eventId, title = "Age
 
     return (
         <Box sx={{ mt: 1 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+            <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1 }}>
                 <Typography variant="h6">{title}</Typography>
                 <IconButton onClick={addRow} size="small" aria-label="Add age group">
                     <AddIcon />

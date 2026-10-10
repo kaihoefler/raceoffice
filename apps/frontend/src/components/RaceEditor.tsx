@@ -326,7 +326,7 @@ export default function RaceEditor({ open, mode, eventId, ageGroups, initialRace
               }
             />
 
-            <Stack direction="row" spacing={1} alignItems="center">
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
               {showRefreshName && (
                 <Button variant="outlined" onClick={handleRefreshName}>
                   Refresh name

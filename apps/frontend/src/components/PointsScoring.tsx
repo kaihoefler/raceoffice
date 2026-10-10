@@ -1210,7 +1210,7 @@ export default function PointsScoring({
             Folgende Startnummer(n) sind im Rennen noch nicht als Starter enthalten. Sollen diese angelegt werden?
           </DialogContentText>
 
-          <Stack direction="row" flexWrap="wrap" gap={1}>
+          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
             {missingDialogBibs.map((bib) => (
               <Chip key={bib} label={bib} />
             ))}

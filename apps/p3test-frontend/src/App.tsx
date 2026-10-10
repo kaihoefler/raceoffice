@@ -546,7 +546,7 @@ export default function App() {
               </Button>
             </Stack>
 
-                        <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems="flex-start">
+                        <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ alignItems: "flex-start" }}>
               <TextField
                 size="small"
                 label="Decoder ID"

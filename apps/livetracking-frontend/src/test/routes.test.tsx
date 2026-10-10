@@ -20,11 +20,14 @@ const ROUTES: Array<[route: string, marker: () => Promise<HTMLElement>, pathname
 
 describe("route smoke test", () => {
   let consoleError: MockInstance;
+  let consoleWarn: MockInstance;
   beforeEach(() => {
     consoleError = vi.spyOn(console, "error");
+    consoleWarn = vi.spyOn(console, "warn");
   });
   afterEach(() => {
     consoleError.mockRestore();
+    consoleWarn.mockRestore();
   });
 
   it.each(ROUTES)("%s renders its page", async (route, marker, pathname = `/livetracking${route}`) => {
@@ -32,8 +35,10 @@ describe("route smoke test", () => {
 
     expect(await marker()).toBeInTheDocument();
     expect(router.state.location.pathname).toBe(pathname);
-    // Rendering errors (route error boundary) and React/MUI warnings both go to console.error.
+    // Rendering errors (route error boundary) and React warnings go to console.error, MUI usage
+    // warnings (e.g. a deprecated or misused prop) to console.error or console.warn.
     expect(screen.queryByText(/Unexpected Application Error/)).not.toBeInTheDocument();
     expect(consoleError.mock.calls.map((c) => String(c[0]).slice(0, 300))).toEqual([]);
+    expect(consoleWarn.mock.calls.map((c) => String(c[0]).slice(0, 300))).toEqual([]);
   });
 });
