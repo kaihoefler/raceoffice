@@ -886,8 +886,9 @@ export default function FinishLineScoring({
                 }
               }}
               onSelect={(next) => {
-                // Auswahl aus Dropdown
-                setError(null);
+                // Auswahl aus Dropdown. Den Fehler nicht zurücksetzen: Enter löst (freeSolo) auch
+                // onSelect aus, und zwar zusammen mit onEnter, das gerade einen Fehler gesetzt haben kann
+                // (z.B. Startnummer schon im Ziel). Beim Tippen setzt onInputValueChange ihn zurück.
                 setSelBib(next);
                 setBibInput(next?.bib != null ? String(next.bib) : "");
               }}

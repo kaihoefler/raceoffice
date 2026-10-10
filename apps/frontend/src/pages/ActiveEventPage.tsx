@@ -413,10 +413,10 @@ export default function ActiveEventPage() {
           <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mb: 2 }}>
             {/* AgeGroup Filter */}
             <FormControl size="small" sx={{ minWidth: 220 }}>
-              <InputLabel>Age Group</InputLabel>
+              <InputLabel id="race-filter-age-group-label">Age Group</InputLabel>
               <Select
                 size="small"
-                label="Age Group"
+                labelId="race-filter-age-group-label" label="Age Group"
                 value={ageGroupFilter}
                 onChange={(e) => setAgeGroupFilter(e.target.value)}
               >
@@ -431,8 +431,8 @@ export default function ActiveEventPage() {
 
             {/* Stage Filter */}
             <FormControl size="small" sx={{ minWidth: 200 }}>
-              <InputLabel>Stage</InputLabel>
-              <Select size="small" label="Stage" value={stageFilter} onChange={(e) => setStageFilter(e.target.value as any)}>
+              <InputLabel id="race-filter-stage-label">Stage</InputLabel>
+              <Select size="small" labelId="race-filter-stage-label" label="Stage" value={stageFilter} onChange={(e) => setStageFilter(e.target.value as any)}>
                 <MenuItem value="all">All</MenuItem>
                 <MenuItem value="">(none)</MenuItem>
                 <MenuItem value="heat">heat</MenuItem>
@@ -443,10 +443,10 @@ export default function ActiveEventPage() {
 
             {/* RaceMode Filter */}
             <FormControl size="small" sx={{ minWidth: 220 }}>
-              <InputLabel>Race Mode</InputLabel>
+              <InputLabel id="race-filter-mode-label">Race Mode</InputLabel>
               <Select
                 size="small"
-                label="Race Mode"
+                labelId="race-filter-mode-label" label="Race Mode"
                 value={modeFilter}
                 onChange={(e) => setModeFilter(e.target.value as any)}
               >

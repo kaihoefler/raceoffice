@@ -131,6 +131,9 @@ export default function RaceEditor({ open, mode, eventId, ageGroups, initialRace
   // we must NOT let the auto-name effect overwrite it on the first open render.
   const hasPrefilledNameTemplate = mode === "new" && Boolean(String(initialRace?.name ?? "").trim());
 
+  // Set by the init effect: the auto-name effect runs in the same commit, but still sees the
+  // previous fields and nameLocked; it must not overwrite the name the init effect just set.
+  const justInitializedRef = useRef(false);
 
   // Initialize whenever we open / switch initialRace / mode
   useEffect(() => {
@@ -148,7 +151,16 @@ export default function RaceEditor({ open, mode, eventId, ageGroups, initialRace
     setDistanceValue(initialRace?.distance_value ?? "");
     setRaceMode(initialRace?.racemode ?? { isPointsRace: false, isEliminationRace: false });
 
-        if (mode === "new") {
+    // Auto name of the fields as they are being initialized (the autoName memo still has the old ones).
+    const computedAtOpen = buildAutoName({
+      ageGroup: ageGroups.find((ag) => ag.id === nextAgeGroupId) ?? null,
+      distance_value: initialRace?.distance_value ?? "",
+      racemode: initialRace?.racemode ?? { isPointsRace: false, isEliminationRace: false },
+      stage: initialRace?.stage ?? "heat",
+      stage_value: initialRace?.stage_value ?? "",
+    });
+
+    if (mode === "new") {
       // For new (incl. "copy/next"), let the name be auto-managed by default.
       // BUT: if a template provides a name (e.g. from LiveRace), we prefill and lock it.
       const initialName = String(initialRace?.name ?? "").trim();
@@ -158,33 +170,31 @@ export default function RaceEditor({ open, mode, eventId, ageGroups, initialRace
         setNameLocked(true);
       } else {
         setNameLocked(false);
-        setName(""); // will be filled by autoName effect
+        setName(computedAtOpen);
       }
     } else {
-
+      // Edit: keep the stored name; it stays auto-managed only if it equals the generated one.
       const initialName = initialRace?.name ?? "";
       setName(initialName);
-
-      const initialAg = ageGroups.find((ag) => ag.id === nextAgeGroupId) ?? null;
-      const computedAtOpen = buildAutoName({
-        ageGroup: initialAg,
-        distance_value: initialRace?.distance_value ?? "",
-        racemode: initialRace?.racemode ?? { isPointsRace: false, isEliminationRace: false },
-        stage: initialRace?.stage ?? "heat",
-        stage_value: initialRace?.stage_value ?? "",
-      });
-
       setNameLocked(initialName.trim().length > 0 && initialName.trim() !== computedAtOpen.trim());
     }
 
+    justInitializedRef.current = true;
     setTimeout(() => nameInputRef.current?.focus(), 0);
-  }, [open, mode, initialRace, ageGroups]);
+    // Not on ageGroups: it is a new array after every realtime update of the event (e.g. another
+    // operator scoring), and re-initializing would throw away what the user is typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mode, initialRace]);
 
     // Auto-update name when fields change, but only if name is not locked.
   // IMPORTANT: when creating a new race from a template that already has a name,
   // we keep that name (locked) and do not overwrite it with autoName.
   useEffect(() => {
     if (!open) return;
+    if (justInitializedRef.current) {
+      justInitializedRef.current = false;
+      return;
+    }
     if (hasPrefilledNameTemplate) return;
     if (nameLocked) return;
     setName(autoName);
@@ -218,16 +228,16 @@ export default function RaceEditor({ open, mode, eventId, ageGroups, initialRace
 
   return (
     <Box sx={{ mt: 3 }}>
-      <Card variant="outlined">
+      <Card variant="outlined" component="section" aria-label={mode === "edit" ? "Edit Race" : "New Race"}>
         <CardHeader title={mode === "edit" ? "Edit Race" : "New Race"} />
         <Divider />
         <CardContent>
           <Stack spacing={2}>
             <FormControl size="small" fullWidth>
-              <InputLabel>Age Group</InputLabel>
+              <InputLabel id="race-editor-age-group-label">Age Group</InputLabel>
               <Select
                 size="small"
-                label="Age Group"
+                labelId="race-editor-age-group-label" label="Age Group"
                 value={ageGroupId}
                 onChange={(e) => setAgeGroupId(e.target.value)}
               >
@@ -241,10 +251,10 @@ export default function RaceEditor({ open, mode, eventId, ageGroups, initialRace
 
             <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
               <FormControl size="small" fullWidth>
-                <InputLabel>Stage</InputLabel>
+                <InputLabel id="race-editor-stage-label">Stage</InputLabel>
                 <Select
                   size="small"
-                  label="Stage"
+                  labelId="race-editor-stage-label" label="Stage"
                   value={stage}
                   onChange={(e) => {
                     const nextStage = e.target.value as RaceStage;
