@@ -333,7 +333,8 @@ Model: a test **sets** what the timing system reports next. The mock answers **e
 - What exists:
   - Route smoke tests (`src/test/routes.test.tsx` in both apps): every route renders its page, and nothing is logged via `console.error`. React and MUI report rendering errors and deprecations there, so an upgrade that only warns already fails the test.
   - Scenario tests (`apps/frontend/src/test/scenarios/`): a recorded real race, scored state by state as agreed with the race office (elimination and points interpretation). Each has a Markdown table next to it that is the source of truth.
-  - Component tests next to the component or page (`*.test.tsx`): the live sync toggle and connection settings, `PointsBibField` (the MUI Autocomplete contract), manual finish entry, the race list with its filters and the race editor, inline starter editing, the LiveTracking setup editor.
+  - `RaceStatusProvider` (`src/providers/RaceStatusProvider.test.tsx`, fake timers): polling interval, errors keep the last state, backoff after 10 errors, request timeout, pause, URL change.
+  - Component tests next to the component or page (`*.test.tsx`): the live sync toggle, connection settings and feed failure warning, `PointsBibField` (the MUI Autocomplete contract), manual finish entry, the race list with its filters and the race editor, inline starter editing, the LiveTracking setup editor.
 - MUI API style: text field attributes go through `slotProps` (`htmlInput`, `input`, `inputLabel`), not the deprecated `inputProps`/`InputProps`/`InputLabelProps`; a `Select` gets a `labelId` so its accessible name is its label.
 
 ### Gates
@@ -341,6 +342,5 @@ Model: a test **sets** what the timing system reports next. The mock answers **e
 - CI: `.github/workflows/ci.yml` runs the same checks on every push to `main` and every pull request, Dependabot PRs included. Details: `doc/build-and-deploy.md` → "Continuous Integration & Releases".
 
 ### Known gaps (planned)
-- `RaceStatusProvider` timing behaviour (request timeout, backoff after errors, stale indicator) has no test yet; it needs fake timers.
 - No browser E2E tests (Playwright with the race status mock HTTP server is planned).
 - The release workflow does not yet smoke-test the packaged ZIP.

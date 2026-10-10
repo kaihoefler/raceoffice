@@ -50,6 +50,28 @@ describe("live sync toggle", () => {
     expect(syncToggle()).toBeDisabled();
   });
 
+  it("warns while the timing system fails, keeps the last state and sync, and recovers", async () => {
+    const { feed, user } = renderScoring();
+
+    await feedStep(feed, buildRace({ flag: "GREEN", lapsComplete: 4, lapsToGo: 26, competitors: startField(bibs, { laps: 4 }) }));
+    await user.click(await screen.findByRole("button", { name: "Activate Sync" }));
+    await waitFor(() => expect(syncToggle()).toHaveAttribute("aria-pressed", "true"));
+
+    feed.setResponse({ kind: "httpError", status: 500 });
+    await feed.waitUntilServed();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Live status service not responding");
+    expect(alert).toHaveTextContent("HTTP 500");
+    expect(screen.getByRole("button", { name: TEST_RACE_STATUS_URL })).toHaveTextContent("no response");
+    expect(screen.getByText("Lap 4 (26 Laps to Go)")).toBeInTheDocument();
+    expect(syncToggle()).toHaveAttribute("aria-pressed", "true");
+
+    await feedStep(feed, buildRace({ flag: "GREEN", lapsComplete: 5, lapsToGo: 25, competitors: startField(bibs, { laps: 5 }) }));
+    expect(await screen.findByText("Lap 5 (25 Laps to Go)")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: TEST_RACE_STATUS_URL })).toHaveTextContent("connected");
+  });
+
   it("goes off when the timing system moves on to another race", async () => {
     const { feed, user } = renderScoring();
 
