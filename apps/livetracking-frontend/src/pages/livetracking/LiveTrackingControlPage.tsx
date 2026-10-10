@@ -65,6 +65,7 @@ import {
 
 import { Link as RouterLink } from "react-router-dom";
 import LiveTrackingLiveBoard from "../../components/livetracking/LiveTrackingLiveBoard";
+import LiveTrackingPassingLog from "../../components/livetracking/LiveTrackingPassingLog";
 import { getLiveTrackingControlGuards } from "./liveTrackingControlGuards";
 
 import { resolveLiveTrackingDisplayName } from "../../components/livetracking/liveTrackingDisplayName";
@@ -552,6 +553,17 @@ export default function LiveTrackingControlPage() {
 
     return map;
   }, [setupDraft, setupDoc]);
+
+  // Passings reference the saved setup (the worker runs on it), not the unsaved draft.
+  const passingLogTimingPoints = useMemo(
+    () =>
+      (setupDoc ? normalizeTimingPoints(setupDoc.track.timingPoints) : []).map((point) => {
+        const name = String(point.name ?? "").trim() || point.id;
+        const ip = String(point.decoderIp ?? "").trim();
+        return { id: point.id, label: ip ? `${name} (${ip})` : name };
+      }),
+    [setupDoc],
+  );
 
   function resolveControlBoardDisplayName(row: LiveTrackingResultsDocument["athleteLiveStates"][number]): string {
     const resolved = resolveLiveTrackingDisplayName({
@@ -1302,6 +1314,23 @@ export default function LiveTrackingControlPage() {
 
         </CardContent>
       </Card>
+
+      {/* Collapsed and unmounted by default: passings arrive several times per second. */}
+      <Accordion variant="outlined" slotProps={{ transition: { unmountOnExit: true } }}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <Typography variant="h6">Passing Log</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ ml: 2, alignSelf: "center" }}>
+            last 20 passings per decoder
+          </Typography>
+        </AccordionSummary>
+        <AccordionDetails>
+          <LiveTrackingPassingLog
+            passings={runtime?.recentPassings ?? []}
+            timingPoints={passingLogTimingPoints}
+            resolveAthleteName={(transponderId) => participantNameByTransponderId.get(transponderId.trim())}
+          />
+        </AccordionDetails>
+      </Accordion>
 
 
       <Card variant="outlined">
