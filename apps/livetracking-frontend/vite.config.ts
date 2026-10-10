@@ -12,6 +12,9 @@ export default defineConfig({
     // Component tests render real pages in a browser-like DOM (see src/test/renderApp.tsx).
     environment: "jsdom",
     setupFiles: ["@raceoffice/test-utils/setup"],
+    // Setup editor tests type into the full control page, which re-renders on every keystroke;
+    // under load (cold cache, CI) that exceeds the 5 s default.
+    testTimeout: 15_000,
   },
   build: {
 

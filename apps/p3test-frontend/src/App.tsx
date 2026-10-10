@@ -70,9 +70,7 @@ type P3ClientState = {
     lastError: string | null;
   };
   transport: {
-    bytesReceived: number;
     bytesSent: number;
-    bufferedHex: string;
   };
     history: {
     nextEventId: number;
@@ -520,15 +518,11 @@ export default function App() {
 
             <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
               <Chip label={`Status: ${status}`} color={status === "connected" ? "success" : status === "connecting" ? "warning" : status === "error" ? "error" : "default"} variant="outlined" />
-              <Chip label={`RX: ${state?.transport.bytesReceived ?? 0} bytes`} variant="outlined" />
               <Chip label={`TX: ${state?.transport.bytesSent ?? 0} bytes`} variant="outlined" />
             </Stack>
 
             <Typography variant="body2" color="text.secondary">
               Last error: {state?.connection.lastError ?? "—"}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Buffered tail: {state?.transport.bufferedHex || "—"}
             </Typography>
           </Stack>
         </CardContent>
