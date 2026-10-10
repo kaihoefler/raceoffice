@@ -985,6 +985,7 @@ export default function PointsScoring({
           {mode === "finish" ? (
             <PointsRow label="3 P">
               <PointsBibField
+                ariaLabel="3 P bib"
                 value={sel3P}
                 inputValue={in3P}
                 inputRef={ref3P}
@@ -1027,6 +1028,7 @@ export default function PointsScoring({
 
           <PointsRow label="2 P">
             <PointsBibField
+              ariaLabel="2 P bib"
               value={sel2P}
               inputValue={in2P}
               inputRef={ref2P}
@@ -1075,6 +1077,7 @@ export default function PointsScoring({
 
 
             <PointsBibField
+              ariaLabel="1 P bib"
               value={sel1P}
               inputValue={in1P}
               inputRef={ref1P}

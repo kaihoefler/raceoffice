@@ -86,6 +86,12 @@ type Props = {
   pollIntervalMs?: number;
 };
 
+/**
+ * How often an unchanged successful poll still refreshes `updatedAt` (and re-renders consumers).
+ * Must stay well below the 3 s "no response" threshold of LiveRaceStatus.
+ */
+const UPDATED_AT_REFRESH_MS = 1000;
+
 export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Props) {
   /**
    * Bestimmt die URL:
@@ -222,20 +228,29 @@ export function RaceStatusProvider({ children, url, pollIntervalMs = 1000 }: Pro
 
         if (!mounted) return;
 
-        // Erfolgsfall:
-        // - status ok
-        // - error cleared
-        // - errorCount reset
-        // - updatedAt setzt "letzter erfolgreicher Kontakt"
-        // - currentRace wird aktualisiert (oder null, falls kein aktives Rennen)
-        setState((prev) => ({
-          ...prev,
-          status: "ok",
-          error: null,
-          errorCount: 0,
-          updatedAt: Date.now(),
-          currentRace: activeRace,
-        }));
+        // Erfolgsfall: status ok, Fehler zurückgesetzt, updatedAt = letzter erfolgreicher Kontakt,
+        // currentRace = aktives Rennen (oder null).
+        //
+        // Unveränderte Antworten lösen KEIN Re-Render aus: die ganze Scoring-Seite hängt an diesem
+        // Context und würde sonst bei jedem Poll neu rendern. Nur updatedAt wird spätestens alle
+        // UPDATED_AT_REFRESH_MS erneuert, damit die "no response"-Anzeige (> 3 s) korrekt bleibt.
+        // Bei unverändertem Inhalt bleibt außerdem das currentRace-Objekt dasselbe (stabile Memos).
+        setState((prev) => {
+          const now = Date.now();
+          const sameRace = JSON.stringify(prev.currentRace) === JSON.stringify(activeRace);
+          const wasHealthy = prev.status === "ok" && prev.error === null && prev.errorCount === 0;
+          const contactIsFresh = prev.updatedAt != null && now - prev.updatedAt < UPDATED_AT_REFRESH_MS;
+          if (sameRace && wasHealthy && contactIsFresh) return prev;
+
+          return {
+            ...prev,
+            status: "ok",
+            error: null,
+            errorCount: 0,
+            updatedAt: now,
+            currentRace: sameRace ? prev.currentRace : activeRace,
+          };
+        });
       } catch (e: any) {
         if (!mounted) return;
         if (e?.name === "AbortError") return;

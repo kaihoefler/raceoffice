@@ -14,29 +14,16 @@
 
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { FullEvent, RaceStatusRace } from "@raceoffice/domain";
-import { racesOf } from "@raceoffice/race-status-mock";
-import { listRecordings, loadRecording } from "@raceoffice/race-status-mock/server";
+import type { FullEvent } from "@raceoffice/domain";
 import { feedStep } from "@raceoffice/test-utils";
 
 import { eventDocs, race, TEST_EVENT_ID } from "../fixtures";
 import { renderApp } from "../renderApp";
-
-const RECORDING = "AGI-2024_race-11-Cadet-Men-6000-Elim-Final-B";
-const RACE_NAME = "Cadet Men 6000 Elim-Final B";
-
-function loadStates(): RaceStatusRace[] {
-  const file = listRecordings().find((f) => f.includes(RECORDING));
-  if (!file) throw new Error(`Recording ${RECORDING} not found`);
-  return racesOf(loadRecording(file)).map((r, i) => {
-    if (!r) throw new Error(`State ${i + 1} has no active race`);
-    return r;
-  });
-}
+import { RACE_NAME, scenarioStates } from "./agiCadetMenFinalB";
 
 describe(`scenario: ${RACE_NAME} (elimination, live sync)`, () => {
   it("scores the race state by state as agreed with the race office", { timeout: 60_000 }, async () => {
-    const states = loadStates();
+    const states = scenarioStates();
     const { feed, server, user } = renderApp({
       route: "/races/prev/scoring",
       docs: eventDocs({ races: [race({ id: "prev", name: "Cadet Men 6000 Elim-Final A" })] }),
@@ -170,10 +157,19 @@ describe(`scenario: ${RACE_NAME} (elimination, live sync)`, () => {
       await save();
     }
 
-    // 34 (FINISH): take over the finish order from the feed
+    // 34 (GREEN, final order): nothing to do
     await state(34);
+
+    // 35 (FINISH): take over the finish order from the feed
+    await state(35);
     await user.click(screen.getByRole("tab", { name: "Finish" }));
     await user.click(await screen.findByRole("button", { name: "Fill from Live" }));
+
+    // Sync stays on at FINISH; it only goes off when the timing system moves on to another race.
+    expect(screen.getByRole("button", { name: "Activate Sync" })).toHaveAttribute("aria-pressed", "true");
+    await feedStep(feed, { ...states[34]!, raceID: states[34]!.raceID + 1, raceName: "Next Race", flagStatus: "PURPLE" });
+    expect(await screen.findByText("Next Race")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Activate Sync" })).toHaveAttribute("aria-pressed", "false"));
 
     // ---- What was stored ----
     await waitFor(() => {
@@ -184,7 +180,7 @@ describe(`scenario: ${RACE_NAME} (elimination, live sync)`, () => {
 
     const event = server.doc(`Event-${TEST_EVENT_ID}`).data as FullEvent;
     const created = event.races.find((r) => r.name === RACE_NAME)!;
-    const finalState = states[33]!;
+    const finalState = states[34]!;
 
     expect(created.raceStarters.map((a) => a.bib).sort((a, b) => a! - b!)).toEqual(
       finalState.competitors.map((c) => Number(c.number)).sort((a, b) => a - b),

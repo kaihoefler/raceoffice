@@ -9,6 +9,10 @@ export default defineConfig({
     // Component tests render real pages in a browser-like DOM (see src/test/renderApp.tsx).
     environment: "jsdom",
     setupFiles: ["@raceoffice/test-utils/setup"],
+    // Page tests render the full scoring page with live polling and are CPU-heavy; in parallel
+    // they slow each other down until timeouts hit. Sequential runs are predictable.
+    fileParallelism: false,
+    testTimeout: 30_000,
   },
   build: {
     outDir: "../server/public",

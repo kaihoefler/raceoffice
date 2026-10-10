@@ -71,8 +71,8 @@ export default function ScoringLiveColumns({
           sx={{ borderBottom: "1px solid", borderColor: "divider" }}
         >
           <Tab value="points" label="Points" />
-          <Tab value="finish" label="Finish" />
           <Tab value="elimination" label="Elimination" />
+          <Tab value="finish" label="Finish" />
         </Tabs>
 
         <Box sx={{ p: 1 }}>

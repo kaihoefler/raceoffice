@@ -36,6 +36,8 @@ type Props = {
 
   /** Optional UI */
   placeholder?: string;
+  /** Accessible name of the input (screen readers, tests), e.g. "2 P bib". */
+  ariaLabel?: string;
   nameAdornmentMaxWidth?: number;
   disabled?: boolean;
 };
@@ -59,6 +61,7 @@ export default function PointsBibField({
   onSelect,
   onEnter,
   placeholder = "Startnummer",
+  ariaLabel,
   nameAdornmentMaxWidth = 160,
   disabled = false,
 }: Props) {
@@ -160,6 +163,7 @@ export default function PointsBibField({
               htmlInput: {
                 ...inputProps,
                 inputMode: "numeric",
+                "aria-label": ariaLabel,
                 onFocus: (e: FocusEvent<HTMLInputElement>) => {
                   (inputProps as any).onFocus?.(e);
                   setIsFocused(true);

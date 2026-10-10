@@ -43,12 +43,14 @@ It is split into layers so that the scoring rules can be tested without React, n
 | Layer | Where | Responsibility |
 |---|---|---|
 | Feed contract | `packages/domain/src/raceStatusFeed.ts` | `RaceStatusRace` / `RaceStatusCompetitor` types, `pickCurrentRace(payload)`. Real sample: `examples/race_status.json` |
-| Transport | `apps/frontend/src/providers/RaceStatusProvider.tsx` | polling, request timeout (3× interval, min. 2 s), error count, backoff ×10 after 10 errors, pause, URL. Exposes the raw `currentRace` via `useRaceStatus()`. **No scoring rules.** |
+| Transport | `apps/frontend/src/providers/RaceStatusProvider.tsx` | polling, request timeout (3× interval, min. 2 s), error count, backoff ×10 after 10 errors, pause, URL. Exposes the raw `currentRace` via `useRaceStatus()`. Unchanged responses do not re-render consumers (`updatedAt` is refreshed at most once per second for the "no response" indicator). **No scoring rules.** |
 | Scoring rules | `apps/frontend/src/domain/liveScoring.ts` | pure: `deriveLiveScoring(race, currentRace)`, `suggestDnfGroup` + `dnfLapForDeficit` (DNF proposal), `suggestDnsBibs` (DNS proposal), `buildStartersForBibs`, `buildFinishResultsFromLive`. Time display helpers in `domain/liveTime.ts` |
 | React adapter | `apps/frontend/src/pages/scoring/ScoringViewModel.tsx` | `useScoringViewModel`: calls `deriveLiveScoring`, keeps Set identities stable, adds UI state (`syncEnabled`) |
 | UI | `ScoringLiveColumns`, `LiveRaceStatus`, `PointsScoring`, `EliminationScoring`, `FinishLineScoring` | decide *when* to apply a hint (prefill, lap sync), record the officials' decisions |
 
 Rule of thumb: "what does the feed mean for scoring?" belongs in `liveScoring.ts`; "when does the UI react?" belongs in the components.
+
+Live sync (`LiveRaceStatus`, "Activate Sync"): can be switched on while the flag is GREEN or PURPLE and stays on until the timing system reports another race (or no active race), also after FINISH, so the last sprint, elimination and the finish can still be scored with live prefill. It can always be switched off by hand. While a race is running (GREEN) without sync, the toggle is outlined red.
 
 `RouterProvider` is mounted inside `RaceStatusProvider` (`apps/frontend/src/main.tsx`), so every page can use `useRaceStatus()`. It is the only live provider; older split providers were removed.
 

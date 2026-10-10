@@ -4,12 +4,16 @@
 //   test: { environment: "jsdom", setupFiles: ["@raceoffice/test-utils/setup"] }
 //
 // - jest-dom matchers (toBeInTheDocument, toHaveValue, ...)
+// - 3 s timeout for findBy/waitFor (default 1 s)
 // - unmount rendered trees and undo global stubs (WebSocket, fetch) after each test
 // - browser APIs jsdom lacks but MUI uses (matchMedia, ResizeObserver, scrollIntoView)
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
+
+// Pages with live polling re-render often; on slow machines (CI) 1 s is too tight for findBy/waitFor.
+configure({ asyncUtilTimeout: 3000 });
 
 afterEach(() => {
   cleanup();

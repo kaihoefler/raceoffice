@@ -18,6 +18,8 @@ Abgestimmte Vorbelegung (App schlägt den hintersten Fahrer laut Feed-Position v
 - Zeile 27: App schlägt 104 vor, die Kampfrichter scheiden 142 aus (manuell überschrieben); 104 folgt in Zeile 29
 - DNS (Zeile 5): erst ab Live-Runde 2 vorbelegt, daher in Zeile 6 gespeichert
 
+Zeile 34 ist ergänzt (nicht in der Aufzeichnung): Einlauf wie Zeile 35, aber Flagge GREEN, also der Moment nach der Zieldurchfahrt, bevor die Zeitmessung FINISH setzt. Der per-lap-Recorder behält nur den letzten Stand von Runde 30 (schon FINISH). Bei FINISH schaltet die App den Sync aus, daher werden die letzten Aktionen in Zeile 34 erfasst. Erzeugt in `agiCadetMenFinalB.ts`.
+
 Feed-Eigenheiten: Stand 3 → 4 ist die gelöschte Zieldurchfahrt am Start (Runde 1 → 0). `lapsToGo` hinkt teilweise hinterher (Stände 6/7, 9/10).
 
 | # | Flagge | Runde / to go | Rennzeit | Letzte zwei aktive | Neu +1 Runde | ≥2 Runden | 0 Runden | Erwartung |
@@ -55,4 +57,5 @@ Feed-Eigenheiten: Stand 3 → 4 ist die gelöschte Zieldurchfahrt am Start (Rund
 | 31 | GREEN | 27 / 3 | 9:10 | 96@P8, 152@P9 | 114 | 16 | 123, 145, 146 | 114 Elim |
 | 32 | GREEN | 28 / 2 | 9:30 | 96@P8, 148@P9 | – | 17 | 123, 145, 146 | 148 Elim |
 | 33 | GREEN | 29 / 1 | 9:48 | 141@P7, 96@P8 | 148 | 17 | 123, 145, 146 | 96 Elim |
-| 34 | FINISH | 30 / 0 | 10:13 | 141@P6, 149@P7 | 96 | 18 | 123, 145, 146 | Zieleinlauf übernehmen |
+| 34 | GREEN | 30 / 0 | 10:13 | 141@P6, 149@P7 | 96 | 18 | 123, 145, 146 |  |
+| 35 | FINISH | 30 / 0 | 10:13 | 141@P6, 149@P7 | 96 | 18 | 123, 145, 146 | Zieleinlauf übernehmen |

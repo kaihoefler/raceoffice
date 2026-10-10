@@ -10,7 +10,7 @@
 //
 // Wichtige Regeln/UX:
 // - Bei “PURPLE” werden Zeiten ausgeblendet (hideTimes), nur Positionen/Name
-// - Sync ist nur erlaubt wenn Flag GREEN oder PURPLE (canSync)
+// - Sync einschalten nur bei Flag GREEN oder PURPLE (canSync); er bleibt bis zum Rennwechsel an (auch bei FINISH)
 // - Wenn sich das Live-Race ändert, wird Sync automatisch ausgeschaltet
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -224,7 +224,10 @@ export default function LiveRaceStatus({
   // Wir normalisieren Flag in uppercase, um Vergleiche robust zu machen
   const flagKey = flagTrim.toUpperCase();
 
-  // Sync ist nur erlaubt bei GREEN oder PURPLE (Business-Rule)
+  // Sync EINSCHALTEN ist nur bei GREEN oder PURPLE erlaubt (Business-Rule). Ein aktiver Sync bleibt
+  // danach auch bei FINISH an: der letzte Sprint, die letzte Ausscheidung und der Zieleinlauf
+  // werden oft erst erfasst, wenn die Zeitmessung schon FINISH meldet. Aus geht er nur beim
+  // Rennwechsel (siehe unten) oder von Hand.
   const canSync = flagKey === "GREEN" || flagKey === "PURPLE";
 
   // Zeige elapsedTime im Header nur bei GREEN (Anforderung).
@@ -236,7 +239,7 @@ export default function LiveRaceStatus({
   // -----------------------
   // Sync reset on race change
   // -----------------------
-  // Wenn sich raceID ändert, muss Sync wieder aus (Anforderung).
+  // Wenn sich raceID ändert (anderes Rennen oder kein aktives Rennen), muss Sync wieder aus.
   const raceId = (currentRace as any)?.raceID ?? null;
   const prevRaceIdRef = useRef<number | null>(raceId);
 
@@ -247,11 +250,6 @@ export default function LiveRaceStatus({
     onSyncEnabledChange?.(false);
   }, [raceId, onSyncEnabledChange]);
 
-  // Wenn Flag nicht mehr GREEN/PURPLE, erzwinge Sync off.
-  useEffect(() => {
-    if (!onSyncEnabledChange) return;
-    if (syncEnabled && !canSync) onSyncEnabledChange(false);
-  }, [syncEnabled, canSync, onSyncEnabledChange]);
 
   // -----------------------
   // Flag Chip Styling
@@ -792,8 +790,9 @@ export default function LiveRaceStatus({
       {/* Action-Leiste: Sync Toggle + (optional) “create starters” */}
       <Box sx={{ display: "flex", justifyContent: "flex-start", mb: 1, gap: 1, flexWrap: "wrap" }}>
         {/* Sync Toggle:
-            - nur aktivierbar, wenn canSync (GREEN/PURPLE) und onSyncEnabledChange existiert
-            - wenn aktiv: grün umrandet (kein filled background) */}
+            - einschaltbar nur bei canSync (GREEN/PURPLE), ausschaltbar immer; onSyncEnabledChange muss existieren
+            - wenn aktiv: grün umrandet (kein filled background)
+            - wenn das Rennen läuft (GREEN) und Sync aus ist: rot umrandet, damit niemand ohne Sync wertet */}
         <Tooltip title="Synchronize Live status with PointsScoring" arrow>
           <span>
             <ToggleButton
@@ -801,13 +800,18 @@ export default function LiveRaceStatus({
               value="sync"
               selected={Boolean(syncEnabled)}
               onChange={() => {
-                // Guard: falls aus irgendeinem Grund canSync false ist, ignorieren
-                if (!canSync) return;
+                // Einschalten nur bei GREEN/PURPLE; ausschalten ist immer möglich.
+                if (!syncEnabled && !canSync) return;
                 onSyncEnabledChange?.(!syncEnabled);
               }}
-              disabled={!onSyncEnabledChange || !canSync}
+              disabled={!onSyncEnabledChange || (!syncEnabled && !canSync)}
               aria-label="Activate Sync"
               sx={{
+                ...(!syncEnabled && flagKey === "GREEN" && {
+                  borderColor: "error.main",
+                  color: "error.main",
+                  borderWidth: 2,
+                }),
                 ...(syncEnabled && {
                   borderColor: "success.main",
                   color: "success.main",
