@@ -88,6 +88,16 @@ describe("recordings", () => {
       expect(compactRecordingPerLap(frames).map((f) => f.t)).toEqual([0, 1, 2, 3, 4]);
     });
 
+    it("keeps the last state before a flag change within a lap (final order GREEN, then FINISH)", () => {
+      const frames = [
+        state(0, 29, 1),
+        state(1, 30, 2), // leader crossed the line, flag still GREEN
+        state(2, 30, 1), // last position change before FINISH
+        state(3, 30, 1, { flag: "FINISH" }),
+      ];
+      expect(compactRecordingPerLap(frames).map((f) => f.t)).toEqual([0, 2, 3]);
+    });
+
     it("separates races and 'no active race' phases", () => {
       const frames = [state(0, 5, 1), state(1, 5, 1, { raceID: 2 }), { t: 2, payload: [] }, { t: 3, payload: [] }];
       expect(compactRecordingPerLap(frames).map((f) => f.t)).toEqual([0, 1, 2]);

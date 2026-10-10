@@ -73,19 +73,25 @@ export function compactRecording(frames: RecordingFrame[]): RecordingFrame[] {
 }
 
 /**
- * Which race lap a response belongs to: active race + race lap counter. Responses without
- * an active race form their own group.
+ * Which phase of the race a response belongs to: active race + race lap counter + flag.
+ * Responses without an active race form their own group.
+ *
+ * The flag is part of the key because a flag change within a lap is scoring-relevant:
+ * e.g. on FINISH the app switches live sync off, so the last state before FINISH (final
+ * order, still GREEN) is where the last sprint/elimination is scored.
  */
 export function lapKey(payload: unknown): string {
   const race = pickCurrentRace(payload);
-  return race ? JSON.stringify([race.raceID, race.lapsComplete ?? null]) : "no-active-race";
+  return race ? JSON.stringify([race.raceID, race.lapsComplete ?? null, race.flagStatus]) : "no-active-race";
 }
 
 /**
- * One state per race lap: the LAST relevant state of each lap, i.e. the field as it stood
- * (last position change) right before the next lap started.
+ * One state per race lap and flag: the LAST relevant state of each lap, i.e. the field as it
+ * stood (last position change) right before the next lap started. A flag change within a lap
+ * (PURPLE -> GREEN at the start, GREEN -> FINISH at the end) adds a state: the last one
+ * before the change.
  *
- * Groups are consecutive runs of the same lap, not distinct lap numbers: when the timing
+ * Groups are consecutive runs of the same lap and flag, not distinct values: when the timing
  * system corrects the lap counter (e.g. a finish-line passing recorded at the start and
  * deleted by the timekeepers: lap 1 -> 0 -> 1), each run keeps its own state, so the
  * correction stays visible in the recording.

@@ -16,8 +16,10 @@ The recorder can be started before the feed is up (e.g. before a replay player):
 `--wait` seconds (default 30) and gives up with an error if the feed never answers. Recording time `t` starts with
 the first answer. Short outages during the recording are logged and tolerated.
 
-With `--per-lap` the recorder keeps **one state per race lap**: the last relevant state before the next lap starts
-(the field after the last position change of that lap). A lap counter correction (lap 1 → 0 → 1) keeps its own
+With `--per-lap` the recorder keeps **one state per race lap and flag**: the last relevant state before the next lap starts
+(the field after the last position change of that lap). A flag change within a lap adds the last state before the
+change, e.g. the final order with GREEN right before FINISH (on FINISH the app switches live sync off, so the last
+sprint/elimination is scored in that state). A lap counter correction (lap 1 → 0 → 1) keeps its own
 states. The running lap is held back until the next lap starts and is written when the recorder is stopped with
 Ctrl+C; closing the terminal window instead loses it. Same rule for existing files: `compactRecordingPerLap`.
 Use it when tests only need the field per lap; states within a lap (e.g. an elimination moment) are dropped.

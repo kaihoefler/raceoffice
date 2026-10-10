@@ -14,9 +14,9 @@
 //              an error if the feed never answers (wrong URL). Once recording, short outages
 //              of the timing system are tolerated and logged. `t` counts from the first answer.
 // --anonymize  replaces rider names (see anonymizePayload) before anything is written.
-// --per-lap    keeps one state per race lap: the last relevant state before the next lap
-//              starts (see compactRecordingPerLap). The state of the running lap is held
-//              back until the lap counter changes, and written on Ctrl+C.
+// --per-lap    keeps one state per race lap and flag: the last relevant state before the
+//              next lap starts or the flag changes (see compactRecordingPerLap). The state
+//              of the running lap is held back until lap or flag change, and written on Ctrl+C.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -116,7 +116,7 @@ async function pollOnce(): Promise<void> {
 
 console.log(
   `Recording ${url} -> ${outFile} every ${intervalMs} ms` +
-    `${values.anonymize ? ", anonymized" : ""}${perLap ? ", one state per lap" : ""}. Ctrl+C to stop.`,
+    `${values.anonymize ? ", anonymized" : ""}${perLap ? ", one state per lap and flag" : ""}. Ctrl+C to stop.`,
 );
 
 let timer: NodeJS.Timeout | null = null;
