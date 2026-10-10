@@ -2,8 +2,8 @@
 export * from "./clientTypes.js";
 export { P3DecoderConnection } from "./P3DecoderConnection.js";
 export type { ConnectionOptions, DecoderConnectionCallbacks } from "./P3DecoderConnection.js";
-export { P3DecoderDiscovery } from "./P3DecoderDiscovery.js";
-export type { DiscoveryCallbacks, DiscoveryOptions } from "./P3DecoderDiscovery.js";
+export { P3DecoderDiscovery, getDefaultBroadcastAddresses } from "./P3DecoderDiscovery.js";
+export type { DiscoveryCallbacks, DiscoveryOptions, DiscoveryRemote } from "./P3DecoderDiscovery.js";
 export { P3DecoderPool } from "./P3DecoderPool.js";
 export type { DecoderPoolCallbacks, PoolDecoderState, PoolOptions } from "./P3DecoderPool.js";
 

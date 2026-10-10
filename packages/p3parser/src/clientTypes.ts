@@ -50,10 +50,33 @@ export type DecoderInfoEvent = {
 // Discovery result
 // ---------------------------------------------------------------------------
 
+/**
+ * A decoder that answered the UDP discovery broadcast.
+ *
+ * Only `ip` is guaranteed; the remaining details depend on which reply frames
+ * the decoder sends (typically NETWORK_SETTINGS, TIMELINE, TOR 0x0012).
+ */
 export type DiscoveredDecoder = {
+  /** UDP source address of the replies — the address to connect to. */
   ip: string;
+  /** TCP port for `P3DecoderConnection`. */
   port: number;
-  decoderId: string;
-  decoderType: string;
-  firmwareVersion: string;
+  decoderId: string | null;
+  decoderType: string | null;
+  firmwareVersion: string | null;
+  timelineName: string | null;
+  /** Self-reported network configuration (NETWORK_SETTINGS), may differ from `ip`. */
+  network: {
+    ipAddress: string | null;
+    netmask: string | null;
+    defaultGateway: string | null;
+    dnsServer: string | null;
+  } | null;
+  /** Names of all reply TORs received from this decoder. */
+  torNames: string[];
+  lastRecordKind: string;
+  responseCount: number;
+  /** ISO timestamps. */
+  firstSeenAt: string;
+  lastSeenAt: string;
 };

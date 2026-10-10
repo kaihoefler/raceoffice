@@ -85,15 +85,27 @@ type DecoderInfoEvent = {
 
 ### `DiscoveredDecoder`
 
-Ergebnis einer UDP-Broadcast-Discovery.
+Ergebnis einer UDP-Broadcast-Discovery. Nur `ip` ist garantiert. Decoder antworten typischerweise mit NETWORK_SETTINGS, TIMELINE und TOR 0x0012, nicht mit VERSION_DECODER, daher sind Typ/Firmware oft `null`.
 
 ```ts
 type DiscoveredDecoder = {
-  ip: string;
-  port: number;
-  decoderId: string;
-  decoderType: string;
-  firmwareVersion: string;
+  ip: string;                     // UDP-Absenderadresse = Adresse zum Verbinden
+  port: number;                   // TCP-Port für P3DecoderConnection
+  decoderId: string | null;
+  decoderType: string | null;
+  firmwareVersion: string | null;
+  timelineName: string | null;
+  network: {                      // Selbstauskunft aus NETWORK_SETTINGS, kann von ip abweichen
+    ipAddress: string | null;
+    netmask: string | null;
+    defaultGateway: string | null;
+    dnsServer: string | null;
+  } | null;
+  torNames: string[];             // alle empfangenen Antwort-TORs
+  lastRecordKind: string;
+  responseCount: number;
+  firstSeenAt: string;            // ISO
+  lastSeenAt: string;             // ISO
 };
 ```
 
@@ -101,23 +113,37 @@ type DiscoveredDecoder = {
 
 ## `P3DecoderDiscovery`
 
-Findet P3-Decoder im lokalen Netz via UDP-Broadcast. Kapselt den Discovery-Handshake vollständig (mehrere Request-Varianten, Antwort-Akkumulation pro Source-IP).
+Findet P3-Decoder im lokalen Netz via UDP-Broadcast. Kapselt den Discovery-Handshake vollständig:
+
+- sendet alle beobachteten Request-Varianten (25/32/23/21 Byte + SmartDecoder-Bug), da Decoder-Generationen unterschiedlich reagieren
+- sendet an `255.255.255.255` **und** an die Subnetz-Broadcast-Adresse jedes IPv4-Interfaces — der Limited Broadcast verlässt unter Windows mit mehreren Adaptern (WSL/Hyper-V, VPN) oft nur das falsche Interface
+- bindet lokal UDP-Port **5303**, auf den Decoder antworten
+- jede parsebare Antwort zählt; Antworten werden pro Absender-IP zusammengeführt
+
+Da Port 5303 fest ist, kann pro Host nur ein Scan gleichzeitig laufen; ein zweiter schlägt mit `EADDRINUSE` fehl.
 
 ### Konstruktor
 
 ```ts
-new P3DecoderDiscovery(callbacks: DiscoveryCallbacks, options?: DiscoveryOptions)
+new P3DecoderDiscovery(callbacks?: DiscoveryCallbacks, options?: DiscoveryOptions)
 ```
 
 ```ts
 type DiscoveryCallbacks = {
-  onDiscovered: (decoder: DiscoveredDecoder) => void;
-  onError?: (error: Error) => void;
+  onDiscovered?: (decoder: DiscoveredDecoder) => void; // pro Antwort, mit zusammengeführtem Stand
+  onError?: (error: Error) => void;                    // Socket-Fehler, z.B. EADDRINUSE
+  // Diagnose-Hooks (genutzt vom P3-Test-Client)
+  onListening?: (info: { localPort: number | null; targets: string[] }) => void;
+  onRequestSent?: (request: P3BuiltRequest) => void;
+  onSendError?: (error: Error, request: P3BuiltRequest, target: string) => void;
+  onRecord?: (record: P3Record, remote: { address: string; port: number }) => void;
+  onParseError?: (error: Error, remote: { address: string; port: number }, frame: Uint8Array) => void;
 };
 
 type DiscoveryOptions = {
-  port?: number;             // Default: 5403
-  broadcastAddress?: string; // Default: "255.255.255.255"
+  port?: number;                 // Decoder-Port, Default: 5403
+  localPort?: number;            // lokaler Antwort-Port, Default: 5303
+  broadcastAddresses?: string[]; // Default: getDefaultBroadcastAddresses()
 };
 ```
 
@@ -125,9 +151,11 @@ type DiscoveryOptions = {
 
 | Methode | Beschreibung |
 |---|---|
-| `start()` | Startet UDP-Socket, sendet Broadcasts, ruft `onDiscovered` für jeden gefundenen Decoder |
-| `stop()` | Schließt UDP-Socket, räumt internen Zustand auf |
-| `static scan(timeoutMs?)` | One-Shot: wartet `timeoutMs` ms (Default: 3000), gibt alle gefundenen Decoder zurück |
+| `start()` | Startet UDP-Socket und sendet Broadcasts |
+| `stop()` | Schließt UDP-Socket; bisher gefundene Decoder bleiben über `getDecoders()` abrufbar |
+| `getDecoders()` | Aktueller Stand aller gefundenen Decoder, sortiert nach IP |
+| `run(timeoutMs?)` | `start()`, wartet `timeoutMs` ms (Default: 3000), `stop()`, liefert alle Decoder; rejected bei Socket-Fehlern |
+| `static scan(timeoutMs?, options?)` | One-Shot ohne Callbacks, entspricht `new P3DecoderDiscovery({}, options).run(timeoutMs)` |
 
 ### Beispiel: Manuell
 

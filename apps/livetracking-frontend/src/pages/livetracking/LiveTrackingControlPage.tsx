@@ -85,12 +85,15 @@ type SetupDraft = {
   timingPoints: LiveTrackingTimingPoint[];
 };
 
+// Subset of @raceoffice/p3parser DiscoveredDecoder used here. Only ip is
+// guaranteed; the details depend on which reply frames the decoder sends.
 type DiscoveredDecoder = {
   ip: string;
   port: number;
-  decoderId: string;
-  decoderType: string;
-  firmwareVersion: string;
+  decoderId: string | null;
+  decoderType: string | null;
+  firmwareVersion: string | null;
+  timelineName: string | null;
 };
 
 
@@ -1010,6 +1013,7 @@ export default function LiveTrackingControlPage() {
                         <TableRow>
                           <TableCell>IP</TableCell>
                           <TableCell>Hardware-ID</TableCell>
+                          <TableCell>Timeline</TableCell>
                           <TableCell>Typ</TableCell>
                           <TableCell>Firmware</TableCell>
                           <TableCell>IP zuweisen</TableCell>
@@ -1017,11 +1021,12 @@ export default function LiveTrackingControlPage() {
                       </TableHead>
                       <TableBody>
                         {p3ScanResult.decoders.map((dec) => (
-                          <TableRow key={`${dec.ip}:${dec.decoderId}`}>
+                          <TableRow key={dec.ip}>
                             <TableCell>{dec.ip}</TableCell>
-                            <TableCell>{dec.decoderId}</TableCell>
-                            <TableCell>{dec.decoderType}</TableCell>
-                            <TableCell>{dec.firmwareVersion}</TableCell>
+                            <TableCell>{dec.decoderId ?? "—"}</TableCell>
+                            <TableCell>{dec.timelineName ?? "—"}</TableCell>
+                            <TableCell>{dec.decoderType ?? "—"}</TableCell>
+                            <TableCell>{dec.firmwareVersion ?? "—"}</TableCell>
                             <TableCell>
                               <TextField
                                 select
