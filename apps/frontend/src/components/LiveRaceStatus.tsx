@@ -535,7 +535,7 @@ export default function LiveRaceStatus({
                 onChange={(e) => setDraftPollMs(Number(e.target.value))}
                 fullWidth
                 size="small"
-                inputProps={{ min: 250, max: 60000, step: 250 }}
+                slotProps={{ htmlInput: { min: 250, max: 60000, step: 250 } }}
                 helperText="Min 250ms, max 60000ms"
               />
 
@@ -673,7 +673,7 @@ export default function LiveRaceStatus({
               onChange={(e) => setDraftPollMs(Number(e.target.value))}
               fullWidth
               size="small"
-              inputProps={{ min: 250, max: 60000, step: 250 }}
+              slotProps={{ htmlInput: { min: 250, max: 60000, step: 250 } }}
               helperText="Min 250ms, max 60000ms"
             />
 

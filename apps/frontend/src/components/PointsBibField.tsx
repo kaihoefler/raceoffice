@@ -165,11 +165,11 @@ export default function PointsBibField({
                 inputMode: "numeric",
                 "aria-label": ariaLabel,
                 onFocus: (e: FocusEvent<HTMLInputElement>) => {
-                  (inputProps as any).onFocus?.(e);
+                  inputProps.onFocus?.(e);
                   setIsFocused(true);
                 },
                 onBlur: (e: FocusEvent<HTMLInputElement>) => {
-                  (inputProps as any).onBlur?.(e);
+                  inputProps.onBlur?.(e);
                   setIsFocused(false);
                 },
               },

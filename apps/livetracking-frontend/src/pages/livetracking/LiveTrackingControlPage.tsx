@@ -968,7 +968,7 @@ export default function LiveTrackingControlPage() {
                     const v = Number(e.target.value);
                     if (Number.isFinite(v) && v > 0) setSetupDraft((p) => (p ? { ...p, minLapTimeSecs: v } : p));
                   }}
-                  inputProps={{ min: 1, step: 1 }}
+                  slotProps={{ htmlInput: { min: 1, step: 1 } }}
                   sx={{ maxWidth: 160 }}
                 />
               </Stack>
@@ -1130,7 +1130,7 @@ export default function LiveTrackingControlPage() {
                                 type="text"
                                 label="Time Offset (s)"
                                 value={decoderOffsetInputByPointId[point.id] ?? String(point.decoderTimestampOffsetSecs ?? 0)}
-                                inputProps={{ inputMode: "decimal", placeholder: "z. B. -1,234" }}
+                                slotProps={{ htmlInput: { inputMode: "decimal", placeholder: "z. B. -1,234" } }}
                                 onChange={(e) => {
                                   const raw = e.target.value;
                                   if (!/^-?\d*(?:[.,]\d*)?$/.test(raw)) return;
@@ -1168,8 +1168,8 @@ export default function LiveTrackingControlPage() {
                                   onChange={(e) => patchPoint(index, { simTranCodes: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })}
                                   fullWidth
                                 />
-                                <TextField size="small" label="Passing Delay (ms)" value={computedPassingDelay} InputProps={{ readOnly: true }} sx={{ minWidth: 180 }} />
-                                <TextField size="small" label="Startup Delay (s)" value={computedStartupDelay} InputProps={{ readOnly: true }} sx={{ minWidth: 180 }} />
+                                <TextField size="small" label="Passing Delay (ms)" value={computedPassingDelay} slotProps={{ input: { readOnly: true } }} sx={{ minWidth: 180 }} />
+                                <TextField size="small" label="Startup Delay (s)" value={computedStartupDelay} slotProps={{ input: { readOnly: true } }} sx={{ minWidth: 180 }} />
                               </Stack>
                             </TableCell>
                           </TableRow>

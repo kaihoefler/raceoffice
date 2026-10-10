@@ -330,12 +330,17 @@ Model: a test **sets** what the timing system reports next. The mock answers **e
 - Realtime documents: `installFakeRealtime()` (`@raceoffice/test-utils`) replaces the global WebSocket with an in-memory server that applies the same protocol rules and bootstrap defaults (`initialDocumentData`) as the real server. Seed documents via `docs` (fixtures in `apps/frontend/src/test/fixtures.ts`), push server-side changes with `server.update(...)`.
 - Live feed: the provider polls the race status mock every 20 ms with real timers; `await feedStep(feed, nextState)` moves the race on. Fake timers only where time itself is tested (timeout, backoff, stale indicator).
 - Query by role/label/visible text, use `userEvent`, no snapshots, no `.Mui*` class selectors, so tests survive MUI upgrades.
+- What exists:
+  - Route smoke tests (`src/test/routes.test.tsx` in both apps): every route renders its page, and nothing is logged via `console.error`. React and MUI report rendering errors and deprecations there, so an upgrade that only warns already fails the test.
+  - Scenario tests (`apps/frontend/src/test/scenarios/`): a recorded real race, scored state by state as agreed with the race office (elimination and points interpretation). Each has a Markdown table next to it that is the source of truth.
+  - Component tests next to the component or page (`*.test.tsx`): the live sync toggle and connection settings, `PointsBibField` (the MUI Autocomplete contract), manual finish entry, the race list with its filters and the race editor, inline starter editing, the LiveTracking setup editor.
+- MUI API style: text field attributes go through `slotProps` (`htmlInput`, `input`, `inputLabel`), not the deprecated `inputProps`/`InputProps`/`InputLabelProps`; a `Select` gets a `labelId` so its accessible name is its label.
 
 ### Gates
 - Local: `npm run verify` (typecheck → lint → `test:all` → `build:all`).
 - CI: `.github/workflows/ci.yml` runs the same checks on every push to `main` and every pull request, Dependabot PRs included. Details: `doc/build-and-deploy.md` → "Continuous Integration & Releases".
 
 ### Known gaps (planned)
-- Component test infrastructure is in place (see "Component tests" above), but apart from smoke tests there are no component tests yet: the `RaceStatusProvider` polling behaviour (timeout, backoff, pause), the UI reactions to the feed (lap sync, prefill) and the MUI-heavy inputs (`PointsBibField`) are still only covered by `typecheck` and `build`. No browser E2E tests.
-- No recordings of real races yet; `liveScoring.recordings.test.ts` is skipped until the first one is added.
+- `RaceStatusProvider` timing behaviour (request timeout, backoff after errors, stale indicator) has no test yet; it needs fake timers.
+- No browser E2E tests (Playwright with the race status mock HTTP server is planned).
 - The release workflow does not yet smoke-test the packaged ZIP.

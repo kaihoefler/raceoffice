@@ -9,8 +9,9 @@
 // (@raceoffice/domain: parseClientWrite, applyClientWrite, toErrorFrame, initialDocumentData):
 // snapshot on connect, write ack + broadcast, rev_mismatch, error frames, bootstrap defaults.
 //
-// Messages are delivered asynchronously (microtask) and inside React's act(), like a real
-// socket but without act() warnings.
+// Messages are delivered asynchronously (microtask), like a real socket. Outside of Testing
+// Library's async utils they are wrapped in act(); inside findBy/waitFor (which switch React's
+// act environment off while polling) they are delivered plain, as Testing Library does itself.
 
 import { act } from "react";
 import { vi } from "vitest";
@@ -30,7 +31,7 @@ const CLOSING = 2;
 const CLOSED = 3;
 
 function deliver(fn: () => void): void {
-  queueMicrotask(() => act(fn));
+  queueMicrotask(() => ((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT ? act(fn) : fn()));
 }
 
 /** One client connection, as seen by the fake server. */

@@ -462,7 +462,7 @@ export default function RaceStartersPage() {
                                                     onChange={(e) =>
                                                         setEditingDraft((p) => (p ? { ...p, nation: e.target.value.toUpperCase() } : p))
                                                     }
-                                                    inputProps={{ maxLength: 3 }}
+                                                    slotProps={{ htmlInput: { maxLength: 3 } }}
                                                 />
                                             ) : (
                                                 a.nation ?? ""
@@ -561,7 +561,7 @@ export default function RaceStartersPage() {
                                         onChange={(e) => setNewDraft((p) => ({ ...p, nation: e.target.value.toUpperCase() }))}
                                         onKeyDown={handleNewRowKeyDown}
                                         placeholder="IOC"
-                                        inputProps={{ maxLength: 3 }}
+                                        slotProps={{ htmlInput: { maxLength: 3 } }}
                                     />
                                 </TableCell>
 

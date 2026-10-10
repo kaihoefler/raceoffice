@@ -853,7 +853,7 @@ export default function FinishLineScoring({
             placeholder="Rank"
             size="small"
             variant="outlined"
-            inputProps={{ inputMode: "numeric", pattern: "[0-9]*" }}
+            slotProps={{ htmlInput: { inputMode: "numeric", pattern: "[0-9]*" } }}
             sx={{ width: 80 }}
           />
 
