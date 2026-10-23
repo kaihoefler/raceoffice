@@ -1,6 +1,14 @@
 // src/pages/AboutPage.tsx
-import { Typography } from "@mui/material";
+import { Stack, Typography } from "@mui/material";
+
+import { APP_VERSION, BUILD_TIME } from "../buildInfo";
 
 export default function AboutPage() {
-  return <Typography variant="h4">About</Typography>;
+  return (
+    <Stack spacing={1}>
+      <Typography variant="h4">About</Typography>
+      <Typography>Version: {APP_VERSION}</Typography>
+      <Typography color="text.secondary">Build: {new Date(BUILD_TIME).toLocaleString()}</Typography>
+    </Stack>
+  );
 }

@@ -3,6 +3,7 @@ import TimerIcon from "@mui/icons-material/Timer";
 import { AppBar, Box, Button, Chip, Container, IconButton, Toolbar, Tooltip, Typography } from "@mui/material";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
+import { APP_VERSION } from "../buildInfo";
 import { useEventList } from "../providers/EventListProvider";
 
 export default function AppLayout() {
@@ -40,7 +41,15 @@ export default function AppLayout() {
     <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <AppBar position="static">
         <Toolbar>
-          <Typography variant="h6">Race Result Management</Typography>
+          {/* title with build version below, left-aligned */}
+          <Box sx={{ display: "flex", flexDirection: "column", lineHeight: 1 }}>
+            <Typography variant="h6" sx={{ lineHeight: 1.2 }}>
+              Race Result Management
+            </Typography>
+            <Typography variant="caption" sx={{ opacity: 0.7, lineHeight: 1.2 }}>
+              {APP_VERSION}
+            </Typography>
+          </Box>
 
           {/* left-aligned buttons */}
           <Box sx={{ display: "flex", gap: 1, ml: 2 }}>
