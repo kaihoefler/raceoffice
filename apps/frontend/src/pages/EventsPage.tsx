@@ -13,10 +13,16 @@
 // - Delete ist per confirm abgesichert
 // - Editor-Dialog wird über lokale State-Maschine (editorMode/editingId/showEditor) gesteuert
 
-import { useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 
 import {
+  Alert,
   Box,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Button,
   Table,
   TableBody,
@@ -36,6 +42,7 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
+import UploadIcon from "@mui/icons-material/Upload";
 
 
 import EventEditor from "../components/EventEditor";
@@ -44,7 +51,7 @@ import type { Event, FullEvent } from "@raceoffice/domain";
 
 import { useEventList } from "../providers/EventListProvider";
 import { useRealtimeDoc } from "../realtime/useRealtimeDoc";
-import { normalizeFullEvent, slugify } from "../domain/eventActions";
+import { copyEventWithNewId, normalizeFullEvent, parseImportedEvent, slugify } from "../domain/eventActions";
 
 
 export default function EventsPage() {
@@ -54,7 +61,7 @@ export default function EventsPage() {
    * - setActiveEvent: setzt activeEventId im Realtime-Dokument
    * - deleteEvent: entfernt Event aus eventList
    */
-  const { eventList, setActiveEvent, deleteEvent } = useEventList();
+  const { eventList, saveEvent, setActiveEvent, deleteEvent } = useEventList();
 
   /**
    * Lokale UI-States für den EventEditor:
@@ -69,6 +76,37 @@ export default function EventsPage() {
 
   const exportDocId = exportEventId ? `Event-${exportEventId}` : null;
   const { data: rawExportEvent, status: exportStatus, error: exportError } = useRealtimeDoc<Partial<FullEvent>>(exportDocId);
+
+  /**
+   * Import-Flow:
+   * - Datei wählen -> parseImportedEvent
+   * - ID schon vorhanden -> conflictImport (Dialog: überschreiben oder Kopie)
+   * - sonst / nach Entscheidung -> importTarget: wird ins Dokument "Event-{id}" geschrieben,
+   *   sobald dessen Snapshot geladen ist (update() braucht einen Ausgangszustand).
+   */
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [conflictImport, setConflictImport] = useState<FullEvent | null>(null);
+  const [importTarget, setImportTarget] = useState<FullEvent | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
+
+  const importDocId = importTarget ? `Event-${importTarget.id}` : null;
+  const { data: importDocData, update: updateImportDoc } = useRealtimeDoc<Partial<FullEvent>>(importDocId);
+
+  useEffect(() => {
+    if (!importTarget) return;
+    if (importDocData == null) return;
+
+    updateImportDoc(() => importTarget);
+    setImportSuccess(`Imported event "${importTarget.name}".`);
+    setImportTarget(null);
+  }, [importTarget, importDocData, updateImportDoc]);
+
+  useEffect(() => {
+    if (!importSuccess) return;
+    const t = window.setTimeout(() => setImportSuccess(null), 3500);
+    return () => window.clearTimeout(t);
+  }, [importSuccess]);
 
 
   
@@ -139,6 +177,41 @@ export default function EventsPage() {
     setExportEventId(e.id);
   }
 
+  /** Listeneintrag schreiben und das Event-Dokument zum Befüllen vormerken. */
+  function commitImport(event: FullEvent) {
+    saveEvent(event.id, { name: event.name, slug: event.slug || slugify(event.name) });
+    setImportTarget(event);
+  }
+
+  async function handleImportFile(e: ChangeEvent<HTMLInputElement>) {
+    setImportError(null);
+    setImportSuccess(null);
+
+    try {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const event = parseImportedEvent(JSON.parse(await file.text()));
+      const exists = (eventList?.events ?? []).some((x) => x.id === event.id);
+
+      if (exists) setConflictImport(event);
+      else commitImport(event);
+    } catch (err) {
+      setImportError(`Import failed: ${String((err as Error)?.message ?? err)}`);
+    } finally {
+      // erlaubt erneuten Import derselben Datei
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  }
+
+  function resolveConflict(choice: "overwrite" | "copy") {
+    const event = conflictImport;
+    setConflictImport(null);
+    if (!event) return;
+
+    commitImport(choice === "overwrite" ? event : copyEventWithNewId(event, crypto.randomUUID(), `${event.name} (Import)`));
+  }
+
   useEffect(() => {
     if (!exportEventId) return;
     if (exportStatus !== "connected") return;
@@ -189,15 +262,49 @@ export default function EventsPage() {
         <CardHeader
           title="Events"
           action={
-            // "New Event" Button im Header (Icon-only)
-            <IconButton aria-label="New Event" onClick={startNewEvent}>
-              <AddIcon />
-            </IconButton>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+              <Tooltip title="Import Event JSON" arrow>
+                <span>
+                  <IconButton
+                    aria-label="Import Event JSON"
+                    onClick={() => importInputRef.current?.click()}
+                    disabled={importTarget !== null}
+                  >
+                    <UploadIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json,.json"
+                hidden
+                onChange={handleImportFile}
+              />
+
+              {/* "New Event" Button im Header (Icon-only) */}
+              <Tooltip title="New Event" arrow>
+                <IconButton aria-label="New Event" onClick={startNewEvent}>
+                  <AddIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
           }
         />
         <Divider />
 
         <CardContent>
+          {importError && (
+            <Alert severity="error" onClose={() => setImportError(null)} sx={{ mb: 2 }}>
+              {importError}
+            </Alert>
+          )}
+          {importSuccess && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {importSuccess}
+            </Alert>
+          )}
+
           {/* Tabelle der Events */}
           <Table size="small">
             <TableHead>
@@ -319,6 +426,27 @@ export default function EventsPage() {
         onCancel={resetForm}
         onAfterSave={resetForm}
       />
+
+      {/* ID-Konflikt beim Import: bestehendes Event ersetzen oder als Kopie anlegen */}
+      <Dialog open={conflictImport !== null} onClose={() => setConflictImport(null)}>
+        <DialogTitle>Event already exists</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            An event with the same ID as "{conflictImport?.name}" already exists. Overwrite replaces the existing event
+            including all races, starters and results. Import as copy creates a new event "{conflictImport?.name}{" "}
+            (Import)".
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConflictImport(null)}>Cancel</Button>
+          <Button color="error" onClick={() => resolveConflict("overwrite")}>
+            Overwrite
+          </Button>
+          <Button variant="contained" onClick={() => resolveConflict("copy")}>
+            Import as copy
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

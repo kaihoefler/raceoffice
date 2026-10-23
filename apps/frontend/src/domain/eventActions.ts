@@ -120,6 +120,43 @@ export function normalizeFullEvent(raw: unknown, eventId: string): FullEvent {
 }
 
 /**
+ * Parses an event JSON file (as written by the EventsPage export) into a FullEvent.
+ * Throws with a user-readable message if the content does not look like an event,
+ * so a wrong file never ends up as an empty event in the list.
+ */
+export function parseImportedEvent(raw: unknown): FullEvent {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("File does not contain an event object.");
+  }
+
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.id !== "string" || !obj.id.trim()) throw new Error("Event has no id.");
+  if (typeof obj.name !== "string" || !obj.name.trim()) throw new Error("Event has no name.");
+  if (!Array.isArray(obj.races) || !Array.isArray(obj.athletes)) {
+    throw new Error("Event has no races/athletes lists.");
+  }
+
+  const eventId = obj.id.trim();
+  return normalizeFullEvent({ ...obj, id: eventId, name: obj.name.trim() }, eventId);
+}
+
+/**
+ * Copy of an event under a new id (import next to an existing event with the same id).
+ * Races and age groups carry the eventId and are rewritten; race/athlete/ageGroup ids stay,
+ * they are only referenced inside the event document.
+ */
+export function copyEventWithNewId(event: FullEvent, newId: string, name: string): FullEvent {
+  return {
+    ...event,
+    id: newId,
+    name,
+    slug: slugify(name),
+    races: event.races.map((r) => ({ ...r, eventId: newId })),
+    ageGroups: event.ageGroups.map((g) => ({ ...g, eventId: newId })),
+  };
+}
+
+/**
  * Slugify helper used when persisting race names.
  */
 export function slugify(input: string): string {
