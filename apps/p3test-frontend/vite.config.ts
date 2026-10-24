@@ -10,6 +10,8 @@ export default defineConfig({
   },
   server: {
     port: 5175,
+    // Listen on all interfaces so the dev server is reachable from other machines in the LAN.
+    host: true,
     proxy: {
       "/p3-test": { target: "http://localhost:8787", changeOrigin: true },
       "/health": { target: "http://localhost:8787", changeOrigin: true },

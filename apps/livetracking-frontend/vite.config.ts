@@ -23,6 +23,8 @@ export default defineConfig({
   },
   server: {
     port: 5174,
+    // Listen on all interfaces so the dev server is reachable from other machines in the LAN.
+    host: true,
     proxy: {
       "/ws": { target: "http://localhost:8787", ws: true },
       "/sse": { target: "http://localhost:8787", changeOrigin: true },
