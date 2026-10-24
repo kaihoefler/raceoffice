@@ -690,6 +690,7 @@ export default function LiveTrackingControlPage() {
           workerStatusCheck: null,
           updatedAt: nowIso(),
         }));
+        await resetPassingHistory();
       }
 
       if (RESET_CLEARS_RESULTS) {
@@ -704,7 +705,21 @@ export default function LiveTrackingControlPage() {
   }
 
 
-  function clearRuntimeBuffers() {
+  /**
+   * Clears the full passing history the ranking is computed from. Done via the server so this
+   * page never has to load the (potentially large) history document.
+   */
+  async function resetPassingHistory() {
+    try {
+      const response = await fetch("/live-tracking/passing-history/reset", { method: "POST" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      console.error("[live-tracking] passing history reset failed", error);
+      window.alert(`Clearing the passing history failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function clearRuntimeBuffers() {
     updateRuntime((prev) => ({
       ...prev,
       recentPassings: [],
@@ -712,6 +727,7 @@ export default function LiveTrackingControlPage() {
       warnings: [],
       updatedAt: nowIso(),
     }));
+    await resetPassingHistory();
   }
 
   function renameSetup(setupId: string, name: string) {

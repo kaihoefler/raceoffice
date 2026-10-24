@@ -12,6 +12,7 @@ export {
   makeLiveTrackingSessionDocId,
   makeLiveTrackingRuntimeDocId,
   makeLiveTrackingResultsDocId,
+  makeLiveTrackingPassingHistoryDocId,
   parseLiveTrackingDocId,
   type LiveTrackingDocKind,
   type LiveTrackingDocRef,
@@ -111,6 +112,12 @@ export {
   type LiveTrackingInvalidEvent,
   type LiveTrackingResultsDocument,
 } from "./results.js";
+
+export {
+  createLiveTrackingPassingHistoryDocument,
+  isLiveTrackingPassingHistoryDocument,
+  type LiveTrackingPassingHistoryDocument,
+} from "./passingHistory.js";
 
 export {
   DEFAULT_LIVE_TRACKING_TIMING_ENGINE_OPTIONS,

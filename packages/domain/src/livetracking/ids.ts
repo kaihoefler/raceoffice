@@ -10,7 +10,7 @@
 
 export const LIVE_TRACKING_DOC_PREFIX = "liveTracking" as const;
 
-export type LiveTrackingDocKind = "list" | "participants" | "setup" | "session" | "runtime" | "results";
+export type LiveTrackingDocKind = "list" | "participants" | "setup" | "session" | "runtime" | "results" | "passingHistory";
 
 export type LiveTrackingDocRef =
   | { kind: "list" }
@@ -18,7 +18,8 @@ export type LiveTrackingDocRef =
   | { kind: "setup"; setupRef: string }
   | { kind: "session"; sessionId: string }
   | { kind: "runtime"; sessionId: string }
-  | { kind: "results"; sessionId: string };
+  | { kind: "results"; sessionId: string }
+  | { kind: "passingHistory" };
 
 
 function cleanId(value: string): string {
@@ -72,6 +73,11 @@ export function makeLiveTrackingResultsDocId(_sessionId?: string): string {
   return `${LIVE_TRACKING_DOC_PREFIX}Results`;
 }
 
+/** Full passing history of the current (singleton) session. */
+export function makeLiveTrackingPassingHistoryDocId(): string {
+  return `${LIVE_TRACKING_DOC_PREFIX}PassingHistory`;
+}
+
 /**
  * Parses a doc-id into a typed reference.
  * Returns null for non-livetracking ids.
@@ -92,6 +98,9 @@ export function parseLiveTrackingDocId(docId: string): LiveTrackingDocRef | null
   }
   if (raw === `${LIVE_TRACKING_DOC_PREFIX}Results`) {
     return { kind: "results", sessionId: "" };
+  }
+  if (raw === `${LIVE_TRACKING_DOC_PREFIX}PassingHistory`) {
+    return { kind: "passingHistory" };
   }
 
   // Legacy ids with suffix are still accepted for backward compatibility.

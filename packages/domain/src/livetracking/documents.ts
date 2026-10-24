@@ -38,6 +38,11 @@ import {
   isLiveTrackingResultsDocument,
   type LiveTrackingResultsDocument,
 } from "./results.js";
+import {
+  createLiveTrackingPassingHistoryDocument,
+  isLiveTrackingPassingHistoryDocument,
+  type LiveTrackingPassingHistoryDocument,
+} from "./passingHistory.js";
 
 /**
  * Union of all known LiveTracking document payloads.
@@ -51,7 +56,8 @@ export type LiveTrackingDocument =
   | LiveTrackingSetupDocument
   | LiveTrackingSessionDocument
   | LiveTrackingRuntimeDocument
-  | LiveTrackingResultsDocument;
+  | LiveTrackingResultsDocument
+  | LiveTrackingPassingHistoryDocument;
 
 /**
  * Creates default data for a known LiveTracking doc-id.
@@ -96,6 +102,7 @@ export function createInitialLiveTrackingDocument(docId: string): LiveTrackingDo
 
   if (parsed.kind === "runtime") return createLiveTrackingRuntimeDocument();
   if (parsed.kind === "results") return createLiveTrackingResultsDocument();
+  if (parsed.kind === "passingHistory") return createLiveTrackingPassingHistoryDocument();
 
   return null;
 }
@@ -110,6 +117,7 @@ export function isLiveTrackingDocument(value: unknown): value is LiveTrackingDoc
     isLiveTrackingSetupDocument(value) ||
     isLiveTrackingSessionDocument(value) ||
     isLiveTrackingRuntimeDocument(value) ||
-    isLiveTrackingResultsDocument(value)
+    isLiveTrackingResultsDocument(value) ||
+    isLiveTrackingPassingHistoryDocument(value)
   );
 }

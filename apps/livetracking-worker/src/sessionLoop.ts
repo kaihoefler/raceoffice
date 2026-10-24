@@ -24,6 +24,7 @@ import {
   isLiveTrackingWorkerStatusCheck,
   makeLiveTrackingParticipantPoolDocId,
   makeLiveTrackingResultsDocId,
+  makeLiveTrackingPassingHistoryDocId,
   makeLiveTrackingRuntimeDocId,
   makeLiveTrackingSessionDocId,
   makeLiveTrackingSetupDocId,
@@ -33,6 +34,7 @@ import {
   type LiveTrackingAthlete,
   type LiveTrackingParticipantPoolDocument,
   type LiveTrackingResultsDocument,
+  type LiveTrackingPassingHistoryDocument,
   type LiveTrackingRuntimeDocument,
   type LiveTrackingRuntimeRawPayload,
   type LiveTrackingSessionDocument,
@@ -41,7 +43,11 @@ import {
 import { createDecoderSourceAdapter } from "./decoder/adapters/createDecoderSourceAdapter.js";
 import type { DecoderHealthPatch, DecoderSourceAdapter, NormalizedPassing } from "./decoder/adapters/decoderSourceAdapter.js";
 import { normalizedToRuntimePassing } from "./decoder/adapters/normalizedPassing.js";
+import { PassingHistoryWriter } from "./passingHistoryWriter.js";
 import { RealtimeDocClient } from "./realtimeDocClient.js";
+
+/** How often buffered passings are appended to the history document. */
+const HISTORY_FLUSH_INTERVAL_MS = 1_000;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -118,6 +124,10 @@ export class SessionLoop {
   readonly sessionClient: RealtimeDocClient<LiveTrackingSessionDocument>;
   readonly runtimeClient: RealtimeDocClient<LiveTrackingRuntimeDocument>;
   readonly resultsClient: RealtimeDocClient<LiveTrackingResultsDocument>;
+  readonly historyClient: RealtimeDocClient<LiveTrackingPassingHistoryDocument>;
+  private readonly historyWriter: PassingHistoryWriter;
+  private historyFlushTimer: NodeJS.Timeout | null = null;
+  private unsubscribeHistory: (() => void) | null = null;
 
   private setupClient: RealtimeDocClient<LiveTrackingSetupDocument> | null = null;
   private activeSetupDocId: string | null = null;
@@ -156,12 +166,23 @@ export class SessionLoop {
     this.sessionClient = new RealtimeDocClient<LiveTrackingSessionDocument>(this.sessionDocId, baseHttpUrl);
     this.runtimeClient = new RealtimeDocClient<LiveTrackingRuntimeDocument>(this.runtimeDocId, baseHttpUrl);
     this.resultsClient = new RealtimeDocClient<LiveTrackingResultsDocument>(this.resultsDocId, baseHttpUrl);
+    this.historyClient = new RealtimeDocClient<LiveTrackingPassingHistoryDocument>(
+      makeLiveTrackingPassingHistoryDocId(),
+      baseHttpUrl,
+    );
+    this.historyWriter = new PassingHistoryWriter(this.historyClient);
   }
 
   start() {
     this.sessionClient.connect();
     this.runtimeClient.connect();
     this.resultsClient.connect();
+    this.historyClient.connect();
+
+    this.unsubscribeHistory = this.historyClient.onData(() => {
+      this.historyWriter.onDocumentChanged();
+      this.scheduleUpdateResultsProjection();
+    });
 
     this.unsubscribeSession = this.sessionClient.onData(() => {
       this.logSessionStateTransition();
@@ -221,9 +242,15 @@ export class SessionLoop {
     for (const client of this.participantPoolClients.values()) client.close();
     this.participantPoolClients.clear();
 
+    // Best effort: write passings that are still buffered before the socket closes.
+    this.historyWriter.flush();
+    this.unsubscribeHistory?.();
+    this.unsubscribeHistory = null;
+
     this.sessionClient.close();
     this.runtimeClient.close();
     this.resultsClient.close();
+    this.historyClient.close();
   }
 
   private clearScheduledTimers() {
@@ -243,6 +270,20 @@ export class SessionLoop {
       clearTimeout(this.resultsTimer);
       this.resultsTimer = null;
     }
+    if (this.historyFlushTimer) {
+      clearTimeout(this.historyFlushTimer);
+      this.historyFlushTimer = null;
+    }
+  }
+
+  /** Flushes buffered passings at most once per interval; retries while some remain. */
+  private scheduleHistoryFlush() {
+    if (this.historyFlushTimer) return;
+    this.historyFlushTimer = setTimeout(() => {
+      this.historyFlushTimer = null;
+      this.historyWriter.flush();
+      if (this.historyWriter.hasPending()) this.scheduleHistoryFlush();
+    }, HISTORY_FLUSH_INTERVAL_MS);
   }
 
   private scheduleTickCommands() {
@@ -325,6 +366,18 @@ export class SessionLoop {
   private handleNormalizedPassing(passing: NormalizedPassing) {
     const runtimePassing = normalizedToRuntimePassing(passing);
     const t = nowIso();
+
+    // Decoder signals only go to the passing log; results need athlete passings only.
+    if (!passing.signalKind) {
+      this.historyWriter.append({
+        id: runtimePassing.id,
+        timestamp: runtimePassing.timestamp,
+        transponderId: runtimePassing.transponderId,
+        timingPointId: runtimePassing.timingPointId,
+        decoderId: runtimePassing.decoderId,
+      });
+      this.scheduleHistoryFlush();
+    }
     this.commitRuntimeUpdate((doc) => {
       let recentRawPayloads = doc.recentRawPayloads ?? [];
       if (typeof passing.raw === "string") {
@@ -582,6 +635,10 @@ export class SessionLoop {
     const athletes = this.ensureParticipantPoolAthletes();
     if (athletes === null) return;
 
+    // Full session history (not the small runtime window), so no lap ever drops out.
+    const passings = this.historyWriter.allPassings();
+    if (passings === null) return;
+
     const warnings: string[] = [];
 
     if (session.participantSource.kind === "race") {
@@ -593,13 +650,13 @@ export class SessionLoop {
     if (athletes.length === 0 && (setup.activeParticipantPoolIds ?? []).length > 0) {
       const poolIds = (setup.activeParticipantPoolIds ?? []).join(", ");
       warnings.push(`[worker] No athletes loaded from active pool(s): ${poolIds}. Pool documents may be empty or still loading.`);
-      console.warn(`[livetracking-worker] projection: 0 athletes from pools [${poolIds}], ${(runtime.recentPassings ?? []).length} passings, minLapTimeMs=${timingOptions.minLapTimeMs}`);
+      console.warn(`[livetracking-worker] projection: 0 athletes from pools [${poolIds}], ${passings.length} passings, minLapTimeMs=${timingOptions.minLapTimeMs}`);
     } else {
-      console.log(`[livetracking-worker] projection: ${athletes.length} athletes, ${(runtime.recentPassings ?? []).length} passings, minLapTimeMs=${timingOptions.minLapTimeMs}`);
+      console.log(`[livetracking-worker] projection: ${athletes.length} athletes, ${passings.length} passings, minLapTimeMs=${timingOptions.minLapTimeMs}`);
     }
 
     const projected = buildLiveTrackingResultsProjection({
-      passings: runtime.recentPassings ?? [],
+      passings,
       track: setup.track,
       athletes,
       generatedAt: nowIso(),

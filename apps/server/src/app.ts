@@ -5,8 +5,10 @@ import cors from "@fastify/cors";
 import os from "node:os";
 
 import {
+  createLiveTrackingPassingHistoryDocument,
   createLiveTrackingRuntimeDocument,
   isLiveTrackingRuntimeDocument,
+  makeLiveTrackingPassingHistoryDocId,
   makeLiveTrackingRuntimeDocId,
 } from "@raceoffice/domain";
 import { DocStore } from "./services/docStore.js";
@@ -163,6 +165,17 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   // --- LiveTracking worker process lifecycle
   registerLiveTrackingWorkerRoutes(app, liveTrackingWorkerManager);
+
+  // --- LiveTracking passing history reset
+  // Done server-side so subscribers get one whole-document replace instead of a JSON-Patch
+  // diff with one remove op per passing, and the control page never has to load the history.
+  app.post("/live-tracking/passing-history/reset", async () => {
+    const doc = hub.commitServerDocUpdate(makeLiveTrackingPassingHistoryDocId(), () => ({
+      ...createLiveTrackingPassingHistoryDocument(),
+      updatedAt: new Date().toISOString(),
+    }));
+    return { ok: true, rev: doc.rev };
+  });
 
   // --- P3 protocol test client control routes
   registerP3TestClientRoutes(app, p3TestClientService);
