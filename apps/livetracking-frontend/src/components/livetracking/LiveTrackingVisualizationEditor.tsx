@@ -4,7 +4,11 @@ import { Box, Button, Card, CardContent, CardHeader, Divider, InputAdornment, Me
 
 import { useLiveTrackingVisualizationList } from "../../providers/LiveTrackingVisualizationListProvider";
 import { useRealtimeDoc } from "../../realtime/useRealtimeDoc";
-import type { FullLiveTrackingVisualization } from "../../types/liveTrackingVisualization";
+import {
+  DEFAULT_BEST_LAP_COLOR,
+  DEFAULT_LAST_LAP_COLOR,
+  type FullLiveTrackingVisualization,
+} from "../../types/liveTrackingVisualization";
 
 type Props = {
   open: boolean;
@@ -72,8 +76,8 @@ function normalizeFullLiveTrackingVisualization(raw: unknown, visualizationId: s
     fontWeight: typeof obj.fontWeight === "string" ? obj.fontWeight : "600",
     fontColor: typeof obj.fontColor === "string" ? obj.fontColor : "#ffffff",
     headerFontSize: typeof obj.headerFontSize === "string" ? obj.headerFontSize : "1.1em",
-    activeStatusColor: typeof obj.activeStatusColor === "string" ? obj.activeStatusColor : "#22c55e",
-    inactiveStatusColor: typeof obj.inactiveStatusColor === "string" ? obj.inactiveStatusColor : "#ef4444",
+    bestLapColor: typeof obj.bestLapColor === "string" ? obj.bestLapColor : DEFAULT_BEST_LAP_COLOR,
+    lastLapColor: typeof obj.lastLapColor === "string" ? obj.lastLapColor : DEFAULT_LAST_LAP_COLOR,
     qualificationRecentLines:
       typeof obj.qualificationRecentLines === "number" && Number.isFinite(obj.qualificationRecentLines)
         ? Math.max(1, Math.floor(obj.qualificationRecentLines))
@@ -114,8 +118,8 @@ export default function LiveTrackingVisualizationEditor({ open, visualizationId,
   const [fontWeight, setFontWeight] = useState("600");
   const [fontColor, setFontColor] = useState("#ffffff");
   const [headerFontSize, setHeaderFontSize] = useState("1.1em");
-  const [activeStatusColor, setActiveStatusColor] = useState("#22c55e");
-  const [inactiveStatusColor, setInactiveStatusColor] = useState("#ef4444");
+  const [bestLapColor, setBestLapColor] = useState(DEFAULT_BEST_LAP_COLOR);
+  const [lastLapColor, setLastLapColor] = useState(DEFAULT_LAST_LAP_COLOR);
   const [qualificationRecentLines, setQualificationRecentLines] = useState("10");
   const [useQualificationPaging, setUseQualificationPaging] = useState(false);
   const [qualificationPagingLines, setQualificationPagingLines] = useState("10");
@@ -133,8 +137,8 @@ export default function LiveTrackingVisualizationEditor({ open, visualizationId,
     setFontWeight(normalized.fontWeight);
     setFontColor(normalized.fontColor);
     setHeaderFontSize(normalized.headerFontSize);
-    setActiveStatusColor(normalized.activeStatusColor);
-    setInactiveStatusColor(normalized.inactiveStatusColor);
+    setBestLapColor(normalized.bestLapColor);
+    setLastLapColor(normalized.lastLapColor);
     setQualificationRecentLines(String(normalized.qualificationRecentLines));
     setUseQualificationPaging(normalized.useQualificationPaging);
     setQualificationPagingLines(String(normalized.qualificationPagingLines));
@@ -185,8 +189,8 @@ export default function LiveTrackingVisualizationEditor({ open, visualizationId,
         fontWeight: String(fontWeight ?? "").trim() || "600",
         fontColor: String(fontColor ?? "").trim() || "#ffffff",
         headerFontSize: String(headerFontSize ?? "").trim() || "1.1em",
-        activeStatusColor: String(activeStatusColor ?? "").trim() || "#22c55e",
-        inactiveStatusColor: String(inactiveStatusColor ?? "").trim() || "#ef4444",
+        bestLapColor: String(bestLapColor ?? "").trim() || DEFAULT_BEST_LAP_COLOR,
+        lastLapColor: String(lastLapColor ?? "").trim() || DEFAULT_LAST_LAP_COLOR,
         qualificationRecentLines: Math.max(1, Math.floor(Number(qualificationRecentLines) || 10)),
         useQualificationPaging,
         qualificationPagingLines: Math.max(1, Math.floor(Number(qualificationPagingLines) || 10)),
@@ -257,8 +261,8 @@ export default function LiveTrackingVisualizationEditor({ open, visualizationId,
             </Stack>
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <ColorField label="Active status color" value={activeStatusColor} onChange={setActiveStatusColor} pickerFallback="#22c55e" />
-              <ColorField label="Inactive status color" value={inactiveStatusColor} onChange={setInactiveStatusColor} pickerFallback="#ef4444" />
+              <ColorField label="Best lap color" value={bestLapColor} onChange={setBestLapColor} pickerFallback={DEFAULT_BEST_LAP_COLOR} />
+              <ColorField label="Last lap color" value={lastLapColor} onChange={setLastLapColor} pickerFallback={DEFAULT_LAST_LAP_COLOR} />
             </Stack>
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>

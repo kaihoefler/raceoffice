@@ -1,3 +1,7 @@
+/** Timing-board defaults: purple for the best lap, yellow for the last lap. */
+export const DEFAULT_BEST_LAP_COLOR = "#c084fc";
+export const DEFAULT_LAST_LAP_COLOR = "#facc15";
+
 export type LiveTrackingVisualization = {
   id: string;
   name: string;
@@ -12,8 +16,10 @@ export type FullLiveTrackingVisualization = LiveTrackingVisualization & {
   fontWeight: string;
   fontColor: string;
   headerFontSize: string;
-  activeStatusColor: string;
-  inactiveStatusColor: string;
+  /** Training board: color of the best lap. */
+  bestLapColor: string;
+  /** Training board: color of the last lap. */
+  lastLapColor: string;
   qualificationRecentLines: number;
   useQualificationPaging: boolean;
   qualificationPagingLines: number;

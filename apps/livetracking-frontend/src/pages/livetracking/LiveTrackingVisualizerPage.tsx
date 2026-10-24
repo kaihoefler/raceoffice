@@ -22,7 +22,11 @@ import {
 } from "../../components/livetracking/liveTrackingDisplayName";
 import { useLiveTrackingVisualizationList } from "../../providers/LiveTrackingVisualizationListProvider";
 import { useRealtimeDoc } from "../../realtime/useRealtimeDoc";
-import type { FullLiveTrackingVisualization } from "../../types/liveTrackingVisualization";
+import {
+  DEFAULT_BEST_LAP_COLOR,
+  DEFAULT_LAST_LAP_COLOR,
+  type FullLiveTrackingVisualization,
+} from "../../types/liveTrackingVisualization";
 
 
 const flagModules = import.meta.glob("../../assets/flags/*.svg", {
@@ -49,9 +53,6 @@ const nameCellSx = {
   textOverflow: "ellipsis",
 } as const;
 
-/** Timing-board colors: yellow for the last lap, purple for the best lap. */
-const LAST_LAP_COLOR = "#facc15";
-const BEST_LAP_COLOR = "#c084fc";
 /** Column headers are de-emphasized so the times stand out. */
 const TABLE_HEADER_COLOR = "#bdbdbd";
 
@@ -86,8 +87,8 @@ function normalizeFullLiveTrackingVisualization(raw: unknown, visualizationId: s
     fontWeight: typeof obj.fontWeight === "string" ? obj.fontWeight : "600",
     fontColor: typeof obj.fontColor === "string" ? obj.fontColor : "#ffffff",
     headerFontSize: typeof obj.headerFontSize === "string" ? obj.headerFontSize : "1.1em",
-    activeStatusColor: typeof obj.activeStatusColor === "string" ? obj.activeStatusColor : "#22c55e",
-    inactiveStatusColor: typeof obj.inactiveStatusColor === "string" ? obj.inactiveStatusColor : "#ef4444",
+    bestLapColor: typeof obj.bestLapColor === "string" ? obj.bestLapColor : DEFAULT_BEST_LAP_COLOR,
+    lastLapColor: typeof obj.lastLapColor === "string" ? obj.lastLapColor : DEFAULT_LAST_LAP_COLOR,
     qualificationRecentLines:
       typeof obj.qualificationRecentLines === "number" && Number.isFinite(obj.qualificationRecentLines)
         ? Math.max(1, Math.floor(obj.qualificationRecentLines))
@@ -365,6 +366,8 @@ export default function LiveTrackingVisualizerPage() {
   const fontWeight = visualization?.fontWeight ?? "600";
   const fontColor = visualization?.fontColor ?? "#ffffff";
   const headerFontSize = visualization?.headerFontSize ?? "1.1em";
+  const bestLapColor = visualization?.bestLapColor ?? DEFAULT_BEST_LAP_COLOR;
+  const lastLapColor = visualization?.lastLapColor ?? DEFAULT_LAST_LAP_COLOR;
   // Athlete, Laps, Best lap, Last lap + optional current split + one column per split point.
   const trainingColumnCount = 4 + (hasCurrentSplitColumn ? 1 : 0) + orderedSplitPoints.length;
 
@@ -616,13 +619,13 @@ export default function LiveTrackingVisualizerPage() {
                     >
                       <TableCell>{getDisplayName(row)}</TableCell>
                       <TableCell align="right">{row.lapsCompleted}</TableCell>
-                      <TableCell align="right" sx={{ color: `${BEST_LAP_COLOR} !important` }}>
+                      <TableCell align="right" sx={{ color: `${bestLapColor} !important` }}>
                         {formatSeconds(row.bestLapTimeMs)}
                       </TableCell>
                       {hasCurrentSplitColumn ? (
                         <TableCell align="right">{formatSeconds(latestCurrentSplit?.splitTimeMs ?? null)}</TableCell>
                       ) : null}
-                      <TableCell align="right" sx={{ color: `${LAST_LAP_COLOR} !important` }}>
+                      <TableCell align="right" sx={{ color: `${lastLapColor} !important` }}>
                         {formatSeconds(row.lastLapTimeMs)}
                       </TableCell>
                       {orderedSplitPoints.map((point) => (
@@ -653,7 +656,7 @@ export default function LiveTrackingVisualizerPage() {
                             sx={{
                               fontSize: "1.15em",
                               fontWeight: 800,
-                              color: latestLapTime !== null && latestLapTime === row.bestLapTimeMs ? BEST_LAP_COLOR : LAST_LAP_COLOR,
+                              color: latestLapTime !== null && latestLapTime === row.bestLapTimeMs ? bestLapColor : lastLapColor,
                             }}
                           >
                             {formatLapMsCompact(latestLapTime)}
@@ -667,7 +670,7 @@ export default function LiveTrackingVisualizerPage() {
                                 component="span"
                                 sx={{
                                   fontSize: "1.15em",
-                                  ...(isBest ? { color: BEST_LAP_COLOR, fontWeight: 800 } : { opacity: 0.85 }),
+                                  ...(isBest ? { color: bestLapColor, fontWeight: 800 } : { opacity: 0.85 }),
                                 }}
                               >
                                 {formatLapMsCompact(lapTimeMs)}
