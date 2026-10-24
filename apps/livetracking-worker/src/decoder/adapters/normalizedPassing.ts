@@ -25,5 +25,6 @@ export function normalizedToRuntimePassing(n: NormalizedPassing): LiveTrackingRu
     hits: n.hits,
     lowBattery: n.lowBattery,
     backend: n.backend,
+    ...(n.signalKind !== undefined ? { signalKind: n.signalKind } : {}),
   };
 }

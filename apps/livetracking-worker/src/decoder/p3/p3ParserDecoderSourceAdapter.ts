@@ -131,6 +131,14 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
 
   private _onPassing(managed: ManagedConnection, event: PassingEvent): void {
     const { point } = managed;
+
+    // Sync pulses only keep decoders in step; they carry no athlete and would
+    // otherwise crowd real passings out of the bounded recentPassings buffer.
+    if (event.specialKind === "sync_pulse") {
+      this._emitHealth(point, { lastMessageAt: nowIso() });
+      return;
+    }
+
     const offsetSecs = point.decoderTimestampOffsetSecs ?? 0;
 
     const timestamp = applyTimestampOffset(event.time, offsetSecs);
@@ -147,6 +155,9 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
       hits: event.hits,
       lowBattery: event.lowBattery,
       backend: "p3parser",
+      // Switch / FinishCamStart are kept as start signals for the passing log.
+      // Open point: mapping of these IDs to real start signals is not yet verified on hardware.
+      ...(event.specialKind ? { signalKind: "start_signal" as const } : {}),
     };
 
     this.callbacks.onPassing(normalized);

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { Box, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import { Box, Chip, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
 import type { LiveTrackingRuntimePassingEvent } from "@raceoffice/domain";
 
 type TimingPointColumn = {
@@ -75,6 +75,19 @@ export default function LiveTrackingPassingLog({
             </TableHead>
             <TableBody>
               {column.passings.map((passing) => {
+                if (passing.signalKind === "start_signal") {
+                  return (
+                    <TableRow key={passing.id}>
+                      <TableCell sx={{ fontFamily: "monospace", whiteSpace: "nowrap" }}>{formatTime(passing.timestamp)}</TableCell>
+                      <TableCell>
+                        <Chip label="Start signal" size="small" color="info" variant="outlined" />
+                        <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                          {passing.transponderId}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
                 const name = resolveAthleteName(passing.transponderId);
                 return (
                   <TableRow key={passing.id}>

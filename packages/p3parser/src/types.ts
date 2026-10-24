@@ -99,6 +99,14 @@ export interface P3BaseRecord {
 }
 
 
+/**
+ * Reserved TranX IDs (semantics taken from DecoderInterface.pas, not yet verified on hardware):
+ * - 9993 "sync_pulse": decoder synchronisation pulse
+ * - 9992 "switch": decoder switch input (likely start trigger)
+ * - 9991 "finish_cam_start": finish camera start
+ */
+export type P3SpecialPassingKind = "sync_pulse" | "switch" | "finish_cam_start";
+
 export interface P3PassingRecord extends P3BaseRecord {
   kind: "passing";
   tor: typeof P3_TOR.PASSING;
@@ -106,6 +114,11 @@ export interface P3PassingRecord extends P3BaseRecord {
   transponderId?: string;
   /** "tranx", "prochip-flexchip", or undefined if not evidenced. */
   transponderType?: "tranx" | "prochip-flexchip";
+  /**
+   * Set when the TranX ID is a reserved decoder-internal value (9991/9992/9993)
+   * rather than a real transponder. Such passings carry no athlete.
+   */
+  specialKind?: P3SpecialPassingKind;
   passingTime?: Date;
   passingTimeSource?: "rtc" | "utc";
   signalStrength?: number;

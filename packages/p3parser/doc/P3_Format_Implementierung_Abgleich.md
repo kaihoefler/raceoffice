@@ -103,6 +103,12 @@ Aus `DecoderInterface.pas` belegt und in `src/parser.ts` umgesetzt:
   - `9992 -> Switch`
   - `9993 -> SyncPulse`
   - `9991 -> FinishCamStart`
+  - Zusätzlich wird `specialKind` (`sync_pulse` / `switch` / `finish_cam_start`) am Record und am `PassingEvent` gesetzt.
+    Der Livetracking-Worker verwirft `sync_pulse`. `switch`/`finish_cam_start` reicht er als `signalKind: "start_signal"`
+    weiter: Sie erscheinen im Passing-Log, werden aber von der Timing-Engine ignoriert.
+  - **Offener Punkt:** Die Semantik von `9992`/`9991` stammt nur aus `DecoderInterface.pas` und ist nicht mit echter
+    Hardware verifiziert. Insbesondere ist offen, ob „Switch“ der Startpistolen-Eingang ist. Eine fachliche Auswertung
+    der Startsignale (z. B. als Rennstart) ist noch nicht umgesetzt.
 - Transponder ProChip/FlexChip (`0x0A`) via ASCII-Dekodierung
 - Zeitfelder:
   - RTC (`0x04`) als Fallback

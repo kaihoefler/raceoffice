@@ -8,12 +8,20 @@
  * - keep this as pure type/schema layer (no timing engine here yet).
  */
 
+/**
+ * Marks a passing that is a decoder signal rather than an athlete passing
+ * (e.g. P3 "Switch"/"FinishCamStart"). Kept for the passing log and later
+ * evaluation, but ignored by the timing engine.
+ */
+export type LiveTrackingPassingSignalKind = "start_signal";
+
 export type LiveTrackingPassingEvent = {
   id: string;
   timestamp: string;
   transponderId: string;
   timingPointId: string;
   decoderId: string;
+  signalKind?: LiveTrackingPassingSignalKind;
 };
 
 export type LiveTrackingCurrentSplit = {

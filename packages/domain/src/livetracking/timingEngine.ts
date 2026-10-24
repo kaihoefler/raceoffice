@@ -235,6 +235,10 @@ export function buildLiveTrackingResultsProjection(args: {
 
   // Core acceptance pipeline: validate -> map transponder -> plausibility checks -> apply.
   for (const passing of sortPassingsStable(args.passings)) {
+    // Decoder signals (e.g. start trigger) are not athlete passings: they must neither
+    // create synthetic athletes nor show up as invalid events.
+    if (passing.signalKind) continue;
+
     const eventMs = toMs(passing.timestamp);
     if (eventMs === null) {
       doc.invalidEvents = appendBounded(doc.invalidEvents, {

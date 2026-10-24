@@ -184,6 +184,7 @@ export class P3DecoderConnection {
       passingNumber: r.passingNumber,
       transponderId: r.transponderId,
       transponderType: r.transponderType === "prochip-flexchip" ? "prochip" : "tranx",
+      ...(r.specialKind ? { specialKind: r.specialKind } : {}),
       time: r.passingTime,
       timeSource: r.passingTimeSource,
       signalStrength: r.signalStrength ?? 0,

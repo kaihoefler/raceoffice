@@ -123,6 +123,22 @@ describe("livetracking/timingEngine", () => {
     expect(results.invalidEvents.some((x) => x.reason === "unknown_transponder")).toBe(false);
   });
 
+  it("ignores decoder signal passings (no synthetic athlete, no invalid event)", () => {
+    const results = buildLiveTrackingResultsProjection({
+      passings: [
+        { ...p("1", "2026-01-01T10:00:00.000Z", "Switch", "sf"), signalKind: "start_signal" },
+        p("2", "2026-01-01T10:00:05.000Z", "445566", "sf"), // unknown real chip stays visible
+      ],
+      track,
+      athletes: [],
+      generatedAt: "2026-01-01T10:00:10.000Z",
+    });
+
+    expect(results.athleteLiveStates.map((x) => x.athleteId)).toEqual(["unknown:transponder:445566"]);
+    expect(results.unknownTransponders).not.toContain("Switch");
+    expect(results.invalidEvents.some((x) => x.passingEventId === "1")).toBe(false);
+  });
+
     it("evaluates lap on start/finish even when splits are missing", () => {
     const passings: LiveTrackingPassingEvent[] = [
       p("1", "2026-01-01T10:00:00.000Z", "12345", "sf"),

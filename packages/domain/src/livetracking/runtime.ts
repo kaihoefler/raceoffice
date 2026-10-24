@@ -8,6 +8,8 @@
  * - No persistent setup config and no final sporting ranking should live here.
  */
 
+import type { LiveTrackingPassingSignalKind } from "./results.js";
+
 /**
  * Worker process lifecycle state.
  *
@@ -56,6 +58,8 @@ export type LiveTrackingRuntimePassingEvent = {
   lowBattery?: boolean;
   /** Welches Decoder-Backend das Passing geliefert hat. */
   backend?: "ammc" | "p3parser";
+  /** Gesetzt, wenn das Passing ein Decoder-Signal (z.B. Startsignal) und kein Athleten-Passing ist. */
+  signalKind?: LiveTrackingPassingSignalKind;
 };
 
 /**

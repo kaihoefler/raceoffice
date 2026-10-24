@@ -13,6 +13,7 @@ import {
   P3SessionRecord,
   P3SettingsRecord,
   P3SignalsRecord,
+  P3SpecialPassingKind,
   P3StatusRecord,
   P3TimelineRecord,
   P3Tor0012ObservedRecord,
@@ -240,6 +241,8 @@ export class P3Parser {
           const value = numericLe(tlv).toString(10);
           record.transponderType = "tranx";
           record.transponderId = mapSpecialTransponderId(value);
+          const specialKind = specialPassingKind(value);
+          if (specialKind) record.specialKind = specialKind;
           consumeUnknown(unknownFields, tlv);
           break;
         }
@@ -950,6 +953,19 @@ function mapSpecialTransponderId(value: string): string {
       return "FinishCamStart";
     default:
       return value;
+  }
+}
+
+function specialPassingKind(value: string): P3SpecialPassingKind | undefined {
+  switch (value) {
+    case "9993":
+      return "sync_pulse";
+    case "9992":
+      return "switch";
+    case "9991":
+      return "finish_cam_start";
+    default:
+      return undefined;
   }
 }
 

@@ -1,3 +1,5 @@
+import type { LiveTrackingPassingSignalKind } from "@raceoffice/domain";
+
 export type DecoderBackendKind = "ammc" | "p3parser";
 
 export type NormalizedPassing = {
@@ -18,6 +20,8 @@ export type NormalizedPassing = {
   hits: number;
   lowBattery: boolean;
   backend: DecoderBackendKind;
+  /** Gesetzt für Decoder-Signale (z.B. Startsignal), die kein Athleten-Passing sind. */
+  signalKind?: LiveTrackingPassingSignalKind;
   raw?: unknown;
 };
 

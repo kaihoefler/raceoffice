@@ -5,6 +5,8 @@
  * Consumers never need to import from types.ts / parser.ts / builder.ts.
  */
 
+import type { P3SpecialPassingKind } from "./types.js";
+
 export type DecoderConfig = {
   ip: string;
   /** Default: 5403 */
@@ -24,6 +26,11 @@ export type PassingEvent = {
   /** Transponder identifier string. Numeric string for tranx ("12345"), formatted for prochip ("AA-12345"). */
   transponderId: string;
   transponderType: "tranx" | "prochip";
+  /**
+   * Set for reserved decoder-internal IDs (SyncPulse, Switch, FinishCamStart).
+   * These are not athlete passings; consumers should route them separately.
+   */
+  specialKind?: P3SpecialPassingKind;
   time: Date;
   timeSource: "rtc" | "utc";
   signalStrength: number;

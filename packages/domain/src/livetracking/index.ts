@@ -102,6 +102,7 @@ export {
   isLiveTrackingAthleteLiveState,
   isLiveTrackingResultsDocument,
   type LiveTrackingPassingEvent,
+  type LiveTrackingPassingSignalKind,
   type LiveTrackingCurrentSplit,
   type LiveTrackingCompletedLap,
   type LiveTrackingActivityStatus,
