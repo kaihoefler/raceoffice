@@ -16,7 +16,10 @@ import {
 } from "@raceoffice/domain";
 import { useParams } from "react-router-dom";
 
-import { resolveLiveTrackingDisplayName } from "../../components/livetracking/liveTrackingDisplayName";
+import {
+  abbreviateLiveTrackingDisplayName,
+  resolveLiveTrackingDisplayName,
+} from "../../components/livetracking/liveTrackingDisplayName";
 import { useLiveTrackingVisualizationList } from "../../providers/LiveTrackingVisualizationListProvider";
 import { useRealtimeDoc } from "../../realtime/useRealtimeDoc";
 import type { FullLiveTrackingVisualization } from "../../types/liveTrackingVisualization";
@@ -34,6 +37,17 @@ const flagByNation = Object.fromEntries(
     return [code, url];
   }),
 ) as Record<string, string>;
+
+/**
+ * Name cell that takes the remaining table width and truncates with an ellipsis instead of
+ * widening the table (maxWidth: 0 + width: 100% is the table-layout:auto idiom for that).
+ */
+const nameCellSx = {
+  width: "100%",
+  maxWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+} as const;
 
 function formatMs(ms: number | null): string {
   if (ms == null) return "—";
@@ -290,12 +304,32 @@ export default function LiveTrackingVisualizerPage() {
     return qualificationRankingRows.slice(start, start + qualificationPagingLines);
   }, [qualificationPagingEnabled, qualificationRankingRows, qualificationCurrentPage, qualificationPagingLines]);
 
-    function getDisplayName(row: LiveTrackingAthleteLiveState): string {
-    return resolveLiveTrackingDisplayName({
+  const participantFirstNameByKey = useMemo(() => {
+    // Keyed by athlete id and by transponder id, mirroring the name lookup order.
+    const map = new Map<string, string>();
+    for (const athlete of participantPoolDoc?.athletes ?? []) {
+      const firstName = String(athlete.firstName ?? "").trim();
+      if (!firstName) continue;
+      map.set(athlete.id, firstName);
+      for (const raw of athlete.transponderIds ?? []) {
+        const transponderId = String(raw ?? "").trim();
+        if (transponderId && !map.has(transponderId)) map.set(transponderId, firstName);
+      }
+    }
+    return map;
+  }, [participantPoolDoc]);
+
+  function getDisplayName(row: LiveTrackingAthleteLiveState): string {
+    const fullName = resolveLiveTrackingDisplayName({
       row,
       participantNameByAthleteId,
       participantNameByTransponderId,
     });
+    const firstName =
+      participantFirstNameByKey.get(row.athleteId) ??
+      (row.transponderId ? participantFirstNameByKey.get(String(row.transponderId).trim()) : undefined) ??
+      row.firstName;
+    return abbreviateLiveTrackingDisplayName(fullName, firstName);
   }
 
 
@@ -335,7 +369,15 @@ export default function LiveTrackingVisualizerPage() {
       </Typography>
 
       {session?.mode === "qualifying" ? (
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: { xs: 2, lg: 5 } }}>
+        // minmax(0, 1fr): each half stays at half the width even if its content is wider,
+        // so long names can't push the ranking off screen.
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "minmax(0, 1fr) minmax(0, 1fr)" },
+            gap: { xs: 2, lg: 5 },
+          }}
+        >
           <Box>
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
               <Typography sx={{ fontWeight: 800, fontSize: headerFontSize }}>Live Data</Typography>
@@ -392,7 +434,7 @@ export default function LiveTrackingVisualizerPage() {
                       }
                     >
                       <TableCell align="right">{row.bib ?? participantBibByAthleteId.get(row.athleteId) ?? ""}</TableCell>
-                      <TableCell>{getDisplayName(row)}</TableCell>
+                      <TableCell sx={nameCellSx}>{getDisplayName(row)}</TableCell>
                       <TableCell>
                         <Box
                           component="span"
@@ -499,7 +541,7 @@ export default function LiveTrackingVisualizerPage() {
                             nation || ""
                           )}
                         </TableCell>
-                        <TableCell>{state ? getDisplayName(state) : entry.athleteId}</TableCell>
+                        <TableCell sx={nameCellSx}>{state ? getDisplayName(state) : entry.athleteId}</TableCell>
                         <TableCell align="right">{formatMs(entry.bestLapTimeMs)}</TableCell>
                       </TableRow>
                     );
