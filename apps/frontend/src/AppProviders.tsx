@@ -10,7 +10,6 @@ import { CssBaseline, ThemeProvider } from "@mui/material";
 import { theme } from "./theme";
 import { EventListProvider } from "./providers/EventListProvider";
 import { VisualizationListProvider } from "./providers/VisualizationListProvider";
-import { LiveTrackingVisualizationListProvider } from "./providers/LiveTrackingVisualizationListProvider";
 import { RaceStatusProvider } from "./providers/RaceStatusProvider";
 
 type Props = {
@@ -25,9 +24,7 @@ export function AppProviders({ children, raceStatus }: Props) {
       <CssBaseline />
       <EventListProvider>
         <VisualizationListProvider>
-          <LiveTrackingVisualizationListProvider>
-            <RaceStatusProvider {...(raceStatus ?? {})}>{children}</RaceStatusProvider>
-          </LiveTrackingVisualizationListProvider>
+          <RaceStatusProvider {...(raceStatus ?? {})}>{children}</RaceStatusProvider>
         </VisualizationListProvider>
       </EventListProvider>
     </ThemeProvider>
