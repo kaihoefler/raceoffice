@@ -49,14 +49,29 @@ const nameCellSx = {
   textOverflow: "ellipsis",
 } as const;
 
-function formatMs(ms: number | null): string {
+/** Timing-board colors: yellow for the last lap, purple for the best lap. */
+const LAST_LAP_COLOR = "#facc15";
+const BEST_LAP_COLOR = "#c084fc";
+/** Column headers are de-emphasized so the times stand out. */
+const TABLE_HEADER_COLOR = "#bdbdbd";
+
+const tableHeaderSx = {
+  color: TABLE_HEADER_COLOR,
+  fontWeight: 800,
+  lineHeight: 1.25,
+  py: 0.25,
+} as const;
+
+/** Seconds without unit, e.g. "19.004"; on the board the unit is obvious. */
+function formatSeconds(ms: number | null): string {
   if (ms == null) return "—";
-  return `${Math.floor(ms / 1000)}.${String(ms % 1000).padStart(3, "0")}s`;
+  return `${Math.floor(ms / 1000)}.${String(ms % 1000).padStart(3, "0")}`;
 }
 
+/** Compact seconds for the recent-laps line, e.g. "19.00". */
 function formatLapMsCompact(ms: number | null): string {
   if (ms == null) return "—";
-  return `${(ms / 1000).toFixed(2)}s`;
+  return (ms / 1000).toFixed(2);
 }
 
 function normalizeFullLiveTrackingVisualization(raw: unknown, visualizationId: string): FullLiveTrackingVisualization {
@@ -232,7 +247,10 @@ export default function LiveTrackingVisualizerPage() {
   }, [results]);
 
   const qualificationLiveRows = useMemo(() => {
-    const rows = [...(results?.athleteLiveStates ?? [])].filter((row) => Boolean(row.lastPassingAt));
+    // Only athletes currently on track; inactive ones are already in the ranking.
+    const rows = [...(results?.athleteLiveStates ?? [])].filter(
+      (row) => Boolean(row.lastPassingAt) && row.activityStatus === "active",
+    );
     rows.sort((a, b) => {
       const aStartFinish = a.transponderId
         ? latestStartFinishByTransponderId.get(String(a.transponderId).trim()) ?? Number.NEGATIVE_INFINITY
@@ -347,9 +365,8 @@ export default function LiveTrackingVisualizerPage() {
   const fontWeight = visualization?.fontWeight ?? "600";
   const fontColor = visualization?.fontColor ?? "#ffffff";
   const headerFontSize = visualization?.headerFontSize ?? "1.1em";
-  const activeStatusColor = visualization?.activeStatusColor ?? "#22c55e";
-  const inactiveStatusColor = visualization?.inactiveStatusColor ?? "#ef4444";
-  const trainingColumnCount = 5 + (hasCurrentSplitColumn ? 1 : 0) + 1 + orderedSplitPoints.length;
+  // Athlete, Laps, Best lap, Last lap + optional current split + one column per split point.
+  const trainingColumnCount = 4 + (hasCurrentSplitColumn ? 1 : 0) + orderedSplitPoints.length;
 
   return (
     <Box
@@ -364,7 +381,7 @@ export default function LiveTrackingVisualizerPage() {
         boxSizing: "border-box",
       }}
     >
-      <Typography sx={{ mb: 4, fontSize: headerFontSize, fontWeight: 800, lineHeight: 1.25 }}>
+      <Typography sx={{ mb: 1, fontSize: headerFontSize, fontWeight: 800, lineHeight: 1.25 }}>
         {visualization?.name ?? "Live Tracking"}
       </Typography>
 
@@ -395,10 +412,8 @@ export default function LiveTrackingVisualizerPage() {
                     whiteSpace: "nowrap",
                   },
                   "& th": {
+                    ...tableHeaderSx,
                     fontSize: headerFontSize,
-                    fontWeight: 800,
-                    lineHeight: 1.25,
-                    py: 1.25,
                   },
                 }}
               >
@@ -406,7 +421,6 @@ export default function LiveTrackingVisualizerPage() {
                 <TableRow>
                   <TableCell align="right">Bib</TableCell>
                   <TableCell>Name</TableCell>
-                  <TableCell />
                   <TableCell align="right">Split</TableCell>
                   <TableCell align="right">Last Lap</TableCell>
                   <TableCell align="right">Rank</TableCell>
@@ -416,7 +430,6 @@ export default function LiveTrackingVisualizerPage() {
               <TableBody>
                 {qualificationLiveRows.map((row, index) => {
                   const rowBg = alternateRowBackgroundColor && index % 2 === 1 ? alternateRowBackgroundColor : undefined;
-                  const isActive = row.activityStatus === "active";
                   const latestSplit = row.currentLapSplits.length > 0 ? row.currentLapSplits[row.currentLapSplits.length - 1] : null;
                   const rank = qualificationRankByAthleteId.get(row.athleteId) ?? null;
 
@@ -435,20 +448,8 @@ export default function LiveTrackingVisualizerPage() {
                     >
                       <TableCell align="right">{row.bib ?? participantBibByAthleteId.get(row.athleteId) ?? ""}</TableCell>
                       <TableCell sx={nameCellSx}>{getDisplayName(row)}</TableCell>
-                      <TableCell>
-                        <Box
-                          component="span"
-                          sx={{
-                            display: "inline-block",
-                            width: "0.8em",
-                            height: "0.8em",
-                            borderRadius: "50%",
-                            bgcolor: isActive ? activeStatusColor : inactiveStatusColor,
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell align="right">{formatMs(latestSplit?.splitTimeMs ?? null)}</TableCell>
-                      <TableCell align="right">{formatMs(row.lastLapTimeMs)}</TableCell>
+                      <TableCell align="right">{formatSeconds(latestSplit?.splitTimeMs ?? null)}</TableCell>
+                      <TableCell align="right">{formatSeconds(row.lastLapTimeMs)}</TableCell>
                       <TableCell align="right">{rank ?? "—"}</TableCell>
                     </TableRow>
                   );
@@ -456,7 +457,7 @@ export default function LiveTrackingVisualizerPage() {
 
                 {qualificationLiveRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6}>No live athletes yet.</TableCell>
+                    <TableCell colSpan={5}>No athletes on track.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -487,10 +488,8 @@ export default function LiveTrackingVisualizerPage() {
                     whiteSpace: "nowrap",
                   },
                   "& th": {
+                    ...tableHeaderSx,
                     fontSize: headerFontSize,
-                    fontWeight: 800,
-                    lineHeight: 1.25,
-                    py: 1.25,
                   },
                 }}
               >
@@ -542,7 +541,7 @@ export default function LiveTrackingVisualizerPage() {
                           )}
                         </TableCell>
                         <TableCell sx={nameCellSx}>{state ? getDisplayName(state) : entry.athleteId}</TableCell>
-                        <TableCell align="right">{formatMs(entry.bestLapTimeMs)}</TableCell>
+                        <TableCell align="right">{formatSeconds(entry.bestLapTimeMs)}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -569,10 +568,8 @@ export default function LiveTrackingVisualizerPage() {
                     whiteSpace: "nowrap",
                   },
                   "& th": {
+                    ...tableHeaderSx,
                     fontSize: headerFontSize,
-                    fontWeight: 800,
-                    lineHeight: 1.25,
-                    py: 1.25,
                   },
 
             }}
@@ -580,7 +577,6 @@ export default function LiveTrackingVisualizerPage() {
             <TableHead>
               <TableRow>
                 <TableCell>Athlete</TableCell>
-                <TableCell>Status</TableCell>
                 <TableCell align="right">Laps</TableCell>
                 <TableCell align="right">Best lap</TableCell>
                 {hasCurrentSplitColumn ? <TableCell align="right">Split (current)</TableCell> : null}
@@ -597,7 +593,6 @@ export default function LiveTrackingVisualizerPage() {
               {sortedAthleteLiveStates.map((row, index) => {
                 const rowBg = alternateRowBackgroundColor && index % 2 === 1 ? alternateRowBackgroundColor : undefined;
                 const splitByTimingPointId = new Map(row.currentLapSplits.map((split) => [split.timingPointId, split.splitTimeMs]));
-                const isActive = row.activityStatus === "active";
                 const latestCurrentSplit = row.currentLapSplits.length > 0
                   ? row.currentLapSplits[row.currentLapSplits.length - 1]
                   : null;
@@ -609,38 +604,30 @@ export default function LiveTrackingVisualizerPage() {
                 return (
                   <Fragment key={row.athleteId}>
                     <TableRow
-                      sx={
-                        rowBg
-                          ? {
-                              "& .MuiTableCell-root": {
-                                backgroundColor: rowBg,
-                              },
-                            }
-                          : undefined
-                      }
+                      sx={{
+                        // Name row slightly smaller; the lap line below carries the focus.
+                        // Top padding separates consecutive athletes.
+                        "& .MuiTableCell-root": {
+                          fontSize: "0.85em",
+                          pt: 1.5,
+                          ...(rowBg ? { backgroundColor: rowBg } : {}),
+                        },
+                      }}
                     >
                       <TableCell>{getDisplayName(row)}</TableCell>
-                      <TableCell>
-                        <Box
-                          component="span"
-                          sx={{
-                            display: "inline-block",
-                            width: "0.8em",
-                            height: "0.8em",
-                            borderRadius: "50%",
-                            bgcolor: isActive ? activeStatusColor : inactiveStatusColor,
-                          }}
-                        />
-                      </TableCell>
                       <TableCell align="right">{row.lapsCompleted}</TableCell>
-                      <TableCell align="right">{formatMs(row.bestLapTimeMs)}</TableCell>
+                      <TableCell align="right" sx={{ color: `${BEST_LAP_COLOR} !important` }}>
+                        {formatSeconds(row.bestLapTimeMs)}
+                      </TableCell>
                       {hasCurrentSplitColumn ? (
-                        <TableCell align="right">{formatMs(latestCurrentSplit?.splitTimeMs ?? null)}</TableCell>
+                        <TableCell align="right">{formatSeconds(latestCurrentSplit?.splitTimeMs ?? null)}</TableCell>
                       ) : null}
-                      <TableCell align="right">{formatMs(row.lastLapTimeMs)}</TableCell>
+                      <TableCell align="right" sx={{ color: `${LAST_LAP_COLOR} !important` }}>
+                        {formatSeconds(row.lastLapTimeMs)}
+                      </TableCell>
                       {orderedSplitPoints.map((point) => (
                         <TableCell key={`${row.athleteId}:${point.id}`} align="right">
-                          {formatMs(splitByTimingPointId.get(point.id) ?? null)}
+                          {formatSeconds(splitByTimingPointId.get(point.id) ?? null)}
                         </TableCell>
                       ))}
                     </TableRow>
@@ -656,23 +643,37 @@ export default function LiveTrackingVisualizerPage() {
                           : undefined
                       }
                     >
-                      <TableCell colSpan={trainingColumnCount} sx={{ pt: 0, pb: 1 }}>
-                        <Box sx={{ display: "flex", gap: 2.5, alignItems: "center", flexWrap: "wrap" }}>
-                          <Typography component="span" sx={{ fontSize: "1em", opacity: 0.9 }}>
+                      <TableCell colSpan={trainingColumnCount} sx={{ pt: 0, pb: 1.5 }}>
+                        <Box sx={{ display: "flex", columnGap: 6, rowGap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                          <Typography component="span" sx={{ fontSize: "1.15em", opacity: 0.9 }}>
                             Laps:
                           </Typography>
-                          <Typography component="span" sx={{ fontSize: "1em", fontWeight: 800 }}>
+                          <Typography
+                            component="span"
+                            sx={{
+                              fontSize: "1.15em",
+                              fontWeight: 800,
+                              color: latestLapTime !== null && latestLapTime === row.bestLapTimeMs ? BEST_LAP_COLOR : LAST_LAP_COLOR,
+                            }}
+                          >
                             {formatLapMsCompact(latestLapTime)}
                           </Typography>
-                          {previousLapTimes.map((lapTimeMs, lapIndex) => (
-                            <Typography
-                              key={`${row.athleteId}:recent:${lapIndex}`}
-                              component="span"
-                              sx={{ fontSize: "1em", opacity: 0.85 }}
-                            >
-                              {formatLapMsCompact(lapTimeMs)}
-                            </Typography>
-                          ))}
+                          {previousLapTimes.map((lapTimeMs, lapIndex) => {
+                            // Purple marks the best lap; the latest lap above already wins a tie.
+                            const isBest = lapTimeMs === row.bestLapTimeMs && latestLapTime !== row.bestLapTimeMs;
+                            return (
+                              <Typography
+                                key={`${row.athleteId}:recent:${lapIndex}`}
+                                component="span"
+                                sx={{
+                                  fontSize: "1.15em",
+                                  ...(isBest ? { color: BEST_LAP_COLOR, fontWeight: 800 } : { opacity: 0.85 }),
+                                }}
+                              >
+                                {formatLapMsCompact(lapTimeMs)}
+                              </Typography>
+                            );
+                          })}
                         </Box>
                       </TableCell>
                     </TableRow>
