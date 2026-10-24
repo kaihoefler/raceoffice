@@ -18,7 +18,7 @@
   "dependencies": {
     "@fastify/cors": "^11.2.0",
     "@fastify/static": "^10.1.5",
-    "@fastify/websocket": "^11.2.0",
+    "@fastify/websocket": "^11.3.4",
     "@raceoffice/domain": "file:../../packages/domain",
     "@raceoffice/p3parser": "file:../../packages/p3parser",
     "better-sqlite3": "^12.11.1",
