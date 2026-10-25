@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@raceoffice/domain": "file:../../packages/domain",
+    "@raceoffice/p3parser": "file:../../packages/p3parser",
     "fast-json-patch": "^3.1.1",
     "ws": "^8.18.3"
   },

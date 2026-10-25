@@ -120,11 +120,14 @@ async function main() {
   const workerLockPresent = fsSync.existsSync(path.join(workerOutDir, "package-lock.json"));
   run(workerLockPresent ? "npm ci --omit=dev" : "npm install --omit=dev", { cwd: workerOutDir });
 
-  // Materialize domain package for worker too (same ZIP/link safety reason).
-  await copyDir(
-    path.join(deployDir, "packages", "domain"),
-    path.join(workerOutDir, "node_modules", "@raceoffice", "domain")
-  );
+  // Materialize local packages for the worker too (same ZIP/link safety reason).
+  // The worker imports both domain and p3parser at startup; a missing one makes it exit immediately.
+  for (const name of localPackages) {
+    await copyDir(
+      path.join(deployDir, "packages", name),
+      path.join(workerOutDir, "node_modules", "@raceoffice", name)
+    );
+  }
 
 
   // 5) Create standard runtime folders used by service/default config.
@@ -249,6 +252,7 @@ async function main() {
       `  worker node_modules present: ${fsSync.existsSync(path.join(workerOutDir, "node_modules"))}`,
       `  server node_modules\\@raceoffice\\domain present: ${fsSync.existsSync(path.join(serverOutDir, "node_modules", "@raceoffice", "domain"))}`,
       `  worker node_modules\\@raceoffice\\domain present: ${fsSync.existsSync(path.join(workerOutDir, "node_modules", "@raceoffice", "domain"))}`,
+      `  worker node_modules\\@raceoffice\\p3parser present: ${fsSync.existsSync(path.join(workerOutDir, "node_modules", "@raceoffice", "p3parser"))}`,
 
 
       "",
