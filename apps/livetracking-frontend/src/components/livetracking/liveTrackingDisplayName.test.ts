@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { abbreviateLiveTrackingDisplayName, resolveLiveTrackingDisplayName } from "./liveTrackingDisplayName";
+import {
+  abbreviateLiveTrackingDisplayName,
+  liveStateDisplayName,
+  resolveLiveTrackingDisplayName,
+} from "./liveTrackingDisplayName";
 
 describe("resolveLiveTrackingDisplayName", () => {
   it("returns pure transponder id for unknown:transponder synthetic athlete", () => {
@@ -69,5 +73,44 @@ describe("abbreviateLiveTrackingDisplayName", () => {
   it("leaves names untouched that do not start with the first name", () => {
     expect(abbreviateLiveTrackingDisplayName("unknown:transponder:LG-74117", "")).toBe("unknown:transponder:LG-74117");
     expect(abbreviateLiveTrackingDisplayName("Grolleau Ngoma Nioundou Hanna", "Hanna")).toBe("Grolleau Ngoma Nioundou Hanna");
+  });
+});
+
+describe("liveStateDisplayName", () => {
+  const base = {
+    nation: null,
+    activityStatus: "active" as const,
+    isActive: true,
+    lastPassingAt: "2026-01-01T10:00:00.000Z",
+    lapsCompleted: 0,
+    currentLapSplits: [],
+    recentLapTimesMs: [],
+    completedLaps: [],
+    lastLapTimeMs: null,
+    bestLapTimeMs: null,
+  };
+
+  it("uses the name the worker wrote into the row", () => {
+    const name = liveStateDisplayName({
+      ...base,
+      athleteId: "a-164",
+      firstName: "Karlotta",
+      lastName: "Schröder",
+      bib: 164,
+      transponderId: "RP-39643",
+    });
+    expect(name).toBe("Karlotta Schröder");
+  });
+
+  it("shows the transponder id for unknown chips", () => {
+    const name = liveStateDisplayName({
+      ...base,
+      athleteId: "unknown:transponder:RP-1",
+      firstName: "",
+      lastName: "RP-1",
+      bib: null,
+      transponderId: "RP-1",
+    });
+    expect(name).toBe("RP-1");
   });
 });

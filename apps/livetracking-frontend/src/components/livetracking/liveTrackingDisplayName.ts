@@ -32,6 +32,21 @@ export function resolveLiveTrackingDisplayName(args: {
   return participantName || participantNameByChip || (!syntheticUnknownName ? computedName : "") || fallbackDisplay;
 }
 
+const NO_NAMES = new Map<string, string>();
+
+/**
+ * Display name taken only from the live state row itself. The worker fills the row from the
+ * setup's active participant pools, so this always matches the results; unknown chips show
+ * their transponder id. Use this on boards instead of looking names up in a pool client-side.
+ */
+export function liveStateDisplayName(row: LiveTrackingAthleteLiveState): string {
+  return resolveLiveTrackingDisplayName({
+    row,
+    participantNameByAthleteId: NO_NAMES,
+    participantNameByTransponderId: NO_NAMES,
+  });
+}
+
 /** "Ava Sophie" -> "A. S.", "Anna-Lena" -> "A.-L." */
 function firstNameInitials(firstName: string): string {
   return firstName

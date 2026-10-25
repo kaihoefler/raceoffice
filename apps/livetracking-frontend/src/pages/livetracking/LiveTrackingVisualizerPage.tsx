@@ -3,13 +3,11 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { alpha } from "@mui/material/styles";
 import { Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from "@mui/material";
 import {
-  makeLiveTrackingParticipantPoolDocId,
   makeLiveTrackingResultsDocId,
   makeLiveTrackingSessionDocId,
   makeLiveTrackingSetupDocId,
   normalizeTimingPoints,
   type LiveTrackingAthleteLiveState,
-  type LiveTrackingParticipantPoolDocument,
   type LiveTrackingResultsDocument,
   type LiveTrackingSessionDocument,
   type LiveTrackingSetupDocument,
@@ -18,7 +16,7 @@ import { useParams } from "react-router-dom";
 
 import {
   abbreviateLiveTrackingDisplayName,
-  resolveLiveTrackingDisplayName,
+  liveStateDisplayName,
 } from "../../components/livetracking/liveTrackingDisplayName";
 import { useLiveTrackingVisualizationList } from "../../providers/LiveTrackingVisualizationListProvider";
 import { useRealtimeDoc } from "../../realtime/useRealtimeDoc";
@@ -131,68 +129,6 @@ export default function LiveTrackingVisualizerPage() {
     return setupId ? makeLiveTrackingSetupDocId(setupId) : null;
   }, [session?.setupId]);
   const { data: setupDoc } = useRealtimeDoc<LiveTrackingSetupDocument>(setupDocId);
-
-  const sessionParticipantPoolDocId = useMemo(() => {
-    if (!session) return "";
-
-    if (session.participantSource.kind === "event_participant_pool") {
-      return session.participantSource.participantPoolDocId;
-    }
-
-    if (session.participantSource.kind === "setup_participant_pool") {
-      return session.participantSource.participantPoolDocId;
-    }
-
-    return makeLiveTrackingParticipantPoolDocId(session.participantSource.eventId);
-  }, [session]);
-
-  const { data: participantPoolDoc } = useRealtimeDoc<LiveTrackingParticipantPoolDocument>(
-    sessionParticipantPoolDocId.trim() || null,
-  );
-
-  const participantNameByAthleteId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const athlete of participantPoolDoc?.athletes ?? []) {
-      const fullName = `${String(athlete.firstName ?? "").trim()} ${String(athlete.lastName ?? "").trim()}`.trim();
-      if (!fullName) continue;
-      map.set(athlete.id, fullName);
-    }
-    return map;
-  }, [participantPoolDoc]);
-
-  const participantNameByTransponderId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const athlete of participantPoolDoc?.athletes ?? []) {
-      const fullName = `${String(athlete.firstName ?? "").trim()} ${String(athlete.lastName ?? "").trim()}`.trim();
-      if (!fullName) continue;
-
-      for (const raw of athlete.transponderIds ?? []) {
-        const transponderId = String(raw ?? "").trim();
-        if (!transponderId) continue;
-        if (!map.has(transponderId)) map.set(transponderId, fullName);
-      }
-    }
-    return map;
-  }, [participantPoolDoc]);
-
-  const participantNationByAthleteId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const athlete of participantPoolDoc?.athletes ?? []) {
-      const nation = String(athlete.nation ?? "").trim().toUpperCase();
-      if (!nation) continue;
-      map.set(athlete.id, nation);
-    }
-    return map;
-  }, [participantPoolDoc]);
-
-  const participantBibByAthleteId = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const athlete of participantPoolDoc?.athletes ?? []) {
-      if (typeof athlete.bib !== "number") continue;
-      map.set(athlete.id, athlete.bib);
-    }
-    return map;
-  }, [participantPoolDoc]);
 
   const startFinishTimingPointId = useMemo(() => {
     const point = normalizeTimingPoints(setupDoc?.track.timingPoints ?? []).find((x) => x.role === "start_finish");
@@ -323,32 +259,12 @@ export default function LiveTrackingVisualizerPage() {
     return qualificationRankingRows.slice(start, start + qualificationPagingLines);
   }, [qualificationPagingEnabled, qualificationRankingRows, qualificationCurrentPage, qualificationPagingLines]);
 
-  const participantFirstNameByKey = useMemo(() => {
-    // Keyed by athlete id and by transponder id, mirroring the name lookup order.
-    const map = new Map<string, string>();
-    for (const athlete of participantPoolDoc?.athletes ?? []) {
-      const firstName = String(athlete.firstName ?? "").trim();
-      if (!firstName) continue;
-      map.set(athlete.id, firstName);
-      for (const raw of athlete.transponderIds ?? []) {
-        const transponderId = String(raw ?? "").trim();
-        if (transponderId && !map.has(transponderId)) map.set(transponderId, firstName);
-      }
-    }
-    return map;
-  }, [participantPoolDoc]);
-
+  /**
+   * Names, bibs and nations come from the results rows: the worker resolves them from the
+   * setup's active participant pools, so the board always matches the computed results.
+   */
   function getDisplayName(row: LiveTrackingAthleteLiveState): string {
-    const fullName = resolveLiveTrackingDisplayName({
-      row,
-      participantNameByAthleteId,
-      participantNameByTransponderId,
-    });
-    const firstName =
-      participantFirstNameByKey.get(row.athleteId) ??
-      (row.transponderId ? participantFirstNameByKey.get(String(row.transponderId).trim()) : undefined) ??
-      row.firstName;
-    return abbreviateLiveTrackingDisplayName(fullName, firstName);
+    return abbreviateLiveTrackingDisplayName(liveStateDisplayName(row), row.firstName);
   }
 
 
@@ -449,7 +365,7 @@ export default function LiveTrackingVisualizerPage() {
                           : undefined
                       }
                     >
-                      <TableCell align="right">{row.bib ?? participantBibByAthleteId.get(row.athleteId) ?? ""}</TableCell>
+                      <TableCell align="right">{row.bib ?? ""}</TableCell>
                       <TableCell sx={nameCellSx}>{getDisplayName(row)}</TableCell>
                       <TableCell align="right">{formatSeconds(latestSplit?.splitTimeMs ?? null)}</TableCell>
                       <TableCell align="right">{formatSeconds(row.lastLapTimeMs)}</TableCell>
@@ -510,7 +426,7 @@ export default function LiveTrackingVisualizerPage() {
                     const state = liveStateByAthleteId.get(entry.athleteId) ?? null;
                     const rowBg = alternateRowBackgroundColor && index % 2 === 1 ? alternateRowBackgroundColor : undefined;
                     const nation = String(
-                      state?.nation ?? participantNationByAthleteId.get(entry.athleteId) ?? "",
+                      state?.nation ?? "",
                     )
                       .trim()
                       .toUpperCase();
@@ -530,7 +446,7 @@ export default function LiveTrackingVisualizerPage() {
                         }
                       >
                         <TableCell align="right">{entry.rank}</TableCell>
-                        <TableCell align="right">{state?.bib ?? participantBibByAthleteId.get(entry.athleteId) ?? ""}</TableCell>
+                        <TableCell align="right">{state?.bib ?? ""}</TableCell>
                         <TableCell align="center">
                           {flagUrl ? (
                             <Box
