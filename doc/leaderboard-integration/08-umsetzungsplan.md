@@ -32,7 +32,7 @@
 - `RMonitorTcpSource` (Reconnect, Encoding, Chunking), `LineBus`, `Recorder`, `RecordingPlayerSource`
   - Recorder schreibt die empfangenen Bytes unverändert.
   - Player mit getrenntem Datei- und Stream-Encoding sowie UTF-8-Erkennung, weil Java-Recordings je nach Recorder-Einstellung windows-1252 oder UTF-8 sind.
-- Store mit `corrections: "apply"` (`$COR`). Offen: ob korrigierte Zeiten im API markiert werden sollen (`CompetitorState.corrections` ist vorhanden).
+- Store mit `corrections: "apply"` (`$COR`). Korrigierte Zeiten erscheinen im JSON als `timeCorrection` und werden im Leaderboard (P4) als „Zielfoto“ markiert.
 - REST-Kompatibilitätsschicht, `SnapshotPublisher` + WS `/ws/race/*`, `/ws/status`
 - Control-API inkl. Recordings-Upload/-Download, ConfigStore, CLI/ENV, optionaler Token
 - Optional: TCP-Replay-Server

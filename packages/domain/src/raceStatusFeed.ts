@@ -36,6 +36,12 @@ export type RaceStatusCompetitor = {
   lastLap?: string;
   /** Position from practice/qualifying (`$H`), 0 if unknown. */
   qualiPosition?: number;
+  /**
+   * Latest time correction by the timing system (Orbits `$COR`, typically photo finish).
+   * Only present if there was one; not sent by the Java RMonitorLeaderboard.
+   * `totalTime`/`lastLap` are already corrected – mark them when `lap === lapsComplete`.
+   */
+  timeCorrection?: { lap: number; deltaMs: number };
 };
 
 /**

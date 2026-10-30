@@ -43,7 +43,7 @@ Die Golden-Tests haben diese Punkte bestätigt:
 
 | Thema | Java | Port |
 |---|---|---|
-| **`$COR` (Zeitkorrektur, Zielfoto)** | ignoriert, die Gesamtzeit kommt über das folgende `$G`, die Runde bleibt unkorrigiert | korrigiert Gesamtzeit, Rundenzeit, `lastLap` und ggf. `bestLap` (`corrections: "apply"`, Default). `"ignore"` verhält sich wie Java. |
+| **`$COR` (Zeitkorrektur, Zielfoto)** | ignoriert, die Gesamtzeit kommt über das folgende `$G`, die Runde bleibt unkorrigiert | korrigiert Gesamtzeit, Rundenzeit, `lastLap` und ggf. `bestLap` (`corrections: "apply"`, Default). Der Fahrer bekommt im JSON zusätzlich `timeCorrection: { lap, deltaMs }`, nur wenn korrigiert wurde. `"ignore"` verhält sich wie Java. |
 | Reihenfolge der Competitors in `RaceTO` | HashMap-Reihenfolge | nach Position, Position 0 am Ende |
 | Anzahl gehaltener Rennen | unbegrenzt | `maxRaces` (Default 200, ein voller Wettkampftag hat bis ca. 100), das älteste fällt zuerst heraus |
 | Klassen (`$C`) | statische Map | gehört zur Store-Instanz |

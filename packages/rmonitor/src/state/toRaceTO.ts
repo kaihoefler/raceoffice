@@ -12,10 +12,12 @@ import type { CompetitorState, RaceState } from "./model.js";
 
 /** Full transfer object of one race (the domain type with all Java fields present). */
 export type RaceTO = Required<Omit<RaceStatusRace, "competitors">> & { competitors: CompetitorTO[] };
-export type CompetitorTO = Required<RaceStatusCompetitor>;
+/** Java `CompetitorTO` fields (all present) plus the optional `timeCorrection` extension. */
+export type CompetitorTO = Required<Omit<RaceStatusCompetitor, "timeCorrection">> &
+  Pick<RaceStatusCompetitor, "timeCorrection">;
 
 export function toCompetitorTO(c: CompetitorState): CompetitorTO {
-  return {
+  const to: CompetitorTO = {
     number: c.number,
     position: c.position,
     lapsComplete: c.lapsComplete,
@@ -26,6 +28,10 @@ export function toCompetitorTO(c: CompetitorState): CompetitorTO {
     lastLap: formatDuration(c.lastLapMs),
     qualiPosition: c.qualiPosition,
   };
+  // Extension, only with `$COR` handling enabled: keeps the JSON identical to Java otherwise.
+  const latest = c.corrections.at(-1);
+  if (latest) to.timeCorrection = { lap: latest.lap, deltaMs: latest.deltaMs };
+  return to;
 }
 
 /** Sort key: classified competitors by position, unclassified (position 0) last. */

@@ -59,7 +59,25 @@ describe("$COR", () => {
     expect(rider.corrections).toEqual([{ lap: 3, deltaMs: -48, correctedTotalTimeMs: 46_517 }]);
     // The following $G finds the corrected lap: no duplicate lap 3.
     expect(rider.lapList.filter((l) => l.lapNumber === 3)).toHaveLength(1);
-    expect(toRaceTO(store.current).competitors[0]).toMatchObject({ totalTime: "0:46.517", lastLap: "0:16.784" });
+    expect(toRaceTO(store.current).competitors[0]).toEqual({
+      number: "193",
+      position: 1,
+      lapsComplete: 3,
+      firstName: "Rider",
+      lastName: "Name193 (GER)",
+      totalTime: "0:46.517",
+      bestLap: "0:15.957",
+      lastLap: "0:16.784",
+      qualiPosition: 1,
+      timeCorrection: { lap: 3, deltaMs: -48 },
+    });
+  });
+
+  it("adds no timeCorrection field without corrections or in ignore mode (JSON identical to Java)", () => {
+    expect(toRaceTO(run(SPRINT).store.current).competitors[0]).not.toHaveProperty("timeCorrection");
+    expect(toRaceTO(run([...SPRINT, COR], "ignore").store.current).competitors[0]).not.toHaveProperty(
+      "timeCorrection",
+    );
   });
 
   it("ignore mode reproduces the Java result (total via $G, last lap uncorrected)", () => {

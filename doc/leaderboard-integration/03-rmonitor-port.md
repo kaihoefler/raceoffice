@@ -126,6 +126,14 @@ export class RaceStateStore {
   - Orbits schickt direkt danach ein `$G` mit der korrigierten Gesamtzeit. Java übernimmt deshalb die Gesamtzeit, lässt aber `lastLap` unkorrigiert und legt eine doppelte Runde an.
   - Der Port korrigiert Gesamtzeit, Rundenzeit (= korrigierte Gesamtzeit − Gesamtzeit der Vorrunde), `lastLap` und ggf. `bestLap`.
   - Mit der Store-Option `corrections: "ignore"` verhält er sich wie Java. Die Golden-Tests nutzen diese Einstellung.
+  - **Markierung:** `toRaceTO` ergänzt beim Fahrer `timeCorrection: { lap, deltaMs }`, die letzte Korrektur mit dem von Orbits gesendeten Wert.
+    - Das Feld steht nur da, wenn es eine Korrektur gab. Ohne `$COR` oder im Modus `ignore` bleibt das JSON identisch zu Java.
+    - Das Frontend markiert `totalTime`/`lastLap` als „Zielfoto“, wenn `lap === lapsComplete`.
+- **Negative Zeiten** (`"00:00:00.-100"` in `$J`/`$G`) werden verworfen, wie in Java. Fachlich ist das richtig, die Analyse der Tagesprotokolle (9 Fälle) zeigt:
+  - Sie treten nur beim Massenstart auf (Elimination, Punkte), 20 bis 30 ms nach dem ersten grünen `$F`, für genau einen Fahrer mit Runde 1, −33 bis −748 ms.
+  - Nach ca. 0,7 s nimmt Orbits den Eintrag selbst zurück (`$G` mit leerer Rundenzahl, Zeit 0).
+  - Deutung: Ein Fahrer passiert die Ziellinie kurz vor dem Auslösen der Startzeit, wahrscheinlich weil die Zeitnahme den Start leicht verzögert auslöst oder ein Transponder schon an der Linie erfasst wird. Das ist keine gewertete Runde und kein Fehlstart-Nachweis.
+  - Verwerfen verhindert, dass der Fahrer 0,7 s lang als Führender aufblitzt. Optional für P2: die Fälle im Control Center als Diagnose zählen („Durchfahrt vor Startsignal“).
 
 ---
 
