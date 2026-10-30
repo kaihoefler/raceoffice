@@ -37,3 +37,7 @@ raceoffice.db
 
 examples/53_rec1.bin
 examples/58_rec2.bin
+
+# RMonitor recordings of full competition days: local only (size, personal data).
+packages/rmonitor/test/fixtures/recordings-local/
+packages/rmonitor/test/fixtures/golden-local/

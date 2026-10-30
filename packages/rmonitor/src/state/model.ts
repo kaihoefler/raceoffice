@@ -6,6 +6,7 @@
  */
 import type {
   CompInfoMessage,
+  CorrectionMessage,
   LapInfoMessage,
   PassingInfoMessage,
   QualiInfoMessage,
@@ -102,6 +103,66 @@ export class CompetitorState {
     this.lapsComplete = msg.laps;
     this.totalTimeMs = msg.totalTimeMs;
     this.updateAvgLap();
+  }
+
+  /**
+   * `$COR` (not in Java): applies a corrected total time of lap `msg.lap`, typically the finish
+   * lap after a photo finish. Updates the lap entry, total time, last lap and – if affected –
+   * best lap. The `$G` Orbits sends right after it then finds the corrected lap instead of
+   * creating a duplicate (Java behavior without `$COR` handling).
+   */
+  applyCorrection(msg: CorrectionMessage): void {
+    const target = this.lastLapWithTotal(msg.lap);
+    const previous = msg.lap > 1 ? this.lastLapWithTotal(msg.lap - 1) : undefined;
+    const isCurrentLap = msg.lap === this.lapsComplete;
+
+    const oldTotal = target?.totalTimeMs ?? (isCurrentLap ? this.totalTimeMs : null);
+    const oldLap = target ? target.lapTimeMs : isCurrentLap ? this.lastLapMs : null;
+    const corrected = msg.correctedTotalTimeMs;
+
+    let newLap = oldLap;
+    if (previous?.totalTimeMs != null) {
+      newLap = corrected - previous.totalTimeMs;
+    } else if (oldLap !== null && oldLap > 0) {
+      // First lap or previous lap unknown: shift by the total difference (or the sent delta).
+      newLap = oldLap + (oldTotal !== null ? corrected - oldTotal : msg.deltaMs);
+    }
+
+    if (target) {
+      target.totalTimeMs = corrected;
+      target.lapTimeMs = newLap;
+    }
+    if (isCurrentLap || (oldTotal !== null && this.totalTimeMs === oldTotal)) {
+      this.totalTimeMs = corrected;
+      if (oldLap !== null && newLap !== null && this.lastLapMs === oldLap) this.lastLapMs = newLap;
+    }
+    if (newLap !== null && newLap > 0) {
+      if (oldLap !== null && this.bestLapMs === oldLap) this.bestLapMs = this.minLapTime();
+      else this.updateBestLap(newLap);
+    }
+
+    this.corrections.push({ lap: msg.lap, deltaMs: msg.deltaMs, correctedTotalTimeMs: corrected });
+    this.updateAvgLap();
+  }
+
+  /** `$COR` corrections received for this competitor (not part of the Java REST format). */
+  readonly corrections: Array<{ lap: number; deltaMs: number; correctedTotalTimeMs: number }> = [];
+
+  private lastLapWithTotal(lapNumber: number): LapState | undefined {
+    for (let i = this.laps.length - 1; i >= 0; i--) {
+      const lap = this.laps[i] as LapState;
+      if (lap.lapNumber === lapNumber && lap.totalTimeMs !== null) return lap;
+    }
+    return undefined;
+  }
+
+  private minLapTime(): number {
+    let best = 0;
+    for (const lap of this.laps) {
+      const t = lap.lapTimeMs;
+      if (lap.lapNumber > 0 && t !== null && t > 0 && (best === 0 || t < best)) best = t;
+    }
+    return best;
   }
 
   private findOrCreateLap(totalTimeMs: number): LapState {

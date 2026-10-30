@@ -5,7 +5,7 @@
 | Komponente | Status |
 |---|---|
 | Konzept (`doc/leaderboard-integration/`) | **fertig** |
-| `packages/rmonitor` | **fertig**: Parser, Store, `toRaceTO`, Recording-Format, `LineDecoder`, `FakeOrbitsFeeder`. Golden-Tests für 6 Aufnahmen ohne Abweichung. |
+| `packages/rmonitor` | **fertig**: Parser, Store, `toRaceTO`, Recording-Format, `LineDecoder`, `FakeOrbitsFeeder`, `$COR`-Korrekturen. Golden-Tests ohne Abweichung: 10 Aufnahmen im Repo (davon 4 anonymisierte Ausschnitte) und lokal 15 komplette Wettkampftage (8 719 Haltepunkte). |
 | Domain: optionale `RaceTO`-Felder, `leaderboardProtocol.ts` | **fertig** (nur Typen) |
 | `apps/leaderboard-service` (headless, Docker) | offen |
 | RaceOffice-Integration (Manager, Proxy, WS im Scoring) | offen |
@@ -30,6 +30,9 @@
 
 ### P2 – `apps/leaderboard-service` headless → **Meilenstein: ersetzt die Java-App**
 - `RMonitorTcpSource` (Reconnect, Encoding, Chunking), `LineBus`, `Recorder`, `RecordingPlayerSource`
+  - Recorder schreibt die empfangenen Bytes unverändert.
+  - Player mit getrenntem Datei- und Stream-Encoding sowie UTF-8-Erkennung, weil Java-Recordings je nach Recorder-Einstellung windows-1252 oder UTF-8 sind.
+- Store mit `corrections: "apply"` (`$COR`). Offen: ob korrigierte Zeiten im API markiert werden sollen (`CompetitorState.corrections` ist vorhanden).
 - REST-Kompatibilitätsschicht, `SnapshotPublisher` + WS `/ws/race/*`, `/ws/status`
 - Control-API inkl. Recordings-Upload/-Download, ConfigStore, CLI/ENV, optionaler Token
 - Optional: TCP-Replay-Server

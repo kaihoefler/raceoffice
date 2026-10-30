@@ -21,6 +21,7 @@ export {
   parseJavaFloat,
   parseJavaInt,
   parseJavaIntOrZero,
+  parseSignedDuration,
 } from "./duration.js";
 export type * from "./messages/types.js";
 export { parseLine } from "./messages/parseLine.js";

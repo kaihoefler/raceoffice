@@ -8,6 +8,11 @@
  *
  * Compared after normalization: competitor order (Java HashMap order) and race order.
  * Every other field must be identical.
+ *
+ * Two sets of fixtures:
+ * - golden/ + recordings/: committed, run everywhere (CI)
+ * - golden-local/ + recordings-local/: full competition days, git-ignored (size, personal data);
+ *   generated with `npm run golden:generate:local` and only run where present
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -16,21 +21,33 @@ import { parseLine, parseRecordingBytes, RaceStateStore, toRaceTO } from "../src
 import { normalizeRaces, normalizeRaceTO, selectCheckpoints, type GoldenFile } from "../src/testing/index.js";
 
 const FIXTURES = join(import.meta.dirname, "fixtures");
-const GOLDEN_DIR = join(FIXTURES, "golden");
-const goldenFiles = existsSync(GOLDEN_DIR) ? readdirSync(GOLDEN_DIR).filter((f) => f.endsWith(".golden.json")) : [];
 
-describe.skipIf(goldenFiles.length === 0)("golden: TS port vs. Java reference", () => {
-  it.each(goldenFiles)("%s", (file) => {
-    const golden = JSON.parse(readFileSync(join(GOLDEN_DIR, file), "utf8")) as GoldenFile;
+const SETS = [
+  { name: "committed", golden: "golden", recordings: "recordings" },
+  { name: "local full days", golden: "golden-local", recordings: "recordings-local" },
+].map((set) => {
+  const dir = join(FIXTURES, set.golden);
+  const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".golden.json")).sort() : [];
+  return { ...set, dir, files };
+});
+
+describe.each(SETS)("golden ($name): TS port vs. Java reference", ({ dir, recordings, files }) => {
+  if (files.length === 0) {
+    it.skip(`no golden files in ${dir}`, () => {});
+    return;
+  }
+  it.each(files)("%s", { timeout: 120_000 }, (file) => {
+    const golden = JSON.parse(readFileSync(join(dir, file), "utf8")) as GoldenFile;
     const decoder = new TextDecoder(golden.encoding);
-    const messages = parseRecordingBytes(readFileSync(join(FIXTURES, "recordings", golden.recording))).map((e) =>
+    const messages = parseRecordingBytes(readFileSync(join(FIXTURES, recordings, golden.recording))).map((e) =>
       decoder.decode(e.raw),
     );
     expect(messages.length).toBe(golden.lineCount);
     // The generator and this test must agree on the checkpoints.
     expect(golden.checkpoints.map((c) => c.afterLines)).toEqual(selectCheckpoints(messages));
 
-    const store = new RaceStateStore();
+    // Java keeps every race and ignores $COR; both deviations must not affect the comparison.
+    const store = new RaceStateStore({ maxRaces: Number.POSITIVE_INFINITY, corrections: "ignore" });
     let applied = 0;
     for (const checkpoint of golden.checkpoints) {
       while (applied < checkpoint.afterLines) store.apply(parseLine(messages[applied++] as string));

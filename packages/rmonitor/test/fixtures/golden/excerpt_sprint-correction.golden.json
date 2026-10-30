@@ -1,0 +1,300 @@
+{
+ "recording": "excerpt_sprint-correction.txt",
+ "reference": "ghcr.io/bastianpaetzold/rmonitorleaderboard:1.3.0",
+ "encoding": "windows-1252",
+ "generatedAt": "2026-10-30T22:22:22.176Z",
+ "lineCount": 213,
+ "checkpoints": [
+  {
+   "afterLines": 1,
+   "lastLine": "$I,\"09:59:45\",\"17 Apr 26\"",
+   "current": {
+    "raceName": "",
+    "raceID": -1,
+    "flagStatus": "NONE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": []
+  },
+  {
+   "afterLines": 3,
+   "lastLine": "$B,72,\"Youth Ladies 500 m + D Sprint Q2\"",
+   "current": {
+    "raceName": "Youth Ladies 500 m + D Sprint Q2",
+    "raceID": 72,
+    "flagStatus": "PURPLE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": [
+    {
+     "raceName": "Youth Ladies 500 m + D Sprint Q2",
+     "raceID": 72,
+     "flagStatus": "PURPLE",
+     "elapsedTime": "0:00",
+     "timeOfDay": "0:00",
+     "lapsComplete": 0,
+     "lapsToGo": 0,
+     "trackName": "",
+     "trackLength": 0,
+     "competitors": []
+    }
+   ]
+  },
+  {
+   "afterLines": 6,
+   "lastLine": "$B,72,\"Youth Ladies 500 m + D Sprint Q2\"",
+   "current": {
+    "raceName": "Youth Ladies 500 m + D Sprint Q2",
+    "raceID": 72,
+    "flagStatus": "PURPLE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": []
+   },
+   "races": [
+    {
+     "raceName": "Youth Ladies 500 m + D Sprint Q2",
+     "raceID": 72,
+     "flagStatus": "PURPLE",
+     "elapsedTime": "0:00",
+     "timeOfDay": "0:00",
+     "lapsComplete": 0,
+     "lapsToGo": 0,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": []
+    }
+   ]
+  },
+  {
+   "afterLines": 71,
+   "lastLine": "$F,3,\"00:00:00\",\"10:00:27\",\"00:00:01\",\"Green \"",
+   "current": {
+    "raceName": "Youth Ladies 500 m + D Sprint Q2",
+    "raceID": 72,
+    "flagStatus": "GREEN",
+    "elapsedTime": "0:01",
+    "timeOfDay": "10:00:27",
+    "lapsComplete": 0,
+    "lapsToGo": 3,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "220",
+      "position": 4,
+      "lapsComplete": 0,
+      "firstName": "Rider220",
+      "lastName": "Name220 (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 3
+     },
+     {
+      "number": "232",
+      "position": 2,
+      "lapsComplete": 0,
+      "firstName": "Rider232",
+      "lastName": "Name232 (ESP)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 4
+     },
+     {
+      "number": "193",
+      "position": 1,
+      "lapsComplete": 0,
+      "firstName": "Rider193",
+      "lastName": "Name193 (ESP)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 1
+     },
+     {
+      "number": "195",
+      "position": 5,
+      "lapsComplete": 0,
+      "firstName": "Rider195",
+      "lastName": "Name195 (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 2
+     },
+     {
+      "number": "274",
+      "position": 3,
+      "lapsComplete": 0,
+      "firstName": "Rider274",
+      "lastName": "Name274ï¿½ (CZE)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 5
+     }
+    ]
+   }
+  },
+  {
+   "afterLines": 213,
+   "lastLine": "$F,0,\"00:00:00\",\"10:01:31\",\"00:01:05\",\"Green \"",
+   "current": {
+    "raceName": "Youth Ladies 500 m + D Sprint Q2",
+    "raceID": 72,
+    "flagStatus": "GREEN",
+    "elapsedTime": "1:05",
+    "timeOfDay": "10:01:31",
+    "lapsComplete": 3,
+    "lapsToGo": 0,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "220",
+      "position": 4,
+      "lapsComplete": 3,
+      "firstName": "Rider220",
+      "lastName": "Name220 (ITA)",
+      "totalTime": "0:49.291",
+      "bestLap": "0:16.953",
+      "lastLap": "0:16.953",
+      "qualiPosition": 4
+     },
+     {
+      "number": "232",
+      "position": 2,
+      "lapsComplete": 3,
+      "firstName": "Rider232",
+      "lastName": "Name232 (ESP)",
+      "totalTime": "0:47.785",
+      "bestLap": "0:16.526",
+      "lastLap": "0:16.669",
+      "qualiPosition": 2
+     },
+     {
+      "number": "193",
+      "position": 1,
+      "lapsComplete": 3,
+      "firstName": "Rider193",
+      "lastName": "Name193 (ESP)",
+      "totalTime": "0:46.517",
+      "bestLap": "0:15.957",
+      "lastLap": "0:16.833",
+      "qualiPosition": 1
+     },
+     {
+      "number": "195",
+      "position": 5,
+      "lapsComplete": 3,
+      "firstName": "Rider195",
+      "lastName": "Name195 (ITA)",
+      "totalTime": "0:49.807",
+      "bestLap": "0:17.078",
+      "lastLap": "0:17.885",
+      "qualiPosition": 5
+     },
+     {
+      "number": "274",
+      "position": 3,
+      "lapsComplete": 3,
+      "firstName": "Rider274",
+      "lastName": "Name274ï¿½ (CZE)",
+      "totalTime": "0:47.791",
+      "bestLap": "0:16.615",
+      "lastLap": "0:16.771",
+      "qualiPosition": 3
+     }
+    ]
+   },
+   "races": [
+    {
+     "raceName": "Youth Ladies 500 m + D Sprint Q2",
+     "raceID": 72,
+     "flagStatus": "GREEN",
+     "elapsedTime": "1:05",
+     "timeOfDay": "10:01:31",
+     "lapsComplete": 3,
+     "lapsToGo": 0,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "220",
+       "position": 4,
+       "lapsComplete": 3,
+       "firstName": "Rider220",
+       "lastName": "Name220 (ITA)",
+       "totalTime": "0:49.291",
+       "bestLap": "0:16.953",
+       "lastLap": "0:16.953",
+       "qualiPosition": 4
+      },
+      {
+       "number": "232",
+       "position": 2,
+       "lapsComplete": 3,
+       "firstName": "Rider232",
+       "lastName": "Name232 (ESP)",
+       "totalTime": "0:47.785",
+       "bestLap": "0:16.526",
+       "lastLap": "0:16.669",
+       "qualiPosition": 2
+      },
+      {
+       "number": "193",
+       "position": 1,
+       "lapsComplete": 3,
+       "firstName": "Rider193",
+       "lastName": "Name193 (ESP)",
+       "totalTime": "0:46.517",
+       "bestLap": "0:15.957",
+       "lastLap": "0:16.833",
+       "qualiPosition": 1
+      },
+      {
+       "number": "195",
+       "position": 5,
+       "lapsComplete": 3,
+       "firstName": "Rider195",
+       "lastName": "Name195 (ITA)",
+       "totalTime": "0:49.807",
+       "bestLap": "0:17.078",
+       "lastLap": "0:17.885",
+       "qualiPosition": 5
+      },
+      {
+       "number": "274",
+       "position": 3,
+       "lapsComplete": 3,
+       "firstName": "Rider274",
+       "lastName": "Name274ï¿½ (CZE)",
+       "totalTime": "0:47.791",
+       "bestLap": "0:16.615",
+       "lastLap": "0:16.771",
+       "qualiPosition": 3
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

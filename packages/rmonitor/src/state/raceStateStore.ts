@@ -25,7 +25,17 @@ export type StoreChange = {
 };
 
 export type RaceStateStoreOptions = {
-  /** Maximum number of stored races; the oldest is dropped first. Default 50. */
+  /**
+   * Handling of Orbits `$COR` time corrections (photo finish, mostly 500 m sprints).
+   * `apply` (default) corrects total, lap, last and best lap times; `ignore` behaves like the
+   * Java app, which does not know `$COR` (used by the golden tests).
+   */
+  corrections?: "apply" | "ignore";
+  /**
+   * Maximum number of stored races; the oldest is dropped first. Default 200.
+   * Real competition days reach ~100 race ids per recording; 200 keeps a full day (plus margin)
+   * available under `/races` without letting a multi-day service grow without limit.
+   */
   maxRaces?: number;
 };
 
@@ -34,6 +44,7 @@ const SETTING_TRACK_LENGTH = "TRACKLENGTH";
 
 export class RaceStateStore {
   private readonly maxRaces: number;
+  private readonly applyCorrections: boolean;
   private races = new Map<number, RaceState>();
   private classes = new Map<number, string>();
   private currentRace = new RaceState();
@@ -41,7 +52,8 @@ export class RaceStateStore {
   private revision = 0;
 
   constructor(options: RaceStateStoreOptions = {}) {
-    this.maxRaces = Math.max(1, options.maxRaces ?? 50);
+    this.maxRaces = Math.max(1, options.maxRaces ?? 200);
+    this.applyCorrections = (options.corrections ?? "apply") === "apply";
   }
 
   /** The race messages are applied to (Java `getCurrentRace`); id -1 until the first `$B`. */
@@ -156,6 +168,11 @@ export class RaceStateStore {
 
       case "passingInfo":
         race.getOrCreateCompetitor(msg.regNumber).applyPassingInfo(msg);
+        break;
+
+      case "correction":
+        if (!this.applyCorrections) return { changed: false, newRace: false };
+        race.getOrCreateCompetitor(msg.regNumber).applyCorrection(msg);
         break;
 
       case "unknown":

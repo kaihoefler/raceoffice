@@ -7,7 +7,7 @@
  *   line skipped). Because Java parses the whole message before touching the state, an invalid
  *   line has no effect at all; the store ignores it the same way.
  */
-import { ParseError, parseDuration, parseJavaInt, parseJavaIntOrZero } from "../duration.js";
+import { ParseError, parseDuration, parseJavaInt, parseJavaIntOrZero, parseSignedDuration } from "../duration.js";
 import { tokenize } from "../tokenize.js";
 import type { RMonitorMessage } from "./types.js";
 
@@ -80,6 +80,15 @@ const PARSERS: Record<string, Parser> = {
   }),
   $SP: (t) => lapInfo("$SP", t),
   $SR: (t) => lapInfo("$SR", t),
+  // Orbits extension, not known to the Java app.
+  $COR: (t) => ({
+    kind: "correction",
+    regNumber: str(t, 1),
+    number: str(t, 2),
+    lap: parseJavaInt(t[3]),
+    correctedTotalTimeMs: parseDuration(t[4]),
+    deltaMs: parseSignedDuration(t[5]),
+  }),
 };
 
 function lapInfo(source: "$SP" | "$SR", t: string[]): RMonitorMessage {

@@ -64,6 +64,21 @@ export function parseDuration(value: string | undefined): number {
 }
 
 /**
+ * Signed correction of `$COR` (`-0:00:00.048`, `+0:00:00.001`) → milliseconds.
+ * Unlike `LocalTime`, the hour has no fixed width and the sign is mandatory.
+ */
+const SIGNED_RE = /^([+-])(\d+):([0-5]\d):([0-5]\d)(?:\.(\d{1,9}))?$/;
+
+export function parseSignedDuration(value: string | undefined): number {
+  if (value === undefined) throw new ParseError("missing time field");
+  const m = SIGNED_RE.exec(value);
+  if (!m) throw new ParseError(`not a signed time: "${value}"`);
+  const fractionMs = m[5] === undefined ? 0 : Number(m[5].padEnd(9, "0")) / 1e6;
+  const ms = ((Number(m[2]) * 60 + Number(m[3])) * 60 + Number(m[4])) * 1000 + fractionMs;
+  return m[1] === "-" ? -ms : ms;
+}
+
+/**
  * `DurationUtil.format`: `m:ss` without hours, `H:mm:ss` with hours (no leading zero),
  * `.SSS` only if the millisecond part is non-zero. `0` → `"0:00"` (Java default `Duration.ZERO`).
  */

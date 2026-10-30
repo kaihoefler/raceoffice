@@ -43,8 +43,9 @@ Die Golden-Tests haben diese Punkte bestätigt:
 
 | Thema | Java | Port |
 |---|---|---|
+| **`$COR` (Zeitkorrektur, Zielfoto)** | ignoriert, die Gesamtzeit kommt über das folgende `$G`, die Runde bleibt unkorrigiert | korrigiert Gesamtzeit, Rundenzeit, `lastLap` und ggf. `bestLap` (`corrections: "apply"`, Default). `"ignore"` verhält sich wie Java. |
 | Reihenfolge der Competitors in `RaceTO` | HashMap-Reihenfolge | nach Position, Position 0 am Ende |
-| Anzahl gehaltener Rennen | unbegrenzt | `maxRaces` (Default 50), das älteste fällt zuerst heraus |
+| Anzahl gehaltener Rennen | unbegrenzt | `maxRaces` (Default 200, ein voller Wettkampftag hat bis ca. 100), das älteste fällt zuerst heraus |
 | Klassen (`$C`) | statische Map | gehört zur Store-Instanz |
 | Änderungsmeldung | `PropertyChangeSupport` | `apply()` liefert `{ changed, newRace }`, dazu `store.rev` |
 | Zeilenende `\r` allein | gilt als Zeilenende (`readLine`) | nur `\n` und `\r\n` (Orbits sendet `\r\n`) |
@@ -58,7 +59,8 @@ npm run test:run --workspace=@raceoffice/rmonitor
 - `messages`, `state`: Port der JUnit-Tests, dazu die `RaceManager`-Regeln
 - `recording`: Format, Zeilenenden, windows-1252 (`AGI_2022_pts_Sen_Men`: „Bühnemann“), zufälliges Chunking
 - `feeder`: Feeder über echtes TCP
-- `golden`: Der Port muss an denselben Zeilen exakt dasselbe JSON liefern wie die Java-App
+- `correction`: `$COR` mit einer echten Sprint-Sequenz
+- `golden`: Der Port muss an denselben Zeilen exakt dasselbe JSON liefern wie die Java-App. Die Golden-Tests laufen mit `corrections: "ignore"` und ohne Rennlimit.
 
 ### Golden-Referenz neu erzeugen
 
@@ -77,6 +79,23 @@ Die Erzeugung hängt also nicht vom Timing ab und ist reproduzierbar. Ein andere
 
 Neue Aufnahmen (z. B. mit Yellow/Red oder Rennwechseln) legt man nach `test/fixtures/recordings/` und erzeugt danach die Referenz neu. Die Dateien bleiben byte-genau, siehe `.gitattributes`.
 
+### Tagesprotokolle (lokal)
+
+Komplette Wettkampftage gehören nicht ins öffentliche Repo, wegen ihrer Größe und weil sie Athletennamen enthalten. Sie liegen in `test/fixtures/recordings-local/`, das Git ignoriert.
+
+```sh
+npm run golden:generate:local --workspace=@raceoffice/rmonitor   # Referenz → test/fixtures/golden-local/
+```
+
+Die Golden-Tests laufen dann lokal automatisch mit, in CI werden sie übersprungen. Auffällige Stellen kommen als **anonymisierte Ausschnitte** ins Repo:
+
+```sh
+node scripts/make-excerpt.mjs <quelle.txt> test/fixtures/recordings/<name>.txt <von>-<bis> [<von>-<bis> ...]
+npm run golden:rmonitor -- test/fixtures/recordings/<name>.txt
+```
+
+`make-excerpt` ersetzt Vor- und Nachnamen durch `Rider<nr>`/`Name<nr>`. Nationenkürzel und die Sonderzeichen-Bytes der Originalnamen bleiben erhalten, damit Encoding-Tests weiter funktionieren.
+
 ## Herkunft und Lizenz
 
-Parser und Zustandsregeln sind eine Portierung von RMonitorLeaderboard (© 2013 Zachary Fox, © 2023 Bastian Pätzold). Das Projekt steht unter der **GNU GPL v3**. Die Recordings unter `test/fixtures/recordings/` stammen aus demselben Repository.
+Parser und Zustandsregeln sind eine Portierung von RMonitorLeaderboard (© 2013 Zachary Fox, © 2023 Bastian Pätzold). Das Projekt steht unter der **GNU GPL v3**. Die Recordings unter `test/fixtures/recordings/` stammen aus demselben Repository. Ausgenommen sind die Dateien `excerpt_*.txt`: Das sind anonymisierte Ausschnitte eigener Aufnahmen.

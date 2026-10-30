@@ -71,6 +71,22 @@ export type LapInfoMessage = {
   lapTimeMs: number;
 };
 
+/**
+ * `$COR` – Orbits time correction, e.g. after a photo finish (mostly 500 m sprints):
+ * `$COR,"193","193",3,"00:00:46.517","-0:00:00.048"` = reg, number, lap, corrected total time,
+ * correction. Orbits sends a `$G` with the corrected total right after it.
+ * Not handled by the Java app.
+ */
+export type CorrectionMessage = {
+  kind: "correction";
+  regNumber: string;
+  number: string;
+  lap: number;
+  correctedTotalTimeMs: number;
+  /** Signed correction as sent (`-0:00:00.048` → -48); rounded by Orbits, not always exactly new − old. */
+  deltaMs: number;
+};
+
 /** Prefix the Java app does not handle (e.g. `$RMS`); ignored by the store. */
 export type UnknownMessage = { kind: "unknown"; prefix: string; raw: string };
 
@@ -88,5 +104,6 @@ export type RMonitorMessage =
   | InitRecordMessage
   | PassingInfoMessage
   | LapInfoMessage
+  | CorrectionMessage
   | UnknownMessage
   | InvalidMessage;

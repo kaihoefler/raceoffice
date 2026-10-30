@@ -120,7 +120,12 @@ export class RaceStateStore {
 - Kein `PropertyChangeSupport`. Stattdessen gibt `apply()` eine `StoreChange` zurück, und die Diffs entstehen auf Snapshot-Ebene ([04-service-api.md](04-service-api.md)). Das behebt den `scheduledLaps`-Bug nebenbei.
 - Keine Singletons. Der Store ist eine Instanz, das erleichtert Tests und Replay parallel zum Live-Betrieb.
 - Die Klassen-Map gehört zum Store, nicht statisch zu `RaceClass`.
-- Die Race-Map wird begrenzt: höchstens N Rennen (Default 50) im Speicher, damit lange Veranstaltungstage nicht unbegrenzt wachsen.
+- Die Race-Map wird begrenzt: höchstens N Rennen (Default 200) im Speicher, damit mehrtägige Veranstaltungen nicht unbegrenzt wachsen. Echte Wettkampftage haben bis zu ca. 100 Rennen pro Aufnahme, 50 wären zu knapp.
+- **`$COR` wird verarbeitet** (Java ignoriert es). Orbits sendet damit Zeitkorrekturen, praktisch nur bei 500-m-Sprints, also Zielfoto-Korrekturen der Schlussrunde:
+  - Format: `$COR,"193","193",3,"00:00:46.517","-0:00:00.048"` = Reg.-Nr., Startnummer, Runde, korrigierte Gesamtzeit, Korrektur.
+  - Orbits schickt direkt danach ein `$G` mit der korrigierten Gesamtzeit. Java übernimmt deshalb die Gesamtzeit, lässt aber `lastLap` unkorrigiert und legt eine doppelte Runde an.
+  - Der Port korrigiert Gesamtzeit, Rundenzeit (= korrigierte Gesamtzeit − Gesamtzeit der Vorrunde), `lastLap` und ggf. `bestLap`.
+  - Mit der Store-Option `corrections: "ignore"` verhält er sich wie Java. Die Golden-Tests nutzen diese Einstellung.
 
 ---
 
@@ -147,6 +152,10 @@ export class RaceStateStore {
 - Die Java-App liest mit dem Plattform-Charset. Unter Windows ist das meist `windows-1252`, und so sind die Umlaute in den Orbits-Namen kodiert.
 - Der Port dekodiert Bytes über `TextDecoder(encoding)`. Konfigurierbar sind `utf-8`, `windows-1252` (Default) und `latin1`.
 - Zeilenende: `\r\n` oder `\n`; ein unvollständiger Rest bleibt im Puffer.
+- **Datei-Encoding ≠ Netzwerk-Encoding:** Die Java-Recordings schreibt der Recorder mit seinem eigenen Datei-Encoding, nachdem der Client den Stream dekodiert hat.
+  - Die Tagesprotokolle von 2025 sind windows-1252, die von 2026 UTF-8. Orbits selbst sendet nach bisherigem Wissen windows-1252.
+  - Der Java-Player hat deshalb getrennte Einstellungen für Datei und Stream und kodiert um. Das übernimmt der Player des Service (P2), zusätzlich mit einer UTF-8-Erkennung für importierte Dateien.
+  - Der eigene Recorder schreibt die empfangenen Bytes unverändert, damit ein Replay byte-genau ist.
 
 ---
 
