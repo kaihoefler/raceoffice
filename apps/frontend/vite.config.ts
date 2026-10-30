@@ -49,6 +49,9 @@ export default defineConfig({
       "/sse": { target: "http://localhost:8787", changeOrigin: true },
       "/health": { target: "http://localhost:8787" },
       "/current_race_result": { target: "http://localhost:8787", changeOrigin: true },
+      // Leaderboard service (proxied by the RaceOffice server) and its process control.
+      "/leaderboard-service": { target: "http://localhost:8787" },
+      "/leaderboard": { target: "http://localhost:8787", ws: true },
     },
   },
 });
