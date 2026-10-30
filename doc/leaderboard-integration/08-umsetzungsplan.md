@@ -7,7 +7,7 @@
 | Konzept (`doc/leaderboard-integration/`) | **fertig** |
 | `packages/rmonitor` | **fertig**: Parser, Store, `toRaceTO`, Recording-Format, `LineDecoder`, `FakeOrbitsFeeder`, `$COR`-Korrekturen. Golden-Tests ohne Abweichung: 10 Aufnahmen im Repo (davon 4 anonymisierte Ausschnitte) und lokal 15 komplette Wettkampftage (8 719 Haltepunkte). |
 | Domain: optionale `RaceTO`-Felder, `leaderboardProtocol.ts` | **fertig** (nur Typen) |
-| `apps/leaderboard-service` (headless, Docker) | offen |
+| `apps/leaderboard-service` (headless, Docker) | **fertig bis auf Docker/Bundle** (verschoben nach P6): REST kompatibel, WS mit Snapshot/Patch und Heartbeat-Ticks, Control-API, Recorder, Player, Config, Token. Integrationstests inkl. Golden-Vergleich über TCP. Upload per `PUT` statt Multipart. |
 | RaceOffice-Integration (Manager, Proxy, WS im Scoring) | offen |
 | `apps/leaderboard-frontend`: Leaderboard + Control Center | offen |
 | Start Signal, Lap Counter, Finish Line Log | offen |

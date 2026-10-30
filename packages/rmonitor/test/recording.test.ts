@@ -5,8 +5,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  detectRecordingEncoding,
   formatRecordingLine,
   LineDecoder,
+  LineSplitter,
   parseLine,
   parseRecording,
   parseRecordingBytes,
@@ -87,6 +89,19 @@ describe("LineDecoder", () => {
     const split = data.indexOf(0xc3) + 1; // inside "ß"
     expect(d.push(data.subarray(0, split))).toEqual([]);
     expect(d.push(data.subarray(split))).toEqual(['$E,"TRACKNAME","Groß-Gerau"']);
+  });
+
+  it("detects the encoding of recording files (Java recorder writes cp1252 or UTF-8)", () => {
+    expect(detectRecordingEncoding(readFixture("leaderboard-recording_AGI_2022_pts_Sen_Men.txt"))).toBe("windows-1252");
+    expect(detectRecordingEncoding(readFixture("excerpt_utf8-recording-file.txt"))).toBe("utf-8");
+    expect(detectRecordingEncoding(readFixture("1h_Record_test.txt"))).toBe("windows-1252"); // ASCII only
+  });
+
+  it("LineSplitter returns raw bytes per line", () => {
+    const s = new LineSplitter();
+    const lines = s.push(new Uint8Array([0x24, 0x41, 0xfc, 0x0d, 0x0a, 0x24]));
+    expect(lines.map((l) => Array.from(l))).toEqual([[0x24, 0x41, 0xfc]]);
+    expect(s.flush().map((l) => Array.from(l))).toEqual([[0x24]]);
   });
 
   it("rejects unknown encodings at construction", () => {

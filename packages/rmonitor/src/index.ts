@@ -36,4 +36,9 @@ export {
   parseRecordingLine,
   type RecordingEntry,
 } from "./recording/format.js";
-export { DEFAULT_RMONITOR_ENCODING, LineDecoder } from "./recording/lineDecoder.js";
+export {
+  DEFAULT_RMONITOR_ENCODING,
+  detectRecordingEncoding,
+  LineDecoder,
+  LineSplitter,
+} from "./recording/lineDecoder.js";

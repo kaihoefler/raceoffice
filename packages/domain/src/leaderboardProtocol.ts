@@ -47,6 +47,10 @@ export type LeaderboardServiceStatus = {
     progress: number;
     positionMs: number;
     durationMs: number;
+    /** Encoding used for the loaded recording file (detected or configured). */
+    encoding?: string | null;
+    linesPlayed?: number;
+    lineCount?: number;
   };
   server: { port: number; wsClients: number; restRequestsPerMinute: number };
   race: { currentId: number | null; currentName: string | null; flag: string | null };

@@ -98,6 +98,20 @@ Der Settings-Dialog „Race status connection“ wird zum Dialog **„Live-Quell
 
 Die Steuerlogik wird gekapselt in `apps/frontend/src/services/leaderboardServiceClient.ts`: Fetch-Wrapper für `/leaderboard-service/*` und `/leaderboard/api/*`, plus `useLeaderboardServiceStatus()` auf Basis von `/leaderboard/ws/status`.
 
+### 2.2a Notfall: Umschalten auf die Java-App
+
+Die Java-App RMonitorLeaderboard muss als Rückfallebene jederzeit nutzbar bleiben, ohne Neubau und ohne Server-Neustart. Möglich wird das durch die REST-Kompatibilität des Service.
+
+- **Im Scoring (sofort, pro Browser):** Der Dialog „Live-Quelle“ hat eine Schnellwahl **„Java-Leaderboard (Notfall)“**.
+  - Sie setzt die URL auf `http://<host>:8080/races?filter=current` und den Transport auf Polling, weil die Java-App keinen WebSocket hat.
+  - Die Auswahl wird wie die heutige URL-Einstellung im Browser gespeichert. „Zurück zum Leaderboard-Service“ stellt den Default wieder her.
+  - Der Provider fällt ohnehin automatisch auf Polling zurück, wenn kein WebSocket verfügbar ist.
+- **Im Server (für alle Clients):** Mit `LEADERBOARD_MODE=external` und `LEADERBOARD_URL=http://<host>:8080` leitet der Proxy `/leaderboard/race*` an die Java-App weiter.
+  - Die Control-API (`/leaderboard/api/*`) und `/ws/*` gibt es dann nicht. Das Scoring blendet die Service-Steuerung aus und nutzt Polling.
+  - Die Umschaltung ist auch zur Laufzeit möglich (`POST /leaderboard-service/mode`).
+- **Parallelbetrieb:** Orbits bedient mehrere Clients. Die Java-App kann am Wettkampftag also „warm“ mitlaufen und ist im Notfall ohne Verbindungsaufbau sofort verfügbar.
+- **Unterschiede, die im Notfall wegfallen:** `$COR`-Korrekturen (Markierung „Zielfoto“, korrigierte letzte Runde) und die Live-Patches. Die Wertung im Scoring funktioniert unverändert, weil sie nur die Java-Felder nutzt.
+
 ### 2.3 Unverändert
 `ScoringLiveColumns.tsx`, `ScoringViewModel.tsx`, `liveScoring.ts` und die Sync-Regeln (Sync nur bei GREEN/PURPLE, Reset bei Rennwechsel) bleiben, wie sie sind. Sie hängen nur am `RaceStatusProvider`-Context.
 
