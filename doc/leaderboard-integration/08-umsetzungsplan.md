@@ -5,7 +5,8 @@
 | Komponente | Status |
 |---|---|
 | Konzept (`doc/leaderboard-integration/`) | **fertig** |
-| `packages/rmonitor` | offen |
+| `packages/rmonitor` | **fertig**: Parser, Store, `toRaceTO`, Recording-Format, `LineDecoder`, `FakeOrbitsFeeder`. Golden-Tests für 6 Aufnahmen ohne Abweichung. |
+| Domain: optionale `RaceTO`-Felder, `leaderboardProtocol.ts` | **fertig** (nur Typen) |
 | `apps/leaderboard-service` (headless, Docker) | offen |
 | RaceOffice-Integration (Manager, Proxy, WS im Scoring) | offen |
 | `apps/leaderboard-frontend`: Leaderboard + Control Center | offen |
@@ -21,7 +22,8 @@
 - `RaceStateStore`, `toRaceTO()`, Recording-Format
 - Port der JUnit-Tests nach vitest
 - Fixtures: Recordings aus dem Java-Repo und weitere lokale Aufnahmen nach `packages/rmonitor/test/fixtures/recordings/`
-- Golden-Test-Harness: Skript, das die Java-App mit Player und Server startet und Fixtures erzeugt; Vergleichstests
+- Fake-Orbits-Feeder (Node-TCP-Server): spielt ein Recording zeilengenau ab, hält an Zeilennummern an und lässt sich programmatisch weiterschalten. Er wird in P2 für die Service-Integrationstests wiederverwendet.
+- Golden-Test-Harness: Skript startet die Java-App headless als Client und Server gegen den Feeder (nicht gegen den Java-Player), zieht `/races` an den Haltepunkten und speichert die Fixtures; dazu die Vergleichstests (Details in [03-rmonitor-port.md](03-rmonitor-port.md#6-teststrategie))
 - Erweiterung `packages/domain/src/raceStatusFeed.ts` (optionale Felder) und neues `leaderboardProtocol.ts`
 
 **Fertig, wenn:** Alle Golden-Tests sind grün, oder jede Abweichung ist dokumentiert und begründet.
@@ -33,8 +35,9 @@
 - Optional: TCP-Replay-Server
 - Dockerfile, compose-Beispiel, Bundle (tsup/esbuild)
 - Integrationstests:
-  - Fake-Orbits-TCP-Server (aus Recording) → Service → REST/WS-Assertions
+  - Fake-Orbits-Feeder aus P1 (Recording) → Service → REST/WS-Assertions
   - Reconnect-Szenarien
+  - Früher Smoke-Test, solange `RecordingPlayerSource` noch fehlt: Der **Java-Player** (`--headless -p --player-file … --player-stream-encoding windows-1252`) dient als TCP-Quelle für `RMonitorTcpSource`
 
 **Fertig, wenn:** Das bestehende Scoring läuft unverändert gegen den Container (`/races?filter=current`).
 
@@ -81,12 +84,14 @@ gantt
 
 | Ebene | Werkzeug | Inhalt |
 |---|---|---|
-| Parser/Modell | vitest | Port der JUnit-Tests, Robustheit (Chunking, kaputte Zeilen) |
-| Kompatibilität | vitest + Fixtures | Golden-Tests gegen Java-Referenz-Snapshots |
-| Service | vitest + Fastify `inject` + Fake-TCP | REST, WS (Snapshot/Patch/Resync), Control-API, Player-Seek |
+| Parser/Modell | vitest | Port der JUnit-Tests, Robustheit (Chunking, kaputte Zeilen, Zeilenenden, windows-1252) |
+| Kompatibilität | vitest + Fixtures | Golden-Tests gegen Java-Referenz-Snapshots, erzeugt mit Fake-Orbits-Feeder → Java-App an festen Zeilennummern |
+| Service | vitest + Fastify `inject` + Fake-Orbits-Feeder | REST, WS (Snapshot/Patch/Resync), Control-API, Player-Seek |
 | Integration RaceOffice | vitest (`packages/test-utils`) | Manager-Start/Stop, Proxy inkl. WS, Fallback auf Polling |
 | Frontend | vitest + Testing Library | Patch-Anwendung, Spaltenlogik, Lap-Counter-Delay |
-| End-to-End | manuell / Recording | Recording → Player → Scoring-Sync einer Elimination und eines Punkterennens |
+| End-to-End | manuell / Recording | Recording → Player (Java-Player oder eigener) → Scoring-Sync einer Elimination und eines Punkterennens |
+
+**Rolle des Java-Players:** Er eignet sich für manuelle und End-to-End-Tests und als frühe TCP-Quelle in P2. Für Golden-Snapshots eignet er sich nicht: Er spielt nach Wanduhrzeit ab, lässt sich headless weder anhalten noch an eine Position setzen und verrät nicht, welche Zeile er zuletzt gesendet hat. Encoding immer explizit auf `windows-1252` setzen.
 
 ---
 
@@ -95,7 +100,8 @@ gantt
 | Risiko | Gegenmaßnahme |
 |---|---|
 | Feinheiten bei Zeitformat und Flag-Mapping weichen von Java ab, das Scoring rechnet falsch | Golden-Tests; `parseTimeToSeconds` gegen alle Formate testen |
-| Zeichenkodierung (Umlaute in Namen) | Encoding konfigurierbar, Default `windows-1252`, Test mit echtem Orbits-Mitschnitt |
+| Zeichenkodierung (Umlaute in Namen) | Encoding konfigurierbar, Default `windows-1252`, fester Test mit `leaderboard-recording_AGI_2022_pts_Sen_Men.txt` (enthält windows-1252-Umlaute) |
+| Golden-Referenz nicht reproduzierbar (Timing, JVM-Default-Encoding) | Feeder mit Haltepunkten statt Java-Player; Java-App mit explizitem Encoding und eigenem Arbeitsverzeichnis |
 | Flaggen außer `Green` und leer sind in den vorhandenen Aufnahmen nicht belegt | Weitere lokale Aufnahmen (Yellow/Red/Finish/Purple, Rennwechsel) als Fixtures aufnehmen |
 | Heartbeat-Timing geht verloren (z. B. Unterdrückung „leerer“ Patches) | Test: Bei Replay in Echtzeit kommt mindestens ein Patch pro Sekunde beim Client an |
 | Der WS-Proxy im RaceOffice-Server wird zum Engpass | Sehr geringe Datenrate (≤ 10 Patches/s). Leaderboard-Bildschirme können direkt auf den Service zeigen. |

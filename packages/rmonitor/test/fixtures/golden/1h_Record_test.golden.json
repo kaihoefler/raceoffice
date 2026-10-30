@@ -1,0 +1,230 @@
+{
+ "recording": "1h_Record_test.txt",
+ "reference": "ghcr.io/bastianpaetzold/rmonitorleaderboard:1.3.0",
+ "encoding": "windows-1252",
+ "generatedAt": "2026-10-30T21:59:37.716Z",
+ "lineCount": 197,
+ "checkpoints": [
+  {
+   "afterLines": 4,
+   "lastLine": "$I,\"22:11:27\",\"27 Jun 20\"",
+   "current": {
+    "raceName": "",
+    "raceID": -1,
+    "flagStatus": "NONE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": []
+  },
+  {
+   "afterLines": 5,
+   "lastLine": "$I,\"22:11:27\",\"27 Jun 20\"",
+   "current": {
+    "raceName": "",
+    "raceID": -1,
+    "flagStatus": "NONE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": []
+  },
+  {
+   "afterLines": 6,
+   "lastLine": "$I,\"22:11:27\",\"27 Jun 20\"",
+   "current": {
+    "raceName": "",
+    "raceID": -1,
+    "flagStatus": "NONE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": []
+  },
+  {
+   "afterLines": 8,
+   "lastLine": "$B,27,\"1h WR Template\"",
+   "current": {
+    "raceName": "1h WR Template",
+    "raceID": 27,
+    "flagStatus": "PURPLE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": [
+    {
+     "raceName": "1h WR Template",
+     "raceID": 27,
+     "flagStatus": "PURPLE",
+     "elapsedTime": "0:00",
+     "timeOfDay": "0:00",
+     "lapsComplete": 0,
+     "lapsToGo": 0,
+     "trackName": "",
+     "trackLength": 0,
+     "competitors": []
+    }
+   ]
+  },
+  {
+   "afterLines": 11,
+   "lastLine": "$B,27,\"1h WR Template\"",
+   "current": {
+    "raceName": "1h WR Template",
+    "raceID": 27,
+    "flagStatus": "PURPLE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": []
+   },
+   "races": [
+    {
+     "raceName": "1h WR Template",
+     "raceID": 27,
+     "flagStatus": "PURPLE",
+     "elapsedTime": "0:00",
+     "timeOfDay": "0:00",
+     "lapsComplete": 0,
+     "lapsToGo": 0,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": []
+    }
+   ]
+  },
+  {
+   "afterLines": 25,
+   "lastLine": "$F,9999,\"00:01:59\",\"22:11:31\",\"00:00:00\",\"Green \"",
+   "current": {
+    "raceName": "1h WR Template",
+    "raceID": 27,
+    "flagStatus": "GREEN",
+    "elapsedTime": "0:00",
+    "timeOfDay": "22:11:31",
+    "lapsComplete": 0,
+    "lapsToGo": 9999,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "Tst",
+      "position": 1,
+      "lapsComplete": 0,
+      "firstName": "",
+      "lastName": "",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 1
+     }
+    ]
+   }
+  },
+  {
+   "afterLines": 175,
+   "lastLine": "$F,9999,\"00:00:00\",\"22:13:37\",\"00:02:06\",\"Finish\"",
+   "current": {
+    "raceName": "1h WR Template",
+    "raceID": 27,
+    "flagStatus": "FINISH",
+    "elapsedTime": "2:06",
+    "timeOfDay": "22:13:37",
+    "lapsComplete": 7,
+    "lapsToGo": 9999,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "Tst",
+      "position": 1,
+      "lapsComplete": 7,
+      "firstName": "",
+      "lastName": "",
+      "totalTime": "2:04.788",
+      "bestLap": "0:13.445",
+      "lastLap": "0:26.391",
+      "qualiPosition": 1
+     }
+    ]
+   }
+  },
+  {
+   "afterLines": 197,
+   "lastLine": "$F,9999,\"00:00:00\",\"22:13:59\",\"00:02:28\",\"Finish\"",
+   "current": {
+    "raceName": "1h WR Template",
+    "raceID": 27,
+    "flagStatus": "FINISH",
+    "elapsedTime": "2:28",
+    "timeOfDay": "22:13:59",
+    "lapsComplete": 7,
+    "lapsToGo": 9999,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "Tst",
+      "position": 1,
+      "lapsComplete": 7,
+      "firstName": "",
+      "lastName": "",
+      "totalTime": "2:04.788",
+      "bestLap": "0:13.445",
+      "lastLap": "0:26.391",
+      "qualiPosition": 1
+     }
+    ]
+   },
+   "races": [
+    {
+     "raceName": "1h WR Template",
+     "raceID": 27,
+     "flagStatus": "FINISH",
+     "elapsedTime": "2:28",
+     "timeOfDay": "22:13:59",
+     "lapsComplete": 7,
+     "lapsToGo": 9999,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "Tst",
+       "position": 1,
+       "lapsComplete": 7,
+       "firstName": "",
+       "lastName": "",
+       "totalTime": "2:04.788",
+       "bestLap": "0:13.445",
+       "lastLap": "0:26.391",
+       "qualiPosition": 1
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

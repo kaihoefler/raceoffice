@@ -1,0 +1,9 @@
+{
+  // Type check for the tests only (no emit); the build uses tsconfig.json (src only).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": ["src", "test"]
+}

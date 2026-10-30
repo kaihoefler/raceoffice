@@ -1,0 +1,980 @@
+{
+ "recording": "leaderboard-recording_500m_kompakt.txt",
+ "reference": "ghcr.io/bastianpaetzold/rmonitorleaderboard:1.3.0",
+ "encoding": "windows-1252",
+ "generatedAt": "2026-10-30T21:59:41.406Z",
+ "lineCount": 400,
+ "checkpoints": [
+  {
+   "afterLines": 1,
+   "lastLine": "$I,\"21:54:49\",\"21 Apr 17\"",
+   "current": {
+    "raceName": "",
+    "raceID": -1,
+    "flagStatus": "NONE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": []
+  },
+  {
+   "afterLines": 9,
+   "lastLine": "$I,\"21:54:56\",\"21 Apr 17\"",
+   "current": {
+    "raceName": "",
+    "raceID": -1,
+    "flagStatus": "NONE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": []
+  },
+  {
+   "afterLines": 10,
+   "lastLine": "$I,\"21:54:56\",\"21 Apr 17\"",
+   "current": {
+    "raceName": "",
+    "raceID": -1,
+    "flagStatus": "NONE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": []
+  },
+  {
+   "afterLines": 11,
+   "lastLine": "$I,\"21:54:56\",\"21 Apr 17\"",
+   "current": {
+    "raceName": "",
+    "raceID": -1,
+    "flagStatus": "NONE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": []
+  },
+  {
+   "afterLines": 13,
+   "lastLine": "$B,4,\"JuniorsÂ B men 500 1/8 final 5\"",
+   "current": {
+    "raceName": "JuniorsÂ B men 500 1/8 final 5",
+    "raceID": 4,
+    "flagStatus": "PURPLE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": [
+    {
+     "raceName": "JuniorsÂ B men 500 1/8 final 5",
+     "raceID": 4,
+     "flagStatus": "PURPLE",
+     "elapsedTime": "0:00",
+     "timeOfDay": "0:00",
+     "lapsComplete": 0,
+     "lapsToGo": 0,
+     "trackName": "",
+     "trackLength": 0,
+     "competitors": []
+    }
+   ]
+  },
+  {
+   "afterLines": 16,
+   "lastLine": "$B,4,\"JuniorsÂ B men 500 1/8 final 5\"",
+   "current": {
+    "raceName": "JuniorsÂ B men 500 1/8 final 5",
+    "raceID": 4,
+    "flagStatus": "PURPLE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": []
+   },
+   "races": [
+    {
+     "raceName": "JuniorsÂ B men 500 1/8 final 5",
+     "raceID": 4,
+     "flagStatus": "PURPLE",
+     "elapsedTime": "0:00",
+     "timeOfDay": "0:00",
+     "lapsComplete": 0,
+     "lapsToGo": 0,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": []
+    }
+   ]
+  },
+  {
+   "afterLines": 73,
+   "lastLine": "$F,3,\"00:00:00\",\"21:55:26\",\"00:00:00\",\"Green \"",
+   "current": {
+    "raceName": "JuniorsÂ B men 500 1/8 final 5",
+    "raceID": 4,
+    "flagStatus": "GREEN",
+    "elapsedTime": "0:00",
+    "timeOfDay": "21:55:26",
+    "lapsComplete": 0,
+    "lapsToGo": 3,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "1016",
+      "position": 3,
+      "lapsComplete": 0,
+      "firstName": "Davide",
+      "lastName": "Casoni (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 2
+     },
+     {
+      "number": "1001",
+      "position": 1,
+      "lapsComplete": 0,
+      "firstName": "Baptiste",
+      "lastName": "Allain (FRA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 1
+     },
+     {
+      "number": "1060",
+      "position": 4,
+      "lapsComplete": 0,
+      "firstName": "Jan Martin",
+      "lastName": "Mende (GER)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 3
+     },
+     {
+      "number": "1082",
+      "position": 2,
+      "lapsComplete": 0,
+      "firstName": "Filippo",
+      "lastName": "Scotto (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 4
+     }
+    ]
+   }
+  },
+  {
+   "afterLines": 201,
+   "lastLine": "$I,\"21:54:49\",\"21 Apr 17\"",
+   "current": {
+    "raceName": "JuniorsÂ B men 500 1/8 final 5",
+    "raceID": 4,
+    "flagStatus": "FINISH",
+    "elapsedTime": "0:46",
+    "timeOfDay": "21:56:12",
+    "lapsComplete": 3,
+    "lapsToGo": 0,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "1016",
+      "position": 4,
+      "lapsComplete": 0,
+      "firstName": "Davide",
+      "lastName": "Casoni (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 4
+     },
+     {
+      "number": "1001",
+      "position": 1,
+      "lapsComplete": 3,
+      "firstName": "Baptiste",
+      "lastName": "Allain (FRA)",
+      "totalTime": "0:41.424",
+      "bestLap": "0:15.105",
+      "lastLap": "0:15.105",
+      "qualiPosition": 2
+     },
+     {
+      "number": "1060",
+      "position": 2,
+      "lapsComplete": 3,
+      "firstName": "Jan Martin",
+      "lastName": "Mende (GER)",
+      "totalTime": "0:41.573",
+      "bestLap": "0:15.072",
+      "lastLap": "0:15.072",
+      "qualiPosition": 1
+     },
+     {
+      "number": "1082",
+      "position": 3,
+      "lapsComplete": 3,
+      "firstName": "Filippo",
+      "lastName": "Scotto (ITA)",
+      "totalTime": "0:41.644",
+      "bestLap": "0:15.241",
+      "lastLap": "0:15.241",
+      "qualiPosition": 3
+     }
+    ]
+   },
+   "races": [
+    {
+     "raceName": "JuniorsÂ B men 500 1/8 final 5",
+     "raceID": 4,
+     "flagStatus": "FINISH",
+     "elapsedTime": "0:46",
+     "timeOfDay": "21:56:12",
+     "lapsComplete": 3,
+     "lapsToGo": 0,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "1016",
+       "position": 4,
+       "lapsComplete": 0,
+       "firstName": "Davide",
+       "lastName": "Casoni (ITA)",
+       "totalTime": "0:00",
+       "bestLap": "0:00",
+       "lastLap": "0:00",
+       "qualiPosition": 4
+      },
+      {
+       "number": "1001",
+       "position": 1,
+       "lapsComplete": 3,
+       "firstName": "Baptiste",
+       "lastName": "Allain (FRA)",
+       "totalTime": "0:41.424",
+       "bestLap": "0:15.105",
+       "lastLap": "0:15.105",
+       "qualiPosition": 2
+      },
+      {
+       "number": "1060",
+       "position": 2,
+       "lapsComplete": 3,
+       "firstName": "Jan Martin",
+       "lastName": "Mende (GER)",
+       "totalTime": "0:41.573",
+       "bestLap": "0:15.072",
+       "lastLap": "0:15.072",
+       "qualiPosition": 1
+      },
+      {
+       "number": "1082",
+       "position": 3,
+       "lapsComplete": 3,
+       "firstName": "Filippo",
+       "lastName": "Scotto (ITA)",
+       "totalTime": "0:41.644",
+       "bestLap": "0:15.241",
+       "lastLap": "0:15.241",
+       "qualiPosition": 3
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "afterLines": 202,
+   "lastLine": "$F,0,\"00:00:00\",\"21:54:50\",\"00:00:00\",\"      \"",
+   "current": {
+    "raceName": "JuniorsÂ B men 500 1/8 final 5",
+    "raceID": 4,
+    "flagStatus": "FINISH",
+    "elapsedTime": "0:46",
+    "timeOfDay": "21:56:12",
+    "lapsComplete": 3,
+    "lapsToGo": 0,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "1016",
+      "position": 4,
+      "lapsComplete": 0,
+      "firstName": "Davide",
+      "lastName": "Casoni (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 4
+     },
+     {
+      "number": "1001",
+      "position": 1,
+      "lapsComplete": 3,
+      "firstName": "Baptiste",
+      "lastName": "Allain (FRA)",
+      "totalTime": "0:41.424",
+      "bestLap": "0:15.105",
+      "lastLap": "0:15.105",
+      "qualiPosition": 2
+     },
+     {
+      "number": "1060",
+      "position": 2,
+      "lapsComplete": 3,
+      "firstName": "Jan Martin",
+      "lastName": "Mende (GER)",
+      "totalTime": "0:41.573",
+      "bestLap": "0:15.072",
+      "lastLap": "0:15.072",
+      "qualiPosition": 1
+     },
+     {
+      "number": "1082",
+      "position": 3,
+      "lapsComplete": 3,
+      "firstName": "Filippo",
+      "lastName": "Scotto (ITA)",
+      "totalTime": "0:41.644",
+      "bestLap": "0:15.241",
+      "lastLap": "0:15.241",
+      "qualiPosition": 3
+     }
+    ]
+   }
+  },
+  {
+   "afterLines": 209,
+   "lastLine": "$I,\"21:54:56\",\"21 Apr 17\"",
+   "current": {
+    "raceName": "JuniorsÂ B men 500 1/8 final 5",
+    "raceID": 4,
+    "flagStatus": "FINISH",
+    "elapsedTime": "0:46",
+    "timeOfDay": "21:56:12",
+    "lapsComplete": 3,
+    "lapsToGo": 0,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "1016",
+      "position": 4,
+      "lapsComplete": 0,
+      "firstName": "Davide",
+      "lastName": "Casoni (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 4
+     },
+     {
+      "number": "1001",
+      "position": 1,
+      "lapsComplete": 3,
+      "firstName": "Baptiste",
+      "lastName": "Allain (FRA)",
+      "totalTime": "0:41.424",
+      "bestLap": "0:15.105",
+      "lastLap": "0:15.105",
+      "qualiPosition": 2
+     },
+     {
+      "number": "1060",
+      "position": 2,
+      "lapsComplete": 3,
+      "firstName": "Jan Martin",
+      "lastName": "Mende (GER)",
+      "totalTime": "0:41.573",
+      "bestLap": "0:15.072",
+      "lastLap": "0:15.072",
+      "qualiPosition": 1
+     },
+     {
+      "number": "1082",
+      "position": 3,
+      "lapsComplete": 3,
+      "firstName": "Filippo",
+      "lastName": "Scotto (ITA)",
+      "totalTime": "0:41.644",
+      "bestLap": "0:15.241",
+      "lastLap": "0:15.241",
+      "qualiPosition": 3
+     }
+    ]
+   },
+   "races": [
+    {
+     "raceName": "JuniorsÂ B men 500 1/8 final 5",
+     "raceID": 4,
+     "flagStatus": "FINISH",
+     "elapsedTime": "0:46",
+     "timeOfDay": "21:56:12",
+     "lapsComplete": 3,
+     "lapsToGo": 0,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "1016",
+       "position": 4,
+       "lapsComplete": 0,
+       "firstName": "Davide",
+       "lastName": "Casoni (ITA)",
+       "totalTime": "0:00",
+       "bestLap": "0:00",
+       "lastLap": "0:00",
+       "qualiPosition": 4
+      },
+      {
+       "number": "1001",
+       "position": 1,
+       "lapsComplete": 3,
+       "firstName": "Baptiste",
+       "lastName": "Allain (FRA)",
+       "totalTime": "0:41.424",
+       "bestLap": "0:15.105",
+       "lastLap": "0:15.105",
+       "qualiPosition": 2
+      },
+      {
+       "number": "1060",
+       "position": 2,
+       "lapsComplete": 3,
+       "firstName": "Jan Martin",
+       "lastName": "Mende (GER)",
+       "totalTime": "0:41.573",
+       "bestLap": "0:15.072",
+       "lastLap": "0:15.072",
+       "qualiPosition": 1
+      },
+      {
+       "number": "1082",
+       "position": 3,
+       "lapsComplete": 3,
+       "firstName": "Filippo",
+       "lastName": "Scotto (ITA)",
+       "totalTime": "0:41.644",
+       "bestLap": "0:15.241",
+       "lastLap": "0:15.241",
+       "qualiPosition": 3
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "afterLines": 210,
+   "lastLine": "$I,\"21:54:56\",\"21 Apr 17\"",
+   "current": {
+    "raceName": "JuniorsÂ B men 500 1/8 final 5",
+    "raceID": 4,
+    "flagStatus": "FINISH",
+    "elapsedTime": "0:46",
+    "timeOfDay": "21:56:12",
+    "lapsComplete": 3,
+    "lapsToGo": 0,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "1016",
+      "position": 4,
+      "lapsComplete": 0,
+      "firstName": "Davide",
+      "lastName": "Casoni (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 4
+     },
+     {
+      "number": "1001",
+      "position": 1,
+      "lapsComplete": 3,
+      "firstName": "Baptiste",
+      "lastName": "Allain (FRA)",
+      "totalTime": "0:41.424",
+      "bestLap": "0:15.105",
+      "lastLap": "0:15.105",
+      "qualiPosition": 2
+     },
+     {
+      "number": "1060",
+      "position": 2,
+      "lapsComplete": 3,
+      "firstName": "Jan Martin",
+      "lastName": "Mende (GER)",
+      "totalTime": "0:41.573",
+      "bestLap": "0:15.072",
+      "lastLap": "0:15.072",
+      "qualiPosition": 1
+     },
+     {
+      "number": "1082",
+      "position": 3,
+      "lapsComplete": 3,
+      "firstName": "Filippo",
+      "lastName": "Scotto (ITA)",
+      "totalTime": "0:41.644",
+      "bestLap": "0:15.241",
+      "lastLap": "0:15.241",
+      "qualiPosition": 3
+     }
+    ]
+   },
+   "races": [
+    {
+     "raceName": "JuniorsÂ B men 500 1/8 final 5",
+     "raceID": 4,
+     "flagStatus": "FINISH",
+     "elapsedTime": "0:46",
+     "timeOfDay": "21:56:12",
+     "lapsComplete": 3,
+     "lapsToGo": 0,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "1016",
+       "position": 4,
+       "lapsComplete": 0,
+       "firstName": "Davide",
+       "lastName": "Casoni (ITA)",
+       "totalTime": "0:00",
+       "bestLap": "0:00",
+       "lastLap": "0:00",
+       "qualiPosition": 4
+      },
+      {
+       "number": "1001",
+       "position": 1,
+       "lapsComplete": 3,
+       "firstName": "Baptiste",
+       "lastName": "Allain (FRA)",
+       "totalTime": "0:41.424",
+       "bestLap": "0:15.105",
+       "lastLap": "0:15.105",
+       "qualiPosition": 2
+      },
+      {
+       "number": "1060",
+       "position": 2,
+       "lapsComplete": 3,
+       "firstName": "Jan Martin",
+       "lastName": "Mende (GER)",
+       "totalTime": "0:41.573",
+       "bestLap": "0:15.072",
+       "lastLap": "0:15.072",
+       "qualiPosition": 1
+      },
+      {
+       "number": "1082",
+       "position": 3,
+       "lapsComplete": 3,
+       "firstName": "Filippo",
+       "lastName": "Scotto (ITA)",
+       "totalTime": "0:41.644",
+       "bestLap": "0:15.241",
+       "lastLap": "0:15.241",
+       "qualiPosition": 3
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "afterLines": 211,
+   "lastLine": "$I,\"21:54:56\",\"21 Apr 17\"",
+   "current": {
+    "raceName": "JuniorsÂ B men 500 1/8 final 5",
+    "raceID": 4,
+    "flagStatus": "FINISH",
+    "elapsedTime": "0:46",
+    "timeOfDay": "21:56:12",
+    "lapsComplete": 3,
+    "lapsToGo": 0,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "1016",
+      "position": 4,
+      "lapsComplete": 0,
+      "firstName": "Davide",
+      "lastName": "Casoni (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 4
+     },
+     {
+      "number": "1001",
+      "position": 1,
+      "lapsComplete": 3,
+      "firstName": "Baptiste",
+      "lastName": "Allain (FRA)",
+      "totalTime": "0:41.424",
+      "bestLap": "0:15.105",
+      "lastLap": "0:15.105",
+      "qualiPosition": 2
+     },
+     {
+      "number": "1060",
+      "position": 2,
+      "lapsComplete": 3,
+      "firstName": "Jan Martin",
+      "lastName": "Mende (GER)",
+      "totalTime": "0:41.573",
+      "bestLap": "0:15.072",
+      "lastLap": "0:15.072",
+      "qualiPosition": 1
+     },
+     {
+      "number": "1082",
+      "position": 3,
+      "lapsComplete": 3,
+      "firstName": "Filippo",
+      "lastName": "Scotto (ITA)",
+      "totalTime": "0:41.644",
+      "bestLap": "0:15.241",
+      "lastLap": "0:15.241",
+      "qualiPosition": 3
+     }
+    ]
+   },
+   "races": [
+    {
+     "raceName": "JuniorsÂ B men 500 1/8 final 5",
+     "raceID": 4,
+     "flagStatus": "FINISH",
+     "elapsedTime": "0:46",
+     "timeOfDay": "21:56:12",
+     "lapsComplete": 3,
+     "lapsToGo": 0,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "1016",
+       "position": 4,
+       "lapsComplete": 0,
+       "firstName": "Davide",
+       "lastName": "Casoni (ITA)",
+       "totalTime": "0:00",
+       "bestLap": "0:00",
+       "lastLap": "0:00",
+       "qualiPosition": 4
+      },
+      {
+       "number": "1001",
+       "position": 1,
+       "lapsComplete": 3,
+       "firstName": "Baptiste",
+       "lastName": "Allain (FRA)",
+       "totalTime": "0:41.424",
+       "bestLap": "0:15.105",
+       "lastLap": "0:15.105",
+       "qualiPosition": 2
+      },
+      {
+       "number": "1060",
+       "position": 2,
+       "lapsComplete": 3,
+       "firstName": "Jan Martin",
+       "lastName": "Mende (GER)",
+       "totalTime": "0:41.573",
+       "bestLap": "0:15.072",
+       "lastLap": "0:15.072",
+       "qualiPosition": 1
+      },
+      {
+       "number": "1082",
+       "position": 3,
+       "lapsComplete": 3,
+       "firstName": "Filippo",
+       "lastName": "Scotto (ITA)",
+       "totalTime": "0:41.644",
+       "bestLap": "0:15.241",
+       "lastLap": "0:15.241",
+       "qualiPosition": 3
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "afterLines": 213,
+   "lastLine": "$B,4,\"JuniorsÂ B men 500 1/8 final 5\"",
+   "current": {
+    "raceName": "JuniorsÂ B men 500 1/8 final 5",
+    "raceID": 4,
+    "flagStatus": "PURPLE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": [
+    {
+     "raceName": "JuniorsÂ B men 500 1/8 final 5",
+     "raceID": 4,
+     "flagStatus": "PURPLE",
+     "elapsedTime": "0:00",
+     "timeOfDay": "0:00",
+     "lapsComplete": 0,
+     "lapsToGo": 0,
+     "trackName": "",
+     "trackLength": 0,
+     "competitors": []
+    }
+   ]
+  },
+  {
+   "afterLines": 216,
+   "lastLine": "$B,4,\"JuniorsÂ B men 500 1/8 final 5\"",
+   "current": {
+    "raceName": "JuniorsÂ B men 500 1/8 final 5",
+    "raceID": 4,
+    "flagStatus": "PURPLE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": []
+   },
+   "races": [
+    {
+     "raceName": "JuniorsÂ B men 500 1/8 final 5",
+     "raceID": 4,
+     "flagStatus": "PURPLE",
+     "elapsedTime": "0:00",
+     "timeOfDay": "0:00",
+     "lapsComplete": 0,
+     "lapsToGo": 0,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": []
+    }
+   ]
+  },
+  {
+   "afterLines": 273,
+   "lastLine": "$F,3,\"00:00:00\",\"21:55:26\",\"00:00:00\",\"Green \"",
+   "current": {
+    "raceName": "JuniorsÂ B men 500 1/8 final 5",
+    "raceID": 4,
+    "flagStatus": "GREEN",
+    "elapsedTime": "0:00",
+    "timeOfDay": "21:55:26",
+    "lapsComplete": 0,
+    "lapsToGo": 3,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "1016",
+      "position": 3,
+      "lapsComplete": 0,
+      "firstName": "Davide",
+      "lastName": "Casoni (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 2
+     },
+     {
+      "number": "1001",
+      "position": 1,
+      "lapsComplete": 0,
+      "firstName": "Baptiste",
+      "lastName": "Allain (FRA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 1
+     },
+     {
+      "number": "1060",
+      "position": 4,
+      "lapsComplete": 0,
+      "firstName": "Jan Martin",
+      "lastName": "Mende (GER)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 3
+     },
+     {
+      "number": "1082",
+      "position": 2,
+      "lapsComplete": 0,
+      "firstName": "Filippo",
+      "lastName": "Scotto (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 4
+     }
+    ]
+   }
+  },
+  {
+   "afterLines": 400,
+   "lastLine": "$F,0,\"00:00:00\",\"21:56:12\",\"00:00:46\",\"Green \"",
+   "current": {
+    "raceName": "JuniorsÂ B men 500 1/8 final 5",
+    "raceID": 4,
+    "flagStatus": "GREEN",
+    "elapsedTime": "0:46",
+    "timeOfDay": "21:56:12",
+    "lapsComplete": 3,
+    "lapsToGo": 0,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "1016",
+      "position": 4,
+      "lapsComplete": 0,
+      "firstName": "Davide",
+      "lastName": "Casoni (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 4
+     },
+     {
+      "number": "1001",
+      "position": 1,
+      "lapsComplete": 3,
+      "firstName": "Baptiste",
+      "lastName": "Allain (FRA)",
+      "totalTime": "0:41.424",
+      "bestLap": "0:15.105",
+      "lastLap": "0:15.105",
+      "qualiPosition": 2
+     },
+     {
+      "number": "1060",
+      "position": 2,
+      "lapsComplete": 3,
+      "firstName": "Jan Martin",
+      "lastName": "Mende (GER)",
+      "totalTime": "0:41.573",
+      "bestLap": "0:15.072",
+      "lastLap": "0:15.072",
+      "qualiPosition": 1
+     },
+     {
+      "number": "1082",
+      "position": 3,
+      "lapsComplete": 3,
+      "firstName": "Filippo",
+      "lastName": "Scotto (ITA)",
+      "totalTime": "0:41.644",
+      "bestLap": "0:15.241",
+      "lastLap": "0:15.241",
+      "qualiPosition": 3
+     }
+    ]
+   },
+   "races": [
+    {
+     "raceName": "JuniorsÂ B men 500 1/8 final 5",
+     "raceID": 4,
+     "flagStatus": "GREEN",
+     "elapsedTime": "0:46",
+     "timeOfDay": "21:56:12",
+     "lapsComplete": 3,
+     "lapsToGo": 0,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "1016",
+       "position": 4,
+       "lapsComplete": 0,
+       "firstName": "Davide",
+       "lastName": "Casoni (ITA)",
+       "totalTime": "0:00",
+       "bestLap": "0:00",
+       "lastLap": "0:00",
+       "qualiPosition": 4
+      },
+      {
+       "number": "1001",
+       "position": 1,
+       "lapsComplete": 3,
+       "firstName": "Baptiste",
+       "lastName": "Allain (FRA)",
+       "totalTime": "0:41.424",
+       "bestLap": "0:15.105",
+       "lastLap": "0:15.105",
+       "qualiPosition": 2
+      },
+      {
+       "number": "1060",
+       "position": 2,
+       "lapsComplete": 3,
+       "firstName": "Jan Martin",
+       "lastName": "Mende (GER)",
+       "totalTime": "0:41.573",
+       "bestLap": "0:15.072",
+       "lastLap": "0:15.072",
+       "qualiPosition": 1
+      },
+      {
+       "number": "1082",
+       "position": 3,
+       "lapsComplete": 3,
+       "firstName": "Filippo",
+       "lastName": "Scotto (ITA)",
+       "totalTime": "0:41.644",
+       "bestLap": "0:15.241",
+       "lastLap": "0:15.241",
+       "qualiPosition": 3
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

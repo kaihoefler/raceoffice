@@ -59,7 +59,9 @@ Zeiten werden mit `LocalTime.parse` gelesen, also im Format `HH:mm:ss[.SSS]`.
 - `Race`:
   - `id`, `name`, `trackName`, `trackLength`, `flagStatus`, `lapsComplete`, `lapsToGo`, `scheduledLaps`, `timeOfDay`, `elapsedTime`, `timeToGo`, `scheduledTime`
   - `competitorMap`, `competitorsVersion`
-- `FlagStatus`: `PURPLE`, `GREEN`, `YELLOW`, `RED`, `FINISH`, `NONE`. Ein unbekannter Wert wird zu `PURPLE`, bei leerem Rennen zu `NONE`.
+- `FlagStatus`: `PURPLE`, `GREEN`, `YELLOW`, `RED`, `FINISH`, `NONE`.
+  - Ein unbekannter oder leerer Wert wird zu `PURPLE`.
+  - `NONE` gibt es nur für ein Rennen mit ID 0 und leerem Namen sowie für das Startobjekt vor dem ersten `$B`.
 - `Competitor`:
   - `regNumber`, `transNumber`, `number`, `firstName`, `lastName`, `nationality`, `addData`, `classId`
   - `totalTime`, `bestLap`, `lastLap`, `avgLap`, `lapsComplete`, `position`, `qualiPosition`, `laps[]`
@@ -182,13 +184,15 @@ Das sind im Rennen etwa 10 Zeilen pro Sekunde, in Spitzen beim Zieldurchgang des
   - Zusätzlich sendet Orbits außer der Reihe ein `$F`, sobald sich `lapsToGo` ändert (Zeile 103697).
   - Auch ohne aktives Rennen läuft der Heartbeat weiter, mit leerer Flagge.
   - Damit ist `$F` ein **natürliches Lebenszeichen**: Bleibt er > 3 s aus, ist die Verbindung zu Orbits gestört (siehe [05-worker-und-steuerung.md](05-worker-und-steuerung.md)).
-- **Flaggen werden auf 6 Zeichen aufgefüllt und kommen in gemischter Schreibweise**, z. B. `"Green "`. Sechs Leerzeichen bedeuten „keine Flagge“. Also: `trim()`, Großschreibung, leer → `NONE`.
-  - In beiden Aufnahmen kommen nur `Green` und leer vor.
+- **Flaggen werden auf 6 Zeichen aufgefüllt und kommen in gemischter Schreibweise**, z. B. `"Green "`. Sechs Leerzeichen bedeuten „keine Flagge“. Java wendet `trim()` und Großschreibung an und macht aus der leeren Flagge `PURPLE`, nicht `NONE` (siehe [03-rmonitor-port.md](03-rmonitor-port.md#3-zustandsmodell)).
+  - In beiden Aufnahmen kommen nur `Green` und leer vor. In anderen Aufnahmen gibt es zusätzlich `Finish`, in einer Testaufnahme auch `Test`.
   - Die übrigen Werte (`Yellow`, `Red`, `Finish`, `Purple`) werden mit weiteren lokalen Aufnahmen verifiziert.
 - **Leere Felder sind normal:** In `$G`/`$SR` ist `laps` vor der ersten Zieldurchfahrt leer (`,,`), 265-mal allein in der Elimination. Das muss zu `0` werden, nicht `NaN`.
 - **Uneinheitliches Quoting:** In `$A` steht die Transponder-Nummer ohne Anführungszeichen (`NK-04720`), die übrigen Felder sind gequotet.
 - **Zeitformat** `HH:MM:SS` bzw. `HH:MM:SS.mmm`. Nullwerte werden als `"00:00:00"` bzw. `"00:00:00.000"` gesendet.
-- **`$I`/`$B` wiederholen sich** (dreimal `$I` direkt nacheinander, zweimal `$B` mit derselben ID). Ein neues Rennen darf nur bei einer **neuen** `uniqueId` entstehen; ein wiederholtes `$I` darf den gerade aufgebauten Zustand nicht unnötig verwerfen.
+- **`$I`/`$B` wiederholen sich** (dreimal `$I` direkt nacheinander, zweimal `$B` mit derselben ID).
+  - Ein wiederholtes `$B` legt kein neues Rennen an.
+  - Jedes `$I` startet dagegen in Java ein neues, noch ID-loses Rennen. Weil Orbits nach `$I` sofort `$B` und die Startliste sendet, geht dabei nichts verloren. Der Port übernimmt das Verhalten unverändert.
 
 ---
 

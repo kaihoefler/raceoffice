@@ -1,0 +1,3 @@
+# RMonitor recordings are test fixtures: windows-1252 with CRLF, compared byte-exact.
+# No line-ending or encoding normalization by git.
+packages/rmonitor/test/fixtures/recordings/*.txt -text

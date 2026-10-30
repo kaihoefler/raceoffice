@@ -89,6 +89,14 @@ export type {
 } from "./raceStatusFeed.js";
 export { pickCurrentRace } from "./raceStatusFeed.js";
 
+// Leaderboard service protocol (WebSocket race stream, service status).
+export type {
+  LeaderboardServiceStatus,
+  LeaderboardSource,
+  LeaderboardWsClientMessage,
+  LeaderboardWsMessage,
+} from "./leaderboardProtocol.js";
+
 // LiveTracking domain model (phase 0 baseline).
 export * from "./livetracking/index.js";
 
