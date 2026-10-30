@@ -39,11 +39,13 @@
     "dev:p3test-frontend": "npm --workspace @raceoffice/p3test-frontend run dev",
     "preview:p3test-frontend": "npm --workspace @raceoffice/p3test-frontend run preview",
     "build:all": "npm run build && npm run build:server && npm run build:livetracking-worker && npm run build:livetracking-frontend && npm run build:p3test-frontend && npm run build:leaderboard-service",
-    "build:leaderboard-service": "npm --workspace @raceoffice/leaderboard-service run build",
+    "build:leaderboard-service": "npm --workspace @raceoffice/leaderboard-frontend run build && npm --workspace @raceoffice/leaderboard-service run build",
     "dev:leaderboard-service": "npm --workspace @raceoffice/leaderboard-service run dev",
     "start:leaderboard-service": "npm --workspace @raceoffice/leaderboard-service run start",
     "dev:all": "concurrently --names \"server,frontend,livetracking,p3test\" --prefix-colors \"blue,green,cyan,yellow\" \"npm run dev:server\" \"npm run dev\" \"npm run dev:livetracking-frontend\" \"npm run dev:p3test-frontend\"",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "build:leaderboard-frontend": "npm --workspace @raceoffice/leaderboard-frontend run build",
+    "dev:leaderboard-frontend": "npm --workspace @raceoffice/leaderboard-frontend run dev"
   },
   "devDependencies": {
     "concurrently": "^10.0.6"

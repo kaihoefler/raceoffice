@@ -9,7 +9,7 @@
 | Domain: optionale `RaceTO`-Felder, `leaderboardProtocol.ts` | **fertig** (nur Typen) |
 | `apps/leaderboard-service` (headless, Docker) | **fertig bis auf Docker/Bundle** (verschoben nach P6): REST kompatibel, WS mit Snapshot/Patch und Heartbeat-Ticks, Control-API, Recorder, Player, Config, Token. Integrationstests inkl. Golden-Vergleich über TCP. Upload per `PUT` statt Multipart. |
 | RaceOffice-Integration (Manager, Proxy, WS im Scoring) | **fertig**: `LeaderboardServiceManager` (Token, Restart-Policy), eigener Proxy HTTP+WS unter `/leaderboard/*`, Modi managed/external/off zur Laufzeit umschaltbar (`POST /leaderboard-service/mode`), Scoring-Quelle „Automatisch / Leaderboard-Service / Java (Notfall) / eigene URL“ mit WS und Polling-Fallback, REPLAY-Hinweis. Proxy ohne neue Abhängigkeit statt `@fastify/http-proxy`. Refactor `ManagedProcess` nicht gemacht (optional). |
-| `apps/leaderboard-frontend`: Leaderboard + Control Center | offen |
+| `apps/leaderboard-frontend`: Leaderboard + Control Center | **fertig**: Rangliste (Flaggen-Banner, Kacheln, Spaltenauswahl mit Presets, Abstand/Intervall, Positionswechsel, Bestrunden, Zielfoto-Markierung, PURPLE-Regel, Stale-Anzeige, Kiosk/Vollbild/Skalierung/Dunkelmodus/Zeilenhöhe, mobil reduzierte Spalten) und Control Center (Orbits mit Verlauf, Service mit kopierbaren Endpunkten, Recorder, Player mit Upload/Tempo/Seek, Token-Dialog). Darstellungshelfer nach `packages/domain/src/liveTime.ts` verschoben. Nicht umgesetzt: Spalten PIC/Class/Avg (nicht im `RaceTO`). |
 | Start Signal, Lap Counter, Finish Line Log | offen |
 | Deployment, Release, Ablösung der Java-App | offen |
 

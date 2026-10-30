@@ -15,6 +15,7 @@ tools/
 deploy/
 apps/server/dist
 apps/server/public
+apps/leaderboard-service/public
 raceoffice.db
 
 # Editor directories and files
