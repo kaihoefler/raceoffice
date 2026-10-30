@@ -23,7 +23,7 @@
     "@raceoffice/p3parser": "file:../../packages/p3parser",
     "better-sqlite3": "^12.11.1",
     "fast-json-patch": "^3.1.1",
-    "fastify": "^5.6.2",
+    "fastify": "^5.12.6",
     "fastify-sse-v2": "^4.2.1"
   },
   "devDependencies": {
