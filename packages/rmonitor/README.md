@@ -98,4 +98,4 @@ npm run golden:rmonitor -- test/fixtures/recordings/<name>.txt
 
 ## Herkunft und Lizenz
 
-Parser und Zustandsregeln sind eine Portierung von RMonitorLeaderboard (© 2013 Zachary Fox, © 2023 Bastian Pätzold). Das Projekt steht unter der **GNU GPL v3**. Die Recordings unter `test/fixtures/recordings/` stammen aus demselben Repository. Ausgenommen sind die Dateien `excerpt_*.txt`: Das sind anonymisierte Ausschnitte eigener Aufnahmen.
+Parser und Zustandsregeln sind eine Portierung von RMonitorLeaderboard (© 2013 Zachary Fox, © 2023 Bastian Pätzold). Das Original steht unter der **GNU GPL v3 oder später**, dieses Paket deshalb ebenso (`GPL-3.0-or-later`, siehe [LICENSE](LICENSE)). Dasselbe gilt für `apps/leaderboard-service` und `apps/leaderboard-frontend`. Die Recordings unter `test/fixtures/recordings/` stammen aus demselben Repository. Ausgenommen sind die Dateien `excerpt_*.txt`: Das sind anonymisierte Ausschnitte eigener Aufnahmen.

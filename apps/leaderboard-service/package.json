@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Headless leaderboard service: receives the RMonitor stream from Orbits, serves it as REST (compatible with RMonitorLeaderboard) and as WebSocket diffs; recorder, player, control API.",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
