@@ -4,6 +4,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createLiveTrackingRuntimeDocument,
   createLiveTrackingSessionDocument,
   createLiveTrackingSetupDocument,
   createTimingConnectionDocument,
@@ -11,6 +12,7 @@ import {
   createTimingDecodersDocument,
   createTimingStatusDocument,
   makeLiveTrackingListDocId,
+  makeLiveTrackingRuntimeDocId,
   makeLiveTrackingSessionDocId,
   makeLiveTrackingSetupDocId,
   TIMING_CONNECTION_DOC_ID,
@@ -153,6 +155,58 @@ describe("timing control center", () => {
     await user.click(screen.getByRole("button", { name: "Passings löschen …" }));
     await user.click(await screen.findByRole("button", { name: "Endgültig löschen" }));
     await waitFor(() => expect(calls.find((c) => c.url.startsWith("/timing/passings/delete"))?.body).toEqual({ confirm: true, filter: { decoderIds: [P3.id] } }));
+  });
+});
+
+describe("stopping the worker", () => {
+  const runtime = () => ({ ...createLiveTrackingRuntimeDocument(), workerStatus: "running", workerHeartbeatAt: new Date().toISOString(), workerProcessId: 42, workerHost: "test" });
+  const simulator = (running: boolean) => ({ kind: "timingSimulator", version: 1, running, config: { decoderId: "0A87E5", transponderIds: ["1"], passingDelay: "1000-2000", startupDelaySecs: 0, announceIp: null }, updatedAt: null });
+
+  it("asks about measurement and simulator, stops the measurement first, then the worker", async () => {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const { server, user } = renderApp({
+      route: "/timing/control",
+      fetch: fetchStub(calls),
+      docs: {
+        [makeLiveTrackingRuntimeDocId()]: runtime(),
+        [makeLiveTrackingSessionDocId()]: { ...createLiveTrackingSessionDocument({ setupId: "s1", eventId: "" }), state: "running" },
+        [TIMING_SIMULATOR_DOC_ID]: simulator(true),
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: "Worker stoppen" }));
+    const dialog = await screen.findByRole("dialog", { name: "Worker stoppen" });
+    expect(within(dialog).getByRole("checkbox", { name: "Laufende Messung stoppen" })).toBeChecked();
+    expect(within(dialog).getByRole("checkbox", { name: "Decoder-Simulation beenden" })).toBeChecked();
+    await user.click(within(dialog).getByRole("button", { name: "Worker stoppen" }));
+
+    await waitFor(() => expect(server.doc(TIMING_SIMULATOR_DOC_ID).data.running).toBe(false));
+    await waitFor(() => expect(server.doc(makeLiveTrackingSessionDocId()).data.commandQueue.map((c: { intent: string }) => c.intent)).toEqual(["stop"]));
+    // The worker is stopped only after the measurement reports idle.
+    expect(calls.some((c) => c.url === "/live-tracking/worker/stop")).toBe(false);
+    server.update(makeLiveTrackingSessionDocId(), (d) => ({ ...d, state: "idle" }));
+    await waitFor(() => expect(calls.some((c) => c.url === "/live-tracking/worker/stop")).toBe(true));
+  });
+
+  it("keeps the simulator when unchecked and stops without asking when nothing runs", async () => {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const { server, user } = renderApp({
+      route: "/timing/control",
+      fetch: fetchStub(calls),
+      docs: { [makeLiveTrackingRuntimeDocId()]: runtime(), [TIMING_SIMULATOR_DOC_ID]: simulator(true) },
+    });
+    await user.click(await screen.findByRole("button", { name: "Worker stoppen" }));
+    const dialog = await screen.findByRole("dialog", { name: "Worker stoppen" });
+    expect(within(dialog).queryByRole("checkbox", { name: "Laufende Messung stoppen" })).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("checkbox", { name: "Decoder-Simulation beenden" }));
+    await user.click(within(dialog).getByRole("button", { name: "Worker stoppen" }));
+    await waitFor(() => expect(calls.some((c) => c.url === "/live-tracking/worker/stop")).toBe(true));
+    expect(server.doc(TIMING_SIMULATOR_DOC_ID).data.running).toBe(true);
+
+    server.update(TIMING_SIMULATOR_DOC_ID, (d) => ({ ...d, running: false }));
+    calls.length = 0;
+    await user.click(screen.getByRole("button", { name: "Worker stoppen" }));
+    await waitFor(() => expect(calls.some((c) => c.url === "/live-tracking/worker/stop")).toBe(true));
+    expect(screen.queryByRole("dialog", { name: "Worker stoppen" })).not.toBeInTheDocument();
   });
 });
 

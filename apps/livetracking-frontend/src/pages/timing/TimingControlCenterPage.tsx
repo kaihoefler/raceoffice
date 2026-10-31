@@ -1,6 +1,6 @@
 // Zeitmessung – Control Center (doc/timing-architecture.md, section 7)
 //
-// - Worker: start/stop the timing worker process
+// - Worker: start/stop the timing worker process (stopping asks about measurement/simulator)
 // - Aktives Setup: choose the setup (used by the measurement too) and connect its decoders
 // - Hardware: one row per physical decoder of the register; connecting is explicit (decoders
 //   accept only few connections), status incl. P3 device values and re-requested passings
@@ -40,6 +40,7 @@ import { Link as RouterLink } from "react-router-dom";
 
 import { ConfirmDialog, JsonAccordion } from "../../components/common/Dialogs";
 import { ActiveSetupCard } from "./ActiveSetupCard";
+import { WorkerCard } from "./WorkerCard";
 import {
   BACKEND_LABEL,
   decoderHealth,
@@ -90,53 +91,6 @@ export default function TimingControlCenterPage() {
         </CardContent>
       </Card>
     </Box>
-  );
-}
-
-function WorkerCard({ online, runtime }: { online: boolean; runtime: ReturnType<typeof useWorkerState>["runtime"] }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const run = async (action: "start" | "stop") => {
-    setBusy(true);
-    setError(null);
-    try {
-      await postJson(`/live-tracking/worker/${action}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Card variant="outlined">
-      <CardHeader
-        title="Worker"
-        subheader="Prozess, der die Decoder anbindet und die Passings speichert"
-        action={<Chip label={online ? "läuft" : "aus"} color={online ? "success" : "default"} sx={{ mt: 1, mr: 1 }} />}
-      />
-      <Divider />
-      <CardContent>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ alignItems: { sm: "center" } }}>
-          {online ? (
-            <Button variant="outlined" color="warning" disabled={busy} onClick={() => void run("stop")}>
-              Worker stoppen
-            </Button>
-          ) : (
-            <Button variant="contained" disabled={busy} onClick={() => void run("start")}>
-              Worker starten
-            </Button>
-          )}
-          <Typography variant="body2" color="text.secondary">
-            {online ? `PID ${runtime?.workerProcessId ?? "—"} auf ${runtime?.workerHost ?? "—"}` : "Ohne Worker werden keine Decoder verbunden."}
-          </Typography>
-        </Stack>
-        {error ? (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {error}
-          </Alert>
-        ) : null}
-      </CardContent>
-    </Card>
   );
 }
 
