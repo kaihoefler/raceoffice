@@ -29,7 +29,7 @@ export type TimingPassingQuery = {
 export type TimingPassingStats = {
   total: number;
   lastSeq: number;
-  decoders: Array<{ decoderId: string; count: number; lastReceivedAt: string | null }>;
+  decoders: Array<{ decoderId: string; count: number; lastReceivedAt: string | null; maxPassingNumber: number | null }>;
 };
 
 export const TIMING_PASSING_QUERY_MAX = 5000;
@@ -193,7 +193,8 @@ export class TimingPassingStore {
   stats(): TimingPassingStats {
     const decoders = this.db
       .prepare(
-        `SELECT decoder_id AS decoderId, COUNT(*) AS count, MAX(received_at) AS lastReceivedAt
+        `SELECT decoder_id AS decoderId, COUNT(*) AS count, MAX(received_at) AS lastReceivedAt,
+                MAX(passing_number) AS maxPassingNumber
          FROM timing_passings GROUP BY decoder_id ORDER BY decoder_id`,
       )
       .all() as TimingPassingStats["decoders"];

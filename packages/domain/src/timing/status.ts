@@ -40,6 +40,11 @@ export type TimingDecoderStatus = {
   passingCount: number;
   hardware: TimingDecoderHardwareInfo | null;
   device: TimingDecoderDeviceStatus | null;
+  /**
+   * Lost passings requested again from the decoder (P3 RESEND) in this worker run:
+   * requested, recovered, and still open (open > 0 after retries = passings are missing).
+   */
+  sequence: { requested: number; recovered: number; open: number } | null;
 };
 
 export type TimingStatusDocument = {
@@ -66,6 +71,7 @@ export function createTimingDecoderStatus(decoderId: string): TimingDecoderStatu
     passingCount: 0,
     hardware: null,
     device: null,
+    sequence: null,
   };
 }
 

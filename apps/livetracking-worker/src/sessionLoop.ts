@@ -224,11 +224,14 @@ export class SessionLoop {
     this.connectionClient = new RealtimeDocClient<TimingConnectionDocument>(TIMING_CONNECTION_DOC_ID, baseHttpUrl);
     this.timingStatusClient = new RealtimeDocClient<TimingStatusDocument>(TIMING_STATUS_DOC_ID, baseHttpUrl);
     this.uploader = new TimingPassingUploader(baseHttpUrl, { onWarning: (m) => this.appendRuntimeWarning(m) });
-    this.connectionManager = new TimingConnectionManager({
-      onPassing: (passing, normalized) => this.handleTimingPassing(passing, normalized),
-      onStatusChange: () => this.scheduleTimingStatusFlush(),
-      onWarning: (m) => this.appendRuntimeWarning(m),
-    });
+    this.connectionManager = new TimingConnectionManager(
+      {
+        onPassing: (passing, normalized) => this.handleTimingPassing(passing, normalized),
+        onStatusChange: () => this.scheduleTimingStatusFlush(),
+        onWarning: (m) => this.appendRuntimeWarning(m),
+      },
+      { fetchResumePoint: (decoderId) => this.fetchHighestPassingNumber(decoderId) },
+    );
   }
 
   start() {
@@ -475,6 +478,14 @@ export class SessionLoop {
         running,
       );
     }
+  }
+
+  /** Highest passing number stored for the decoder (timing store), null if unknown. */
+  private async fetchHighestPassingNumber(decoderId: string): Promise<number | null> {
+    const res = await fetch(`${this.baseHttpUrl}/timing/passings/stats`);
+    if (!res.ok) return null;
+    const stats = (await res.json()) as { decoders?: Array<{ decoderId: string; maxPassingNumber: number | null }> };
+    return stats.decoders?.find((d) => d.decoderId === decoderId)?.maxPassingNumber ?? null;
   }
 
   private scheduleTimingStatusFlush() {

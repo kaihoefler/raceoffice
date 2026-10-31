@@ -118,7 +118,17 @@ Sie besteht aus vier Bausteinen:
 - **Passings** werden nur auf der Timing-Ebene gelöscht: bewusst, mit Filter (Decoder, Zeitraum oder alles) und mit Rückfrage. Abnehmer werden darüber informiert und rechnen neu.
 - **Messungen und Ergebnisse** löscht jeder Abnehmer selbst, beim Livetracking mit „Messung zurücksetzen“. Die Passings und die Messungen anderer Abnehmer bleiben dabei unberührt.
 
-### 5.4 Status und Diagnose
+### 5.4 Vollständigkeit (P3: fehlende Passings nachfordern)
+P3-Decoder nummerieren ihre Passings fortlaufend und halten sie im Speicher. Die Timing-Ebene sorgt dafür, dass keine Durchfahrt verloren geht:
+- **Lücke im laufenden Betrieb:** Folgt auf Nummer 41 die 44, fordert der Worker 42–43 per RESEND nach. Kommen sie nach 5 s nicht, fragt er erneut, höchstens dreimal.
+- **Nach jedem (Wieder-)Verbinden:** Der Worker fragt per SESSION die letzte Passing-Nummer des Decoders ab und fordert alles ab der höchsten im Passing-Store gespeicherten Nummer + 1 nach, höchstens 2 000 auf einmal. So werden auch Durchfahrten während eines Ausfalls nachgeholt.
+- **Erster Kontakt** mit einem Decoder (nichts gespeichert): Es wird nichts nachgeholt, der Decoder-Speicher bleibt unangetastet.
+- **Neustart des Decoders:** Ist die gemeldete letzte Nummer kleiner als die gespeicherte, wurde der Speicher zurückgesetzt. Dann wird nichts angefordert, die Zählung beginnt neu.
+- **Doppelte Passings:** Nachgeforderte Passings, die schon da sind, landen nicht doppelt im Store. Das Schreiben ist idempotent über die Passing-ID, die die Passing-Nummer enthält.
+- **Statusanzeige:** Der Decoder-Status zeigt angefordert / wiederhergestellt / offen. „Offen > 0“ nach allen Versuchen heißt: Es fehlen Passings.
+- **Technik:** Für SESSION und RESEND wird die Decoder-ID in Protokoll-Reihenfolge gesendet (`decoderIdToRequestOrder` in `@raceoffice/p3parser`, siehe [p3test-client-notes.md](p3test-client-notes.md)).
+
+### 5.5 Status und Diagnose
 - Je Decoder werden geführt:
   - Verbindungszustand, letzte Meldung, letzter Fehler, Zahl der Passings
   - Hardware-Info (ID, Typ, Firmware)

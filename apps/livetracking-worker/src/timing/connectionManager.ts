@@ -82,11 +82,18 @@ export class TimingConnectionManager {
   private readonly statuses = new Map<string, TimingDecoderStatus>();
   private readonly adapterFactory: AdapterFactory;
 
+  private readonly fetchResumePoint: ((decoderId: string) => Promise<number | null>) | null;
+
   constructor(
     private readonly callbacks: ConnectionManagerCallbacks,
-    options: { adapterFactory?: AdapterFactory } = {},
+    options: {
+      adapterFactory?: AdapterFactory;
+      /** Highest passing number already stored for a decoder (catch-up after reconnecting). */
+      fetchResumePoint?: (decoderId: string) => Promise<number | null>;
+    } = {},
   ) {
     this.adapterFactory = options.adapterFactory ?? createDecoderSourceAdapter;
+    this.fetchResumePoint = options.fetchResumePoint ?? null;
   }
 
   /** Current status of all decoders that are or were connected in this worker run. */
@@ -101,6 +108,7 @@ export class TimingConnectionManager {
   /** Reconciles connections with the desired decoders. */
   sync(desired: readonly DesiredDecoder[]): void {
     const next = new Map(desired.map((d) => [d.decoder.id, d]));
+    const previous = this.desired;
     let statusChanged = false;
 
     // Newly desired decoders start a connection session; removed ones end it.
@@ -167,6 +175,18 @@ export class TimingConnectionManager {
       });
     }
 
+    // Newly connected decoders: tell the adapter where the stored passings end.
+    if (this.fetchResumePoint) {
+      for (const [id, entry] of next) {
+        if (previous.has(id)) continue;
+        const adapter = this.adapters.get(transportOf(entry.decoder));
+        if (!adapter?.resumeFrom) continue;
+        this.fetchResumePoint(id)
+          .then((n) => adapter.resumeFrom?.(id, n))
+          .catch(() => adapter.resumeFrom?.(id, null));
+      }
+    }
+
     if (statusChanged) this.callbacks.onStatusChange(this.statusList);
   }
 
@@ -222,6 +242,7 @@ export class TimingConnectionManager {
       lastError: patch.lastError !== undefined ? patch.lastError : status.lastError,
       hardware: patch.hardware ?? status.hardware,
       device: patch.device ?? status.device,
+      sequence: patch.sequence ?? status.sequence ?? null,
     };
     this.statuses.set(decoderId, next);
     this.callbacks.onStatusChange(this.statusList);

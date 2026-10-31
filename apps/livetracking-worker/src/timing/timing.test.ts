@@ -154,6 +154,30 @@ describe("TimingConnectionManager", () => {
   });
 });
 
+describe("resume point for catch-up", () => {
+  it("tells the adapter the highest stored passing number of a newly connected decoder", async () => {
+    const resumed: Array<[string, number | null]> = [];
+    const manager = new TimingConnectionManager(
+      { onPassing: () => {}, onStatusChange: () => {}, onWarning: () => {} },
+      {
+        adapterFactory: (backend, points, cb) => {
+          const a = new FakeAdapter(backend, points, cb) as FakeAdapter & { resumeFrom: (id: string, n: number | null) => void };
+          a.resumeFrom = (id, n) => resumed.push([id, n]);
+          return a;
+        },
+        fetchResumePoint: async (id) => (id === "p3@10.0.0.7:5403" ? 41 : null),
+      },
+    );
+    manager.sync([{ decoder: decoder("p3@10.0.0.7:5403", "p3"), reasons: ["explicit"] }]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(resumed).toEqual([["p3@10.0.0.7:5403", 41]]);
+    // Already connected: no second resume on the next sync.
+    manager.sync([{ decoder: decoder("p3@10.0.0.7:5403", "p3"), reasons: ["explicit", "livetracking"] }]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(resumed).toHaveLength(1);
+  });
+});
+
 describe("TimingPassingUploader", () => {
   afterEach(() => vi.useRealTimers());
 
