@@ -17,7 +17,36 @@ export type LeaderboardWsMessage =
   /** Diff against the state with `baseRev`; a client whose rev differs must resync. */
   | { type: "patch"; raceId: number; rev: number; baseRev: number; patch: Operation[] }
   | { type: "status"; status: LeaderboardServiceStatus }
+  /** `/ws/race/current/passings`: all buffered passings of the race; on connect, race change and reset. */
+  | { type: "passings"; raceId: number | null; passings: LeaderboardPassing[] }
+  /** A new passing, or an update of one already sent (same `seq`: position, lap, correction). */
+  | { type: "passing"; raceId: number; passing: LeaderboardPassing }
   | { type: "error"; code: string; message: string };
+
+/**
+ * One line crossing (`$J`) for the finish line log. Orbits sends `$G` (position, laps) right
+ * after `$J`, so `position`/`lap` are filled in by an update with the same `seq`.
+ * Times use the format of the REST feed ("m:ss.SSS"); a lap time "0:00" is the first crossing.
+ */
+export type LeaderboardPassing = {
+  /** Increasing per service run; identifies the passing for updates. */
+  seq: number;
+  raceId: number;
+  regNumber: string;
+  number: string;
+  firstName: string;
+  lastName: string;
+  /** Time of day of the timing system (last heartbeat) when the passing arrived. */
+  timeOfDay: string;
+  /** Race time (last heartbeat) when the passing arrived. */
+  elapsedTime: string;
+  lapTime: string;
+  totalTime: string;
+  lap: number | null;
+  position: number | null;
+  /** Photo-finish correction (`$COR`) of this lap: shift of the total time in ms. */
+  correctionMs?: number;
+};
 
 /** Optional client → server message: request a fresh snapshot. */
 export type LeaderboardWsClientMessage = { type: "resync" };

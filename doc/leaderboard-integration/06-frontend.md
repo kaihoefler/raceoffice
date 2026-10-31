@@ -114,6 +114,7 @@ Eine Seite mit vier Karten statt vier Fenstern. Status kommt live über `/ws/sta
 - Vollbild, Hintergrund in Flaggenfarbe, Rennname oben, Elapsed-Uhr groß unten.
 - **PURPLE:** Startnummern der gemeldeten Fahrer:innen als Raster, also die Startaufstellung.
 - **GREEN:** großes „GO“ bzw. die laufende Uhr. **FINISH:** Schachbrett.
+- „GO“ erscheint in den ersten 5 s nach dem Start, danach nur die Uhr. YELLOW/RED zeigen den Flaggennamen groß.
 - URL-Parameter: `?kiosk=1&scale=…`
 
 ## 6. Lap Counter
@@ -122,6 +123,7 @@ Eine Seite mit vier Karten statt vier Fenstern. Status kommt live über `/ws/sta
 - Modus „Laps to Go“ (Default) oder „Laps Complete“, Umschalter oder `?mode=up`.
 - **Update-Verzögerung** (Default 5 s, `?delay=5`): Die Zahl wechselt erst, wenn der Leader die Linie seit `delay` Sekunden passiert hat, wie in Swing.
 - Bei `lapsToGo = 1` „LAST LAP“ und optionale Glocken-Animation, bei FINISH Schachbrett.
+- Umsetzung: Die Verzögerung gilt für Zahl, LAST LAP und FINISH gemeinsam. Der erste Wert und ein Rennwechsel erscheinen sofort. URL-Parameter haben Vorrang vor den auf dem Gerät gespeicherten Einstellungen.
 
 ## 7. Finish Line Log
 

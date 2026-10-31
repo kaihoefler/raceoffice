@@ -99,7 +99,7 @@ type LeaderboardServiceStatus = {
 | POST | `/api/player/seek` | `{positionMs}` | Store zurücksetzen und bis zur Position im Schnelllauf abspielen |
 | POST | `/api/player/skip-gaps` | `{enabled}` | Pausen > 10 s in der Aufnahme als 1 s abspielen (auch während des Replays). Position und Dauer beziehen sich dann auf die verkürzte Zeitachse. |
 | POST | `/api/state/reset` | – | Rennzustand verwerfen |
-| GET | `/api/race/:id/passings` | – | Ringpuffer der letzten 500 `$J`-Passings (Finish Line Log); live per WS `/ws/race/current/passings` (append-only) |
+| GET | `/api/race/:id/passings` | – | Ringpuffer der letzten 500 `$J`-Passings (Finish Line Log); live per WS `/ws/race/current/passings`: zuerst `{type:"passings", raceId, passings}` (auch bei Rennwechsel, Reset und großen Schüben), danach `{type:"passing", raceId, passing}` für neue und ergänzte Einträge (gleiche `seq` = Aktualisierung: Position/Runde aus dem folgenden `$G`, `$COR`-Korrektur) |
 | GET | `/health` | – | `{ok:true, version}` |
 
 **Player:**

@@ -47,6 +47,15 @@ export function AppHeader({ ui, onUiChange }: Props) {
         <Button component={NavLink} to="/" end size="small" sx={navSx}>
           Rangliste
         </Button>
+        <Button component={NavLink} to="/start-signal" size="small" sx={navSx}>
+          Start
+        </Button>
+        <Button component={NavLink} to="/lap-counter" size="small" sx={navSx}>
+          Runden
+        </Button>
+        <Button component={NavLink} to="/finish-line-log" size="small" sx={navSx}>
+          Ziel
+        </Button>
         <Button component={NavLink} to="/control" size="small" sx={navSx}>
           Control Center
         </Button>

@@ -3,17 +3,22 @@
  * - `/ws/race/current`  snapshot + patches, follows the current race
  * - `/ws/race/:id`      snapshot + patches of one race (snapshot with data null until it exists)
  * - `/ws/status`        service status, pushed on change (checked every second)
+ * - `/ws/race/current/passings`  finish line log: all passings of the current race, then each new
+ *                        or updated passing; a new snapshot on race change and reset
  *
  * Clients may send `{"type":"resync"}` to get a fresh snapshot. The server pings every 15 s.
  */
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
-import type { LeaderboardWsMessage } from "@raceoffice/domain";
+import type { LeaderboardPassing, LeaderboardWsMessage } from "@raceoffice/domain";
 import type { ChannelKey } from "../publisher.js";
 import type { LeaderboardService } from "../service.js";
 
 const PING_INTERVAL_MS = 15_000;
 const STATUS_INTERVAL_MS = 1000;
+/** Passings are sent in small batches; a burst (seek, catch-up) becomes one snapshot instead. */
+const PASSINGS_FLUSH_MS = 50;
+const PASSINGS_BURST = 100;
 
 export function registerWsRoutes(app: FastifyInstance, service: LeaderboardService): { clients: () => number } {
   const sockets = new Set<WebSocket>();
@@ -68,6 +73,61 @@ export function registerWsRoutes(app: FastifyInstance, service: LeaderboardServi
       return;
     }
     subscribe(socket, `race:${Number(id)}`);
+  });
+
+  app.get("/ws/race/current/passings", { websocket: true }, (socket) => {
+    track(socket);
+    let raceId: number | null = null;
+    let queue: LeaderboardPassing[] = [];
+    let needSnapshot = true;
+    let timer: NodeJS.Timeout | null = null;
+
+    const displayId = () => {
+      const id = service.store.displayRace.id;
+      return id === -1 ? null : id;
+    };
+    const flush = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      const current = displayId();
+      if (needSnapshot || current !== raceId || queue.length > PASSINGS_BURST) {
+        raceId = current;
+        sendJson(socket, {
+          type: "passings",
+          raceId,
+          passings: raceId === null ? [] : service.passings.list(raceId),
+        } satisfies LeaderboardWsMessage);
+      } else if (raceId !== null) {
+        for (const passing of queue) {
+          sendJson(socket, { type: "passing", raceId, passing } satisfies LeaderboardWsMessage);
+        }
+      }
+      queue = [];
+      needSnapshot = false;
+    };
+    const schedule = () => {
+      if (!timer) timer = setTimeout(flush, PASSINGS_FLUSH_MS);
+    };
+
+    const offPassings = service.passings.subscribe((event) => {
+      if (event.type === "reset") needSnapshot = true;
+      else if (event.raceId === raceId) queue.push(event.passing);
+      else needSnapshot = true;
+      schedule();
+    });
+    // Race changes without passings (new $B, race end) come through the race stream.
+    const raceSubscription = service.publisher.subscribe("current", (m: LeaderboardWsMessage) => {
+      if (m.type === "snapshot" && displayId() !== raceId) {
+        needSnapshot = true;
+        schedule();
+      }
+    });
+    flush();
+    socket.on("close", () => {
+      if (timer) clearTimeout(timer);
+      offPassings();
+      raceSubscription.unsubscribe();
+    });
   });
 
   app.get("/ws/status", { websocket: true }, (socket) => {

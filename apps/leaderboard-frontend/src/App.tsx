@@ -1,8 +1,11 @@
 // App shell: theme (light/dark), routes, slim app bar (hidden in kiosk mode).
 //
 // Routes (HashRouter, works behind the /leaderboard proxy without rewrites):
-//   #/          Leaderboard
-//   #/control   Control Center
+//   #/                 Leaderboard
+//   #/start-signal     Start Signal
+//   #/lap-counter      Lap Counter
+//   #/finish-line-log  Finish Line Log
+//   #/control          Control Center
 
 import { useMemo } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -12,6 +15,9 @@ import { ServiceOfflineBanner } from "./components/ServiceOfflineBanner";
 import { useStoredState } from "./hooks/useStoredState";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { ControlCenterPage } from "./pages/ControlCenterPage";
+import { FinishLinePage } from "./pages/FinishLinePage";
+import { LapCounterPage } from "./pages/LapCounterPage";
+import { StartSignalPage } from "./pages/StartSignalPage";
 
 export type UiSettings = {
   dark: boolean;
@@ -53,9 +59,12 @@ export function App() {
       <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column", cursor: kiosk ? "none" : undefined }}>
         {kiosk ? null : <AppHeader ui={ui} onUiChange={setUi} />}
         {kiosk ? null : <ServiceOfflineBanner />}
-        <Box component="main" sx={{ flex: 1, minWidth: 0 }}>
+        <Box component="main" sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
           <Routes>
             <Route path="/" element={<LeaderboardPage ui={effectiveUi} kiosk={kiosk} />} />
+            <Route path="/start-signal" element={<StartSignalPage ui={effectiveUi} />} />
+            <Route path="/lap-counter" element={<LapCounterPage kiosk={kiosk} />} />
+            <Route path="/finish-line-log" element={<FinishLinePage ui={effectiveUi} kiosk={kiosk} />} />
             <Route path="/control" element={<ControlCenterPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

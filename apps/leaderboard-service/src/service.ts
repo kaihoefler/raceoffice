@@ -16,6 +16,7 @@ import { parseLine, RaceStateStore } from "@raceoffice/rmonitor";
 import { writeConfigFile, type LeaderboardConfig, type PersistedConfig } from "./config.js";
 import { SnapshotPublisher } from "./publisher.js";
 import { Recorder, RecordingLibrary } from "./recordings.js";
+import { PassingLog } from "./passings.js";
 import { RecordingPlayer } from "./sources/playerSource.js";
 import { RMonitorTcpSource } from "./sources/tcpSource.js";
 import { VERSION } from "./version.js";
@@ -36,6 +37,8 @@ export class LeaderboardService {
   readonly recorder: Recorder;
   readonly recordings: RecordingLibrary;
   readonly player: RecordingPlayer;
+  /** Line crossings for the finish line log (events, not state). */
+  readonly passings = new PassingLog();
   private tcp: RMonitorTcpSource | null = null;
   private source: Source = "none";
   private statusListeners = new Set<() => void>();
@@ -180,6 +183,7 @@ export class LeaderboardService {
 
   resetState(): void {
     this.storeInstance = this.createStore();
+    this.passings.clear();
     this.publisher.reset();
     this.emitStatus();
   }
@@ -247,7 +251,11 @@ export class LeaderboardService {
 
   private applyLine(text: string): void {
     const msg = parseLine(text);
-    if (this.storeInstance.apply(msg).changed) this.publisher.notify({ heartbeat: msg.kind === "heartbeat" });
+    const changed = this.storeInstance.apply(msg).changed;
+    if (changed) {
+      this.passings.observe(this.storeInstance, msg);
+      this.publisher.notify({ heartbeat: msg.kind === "heartbeat" });
+    }
   }
 
   private createStore(): RaceStateStore {

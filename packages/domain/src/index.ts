@@ -102,6 +102,7 @@ export {
 
 // Leaderboard service protocol (WebSocket race stream, service status).
 export type {
+  LeaderboardPassing,
   LeaderboardServiceStatus,
   LeaderboardSource,
   LeaderboardWsClientMessage,

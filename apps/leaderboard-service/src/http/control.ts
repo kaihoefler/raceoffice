@@ -89,6 +89,14 @@ export function registerControlRoutes(app: FastifyInstance, service: Leaderboard
 
   app.get("/api/status", async () => service.status());
 
+  // Finish line log: buffered passings (last 500) of a race; "current" = the race shown as current.
+  app.get("/api/race/:id/passings", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (id === "current") return service.passings.list(service.store.displayRace.id);
+    if (!/^d+$/.test(id)) return reply.code(400).send({ error: "bad_race_id", message: `invalid race id: ${id}` });
+    return service.passings.list(Number(id));
+  });
+
   app.get("/api/config", async () => persistedView(service));
 
   app.put("/api/config", async (req, reply) => {
