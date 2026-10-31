@@ -4,7 +4,9 @@
 // - "Laps to go" (default) or "laps complete" (?mode=up)
 // - Update delay (default 5 s, ?delay=5): the number switches only a few seconds after the leader
 //   crossed the line, so riders see the new value when they look up, like the Java Swing app
-// - 1 lap to go: "LAST LAP" with a swinging bell; FINISH: chequered background
+// - 1 lap to go: "LAST LAP" with a swinging bell
+// - FINISH: plain black with "FINISH" and a small chequered bar below it (like the start signal;
+//   a full chequered background is too restless)
 // For the lap board at the line: /ui/?kiosk=1#/lap-counter?delay=5
 
 import { Box, MenuItem, TextField, ToggleButton, ToggleButtonGroup, Typography, keyframes } from "@mui/material";
@@ -96,15 +98,16 @@ export function LapCounterPage({ kiosk }: { kiosk: boolean }) {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          ...(finish ? checkeredSx(120) : {}),
         }}
       >
         {!hasRace ? (
           <Typography sx={{ fontSize: "6vmin", opacity: 0.7 }}>Kein aktives Rennen</Typography>
         ) : finish ? (
-          <Typography sx={{ fontSize: "16vmin", fontWeight: 900, bgcolor: "rgba(0,0,0,0.85)", px: 4, borderRadius: 2 }}>
-            FINISH
-          </Typography>
+          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4vmin" }}>
+            <Typography sx={{ fontSize: "16vmin", fontWeight: 900, lineHeight: 1 }}>FINISH</Typography>
+            {/* Two rows of large squares: recognisable as the chequered flag without flickering. */}
+            <Box aria-hidden sx={{ ...checkeredSx(64), width: "min(60vw, 768px)", height: 64, borderRadius: 1 }} />
+          </Box>
         ) : (
           <>
             <Typography
