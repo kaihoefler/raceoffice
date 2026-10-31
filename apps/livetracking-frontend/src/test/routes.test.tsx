@@ -8,9 +8,13 @@ import { renderApp } from "./renderApp";
 
 /** Route (below /livetracking), something only that page shows, and where the router ends up. */
 const ROUTES: Array<[route: string, marker: () => Promise<HTMLElement>, pathname?: string]> = [
-  ["/", () => screen.findByText("Tracking Control"), "/livetracking/live-tracking/setup"],
-  ["/live-tracking", () => screen.findByText("Tracking Control"), "/livetracking/live-tracking/setup"],
-  ["/live-tracking/setup", () => screen.findByText("Tracking Control")],
+  ["/", () => screen.findByText(/Ohne Worker werden keine Decoder verbunden/), "/livetracking/timing/control"],
+  ["/timing/control", () => screen.findByText(/Ohne Worker werden keine Decoder verbunden/)],
+  ["/timing/decoders", () => screen.findByText("P3-Decoder im Netzwerk suchen")],
+  ["/timing/setups", () => screen.findByText("Wähle oder lege ein Setup an.")],
+  ["/live-tracking", () => screen.findByText("noch nicht gestartet"), "/livetracking/live-tracking/measurement"],
+  ["/live-tracking/setup", () => screen.findByText("noch nicht gestartet"), "/livetracking/live-tracking/measurement"],
+  ["/live-tracking/measurement", () => screen.findByText("noch nicht gestartet")],
   ["/live-tracking/participants", () => screen.findByText("Setup Participant Pools")],
   ["/live-tracking/visualization", () => screen.findByText("Live Tracking Visualizations")],
   ["/live-tracking/board", () => screen.findByText("Live Board")],

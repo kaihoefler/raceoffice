@@ -14,33 +14,47 @@ import { makeLiveTrackingParticipantPoolDocId } from "./ids.js";
 export type LiveTrackingMode = "training" | "qualifying";
 
 /**
- * Measurement lifecycle state.
+ * Measurement lifecycle state (doc/timing-architecture.md, section 7).
  *
- * This is intentionally different from runtime.workerStatus:
- * - session state tracks sporting measurement flow (prepare/start/stop/reset)
- * - worker status tracks process liveness/health.
+ * - `idle`: no measurement running (results of a stopped measurement stay visible)
+ * - `running`: passings of the setup's decoders count for the measurement
+ * - `error`: a command failed; `reset` or `start` leaves it
+ *
+ * Decoder connections are not part of it: they belong to the timing layer and are
+ * connected explicitly. The former stages `preparing`/`ready`/`stopping` had no effect
+ * and are migrated to `idle` (normalizeLiveTrackingSessionDocument).
  */
-export type LiveTrackingSessionState =
-  | "idle"
-  | "preparing"
-  | "ready"
-  | "running"
-  | "stopping"
-  | "error";
+export type LiveTrackingSessionState = "idle" | "running" | "error";
 
+/** States written by older versions; only accepted by the migration. */
+type LegacySessionState = "preparing" | "ready" | "stopping";
 
-export type LiveTrackingCommandIntent = "prepare" | "start" | "stop" | "shutdown" | "reset";
+export type LiveTrackingCommandIntent = "start" | "stop" | "reset";
+
+/**
+ * One running period of a measurement, as window on the timing passing store:
+ * passings with `fromSeq < seq <= toSeq` (`toSeq` null while running).
+ */
+export type LiveTrackingMeasurementSegment = {
+  fromSeq: number;
+  toSeq: number | null;
+  startedAt: string;
+  stoppedAt: string | null;
+};
+
+/**
+ * The measurement of this session. Start after Stop continues it with a new segment (the pause
+ * does not count); `reset` starts over. Passings themselves are never touched – deleting them is
+ * a timing-layer action.
+ */
+export type LiveTrackingMeasurement = {
+  segments: LiveTrackingMeasurementSegment[];
+};
 
 export type LiveTrackingCommandStatus = "queued" | "running" | "completed" | "failed" | "rejected";
 
-/**
- * Stable command targets.
- *
- * Important distinction:
- * - `preparing` and `stopping` are transient execution states.
- * - command target states are steady outcomes a worker should reach.
- */
-export type LiveTrackingCommandTargetState = Exclude<LiveTrackingSessionState, "preparing" | "stopping" | "error">;
+/** Steady outcome a command should reach. */
+export type LiveTrackingCommandTargetState = Exclude<LiveTrackingSessionState, "error">;
 
 /**
  * Session input source.
@@ -97,6 +111,9 @@ export type LiveTrackingSessionDocument = {
   /** FIFO command queue. One running command max, remaining commands queued. */
   commandQueue: LiveTrackingCommand[];
 
+  /** Measurement window on the timing passing store; absent before the first start. */
+  measurement?: LiveTrackingMeasurement | null;
+
   createdAt: string | null;
   updatedAt: string | null;
   lastError: string | null;
@@ -110,25 +127,16 @@ export type LiveTrackingSessionDocument = {
  * - every state change must pass through this transition table
  */
 const LIVE_TRACKING_ALLOWED_STATE_TRANSITIONS: Record<LiveTrackingSessionState, LiveTrackingSessionState[]> = {
-  idle: ["preparing"],
-  preparing: ["ready", "error"],
-  ready: ["running", "idle", "error"],
-  running: ["stopping", "error"],
-  stopping: ["ready", "error"],
-  error: ["idle", "preparing", "ready"],
+  idle: ["running", "error"],
+  running: ["idle", "error"],
+  error: ["idle", "running"],
 };
 
-/**
- * Desired steady-state per command intent.
- *
- * `desiredState` is used as operator intent; worker execution may still need
- * transient states (`preparing` / `stopping`) before reaching it.
- */
+/** Desired steady-state per command intent (`desiredState` = operator intent). */
 const LIVE_TRACKING_COMMAND_TARGET_STATE: Record<LiveTrackingCommandIntent, LiveTrackingCommandTargetState> = {
-  prepare: "ready",
   start: "running",
-  stop: "ready",
-  shutdown: "idle",
+  stop: "idle",
+  // Reset keeps a running measurement running (with an empty window); see the worker.
   reset: "idle",
 };
 
@@ -139,11 +147,9 @@ const LIVE_TRACKING_COMMAND_TARGET_STATE: Record<LiveTrackingCommandIntent, Live
  * current state and keeps command history auditable (valid commands only).
  */
 const LIVE_TRACKING_ALLOWED_COMMAND_STATES: Record<LiveTrackingCommandIntent, LiveTrackingSessionState[]> = {
-  prepare: ["idle", "ready", "error"],
-  start: ["ready"],
+  start: ["idle", "error"],
   stop: ["running"],
-  shutdown: ["ready", "error", "idle"],
-  reset: ["idle", "preparing", "ready", "stopping", "error"],
+  reset: ["idle", "running", "error"],
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -455,18 +461,67 @@ export function rejectLiveTrackingCommand(
 }
 
 export function isLiveTrackingSessionState(value: unknown): value is LiveTrackingSessionState {
-  return (
-    value === "idle" ||
-    value === "preparing" ||
-    value === "ready" ||
-    value === "running" ||
-    value === "stopping" ||
-    value === "error"
-  );
+  return value === "idle" || value === "running" || value === "error";
 }
 
 export function isLiveTrackingCommandIntent(value: unknown): value is LiveTrackingCommandIntent {
-  return value === "prepare" || value === "start" || value === "stop" || value === "shutdown" || value === "reset";
+  return value === "start" || value === "stop" || value === "reset";
+}
+
+function isMeasurement(value: unknown): value is LiveTrackingMeasurement {
+  if (!isRecord(value) || !Array.isArray(value.segments)) return false;
+  return value.segments.every(
+    (seg) =>
+      isRecord(seg) &&
+      typeof seg.fromSeq === "number" &&
+      (seg.toSeq === null || typeof seg.toSeq === "number") &&
+      typeof seg.startedAt === "string" &&
+      (seg.stoppedAt === null || typeof seg.stoppedAt === "string"),
+  );
+}
+
+/** True if a passing (by store `seq`) belongs to the measurement. */
+export function isSeqInLiveTrackingMeasurement(seq: number, measurement: LiveTrackingMeasurement | null | undefined): boolean {
+  for (const seg of measurement?.segments ?? []) {
+    if (seq > seg.fromSeq && (seg.toSeq === null || seq <= seg.toSeq)) return true;
+  }
+  return false;
+}
+
+/** Lowest store seq the measurement needs (passings after it), or null without measurement. */
+export function getLiveTrackingMeasurementFromSeq(measurement: LiveTrackingMeasurement | null | undefined): number | null {
+  const segments = measurement?.segments ?? [];
+  return segments.length ? Math.min(...segments.map((s) => s.fromSeq)) : null;
+}
+
+/**
+ * Migrates session documents written by older versions:
+ * - states `preparing`/`ready`/`stopping` → `idle`
+ * - queued or running commands `prepare`/`shutdown` → completed (they had no effect)
+ * Returns the document unchanged when it is current, null when it is no session at all.
+ */
+export function normalizeLiveTrackingSessionDocument(value: unknown): LiveTrackingSessionDocument | null {
+  if (isLiveTrackingSessionDocument(value)) return value;
+  if (!isRecord(value) || value.kind !== "liveTrackingSession") return null;
+  const legacy: Record<string, LiveTrackingSessionState> = { preparing: "idle", ready: "idle", stopping: "idle" };
+  const mapState = (v: unknown): unknown => (typeof v === "string" && v in legacy ? legacy[v as LegacySessionState] : v);
+  const queue = Array.isArray(value.commandQueue) ? value.commandQueue : [];
+  const migrated = {
+    ...value,
+    state: mapState(value.state),
+    desiredState: mapState(value.desiredState),
+    commandQueue: queue.map((cmd) => {
+      if (!isRecord(cmd) || (cmd.intent !== "prepare" && cmd.intent !== "shutdown")) return cmd;
+      const done = cmd.status === "queued" || cmd.status === "running";
+      return {
+        ...cmd,
+        intent: cmd.intent === "prepare" ? "start" : "stop",
+        status: done ? "completed" : cmd.status,
+        message: cmd.message ?? `migrated legacy ${String(cmd.intent)} command`,
+      };
+    }),
+  };
+  return isLiveTrackingSessionDocument(migrated) ? migrated : null;
 }
 
 export function isLiveTrackingCommandStatus(value: unknown): value is LiveTrackingCommandStatus {
@@ -526,8 +581,33 @@ export function isLiveTrackingSessionDocument(value: unknown): value is LiveTrac
     isLiveTrackingSessionState(value.state) &&
     Array.isArray(value.commandQueue) &&
     value.commandQueue.every(isLiveTrackingCommand) &&
+    (value.measurement === undefined || value.measurement === null || isMeasurement(value.measurement)) &&
     (typeof value.createdAt === "string" || value.createdAt === null) &&
     (typeof value.updatedAt === "string" || value.updatedAt === null) &&
     (typeof value.lastError === "string" || value.lastError === null)
   );
+}
+
+/**
+ * Measurement window after a command, given the last seq of the timing passing store at that
+ * moment:
+ * - start: new open segment (a stopped measurement continues; the pause does not count)
+ * - stop: closes the open segment
+ * - reset: discards all segments; a running measurement starts over immediately
+ */
+export function applyLiveTrackingMeasurementCommand(
+  measurement: LiveTrackingMeasurement | null | undefined,
+  intent: LiveTrackingCommandIntent,
+  args: { lastSeq: number; at: string; running: boolean },
+): LiveTrackingMeasurement | null {
+  const open = (): LiveTrackingMeasurementSegment => ({ fromSeq: args.lastSeq, toSeq: null, startedAt: args.at, stoppedAt: null });
+  const segments = measurement?.segments ?? [];
+  if (intent === "start") {
+    const closed = segments.map((s) => (s.toSeq === null ? { ...s, toSeq: args.lastSeq, stoppedAt: args.at } : s));
+    return { segments: [...closed, open()] };
+  }
+  if (intent === "stop") {
+    return { segments: segments.map((s) => (s.toSeq === null ? { ...s, toSeq: args.lastSeq, stoppedAt: args.at } : s)) };
+  }
+  return args.running ? { segments: [open()] } : null;
 }

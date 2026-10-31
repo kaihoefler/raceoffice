@@ -9,12 +9,14 @@
  *
  * - `eventList`: the core entry document (no events, none active)
  * - known LiveTracking ids: their typed domain defaults (createInitialLiveTrackingDocument)
+ * - timing layer singletons (timingDecoders, timingConnection, timingStatus)
  * - any other id: an empty object (backward compatibility)
  */
 
 import { createInitialLiveTrackingDocument } from "./livetracking/index.js";
+import { createInitialTimingDocument } from "./timing/index.js";
 
 export function initialDocumentData(docId: string): unknown {
   if (docId === "eventList") return { activeEventId: null, events: [] };
-  return createInitialLiveTrackingDocument(docId) ?? {};
+  return createInitialLiveTrackingDocument(docId) ?? createInitialTimingDocument(docId) ?? {};
 }

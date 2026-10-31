@@ -140,6 +140,17 @@ export function u32Le(value: number): Uint8Array {
 }
 
 /**
+ * Decoder id as reported in records (display form, e.g. `00-0C-03-92`) → the byte order
+ * SESSION and RESEND requests expect (`92-03-0C-00`). See doc/p3test-client-notes.md (1).
+ * Ids that are not exactly 4 bytes are returned unchanged.
+ */
+export function decoderIdToRequestOrder(displayId: string): string {
+  const clean = displayId.replace(/[^a-fA-F0-9]/g, "").toUpperCase();
+  if (clean.length !== 8) return displayId;
+  return [clean.slice(6, 8), clean.slice(4, 6), clean.slice(2, 4), clean.slice(0, 2)].join("-");
+}
+
+/**
  * Convert a decoder ID like `40-24-04-00` or `40240400` to four raw bytes.
  *
  * This matches the wire order used by GetResendPhrase/GetSessionPhrase in the Pascal code.

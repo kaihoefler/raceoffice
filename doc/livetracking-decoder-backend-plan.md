@@ -1,5 +1,7 @@
 # LiveTracking: Decoder-Backend Architekturplan (AMMC + P3Parser)
 
+> **Weiterentwicklung:** Die Adapter-Schicht ist die physikalische Ebene der neuen Zeitmess-Architektur. Dort werden Passings dauerhaft je physischem Decoder gespeichert, die Decoder explizit verbunden und Setups von der Hardware getrennt. Die Randbedingung „keine Persistenz von Passings“ unten ist damit überholt. Siehe [timing-architecture.md](timing-architecture.md).
+
 ## Ziel
 LiveTracking soll zur Laufzeit umschaltbar unterstützen:
 - `ammc` (pro Decoder eine WebSocket-Verbindung via AMMC-Prozess)

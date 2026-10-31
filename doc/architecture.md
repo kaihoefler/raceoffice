@@ -18,6 +18,8 @@ RaceOffice is an npm-workspaces monorepo:
 
 This document focuses on the realtime document model shared by frontend and server.
 
+> **Timing hardware, passings and their consumers** follow a layered target architecture (physical decoders → timing layer with decoder register, passing store and setups → consumers such as LiveTracking). See [timing-architecture.md](timing-architecture.md).
+
 ---
 
 ## 1) Frontend (React SPA)

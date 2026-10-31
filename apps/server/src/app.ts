@@ -6,10 +6,11 @@ import os from "node:os";
 import path from "node:path";
 
 import {
-  createLiveTrackingPassingHistoryDocument,
+  isTimingStatusDocument,
+  markTimingStatusOffline,
+  TIMING_STATUS_DOC_ID,
   createLiveTrackingRuntimeDocument,
   isLiveTrackingRuntimeDocument,
-  makeLiveTrackingPassingHistoryDocId,
   makeLiveTrackingRuntimeDocId,
 } from "@raceoffice/domain";
 import { DocStore } from "./services/docStore.js";
@@ -40,6 +41,8 @@ import {
   P3_DISCOVERY_SERVICE_ENDPOINTS,
   registerP3DiscoveryRoutes,
 } from "./services/p3DiscoveryRoutes.js";
+import { TimingPassingStore } from "./services/timingPassingStore.js";
+import { migrateActiveSetup, migrateLegacySession, migrateLegacySetupDecoders, registerTimingRoutes } from "./services/timingRoutes.js";
 
 // Public non-realtime endpoints for service discovery/fallback responses.
 export const PUBLIC_SERVICE_ENDPOINTS = [
@@ -173,6 +176,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
           updatedAt: t,
           warnings: [...runtime.warnings.slice(-99), `[server] worker offline: ${reason}`],
         }));
+        // Without worker no decoder is connected and no simulator runs.
+        hub.commitServerDocUpdate(TIMING_STATUS_DOC_ID, (current) =>
+          isTimingStatusDocument(current) ? markTimingStatusOffline(current, t) : current,
+        );
       },
     },
   });
@@ -219,16 +226,21 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // --- LiveTracking worker process lifecycle
   registerLiveTrackingWorkerRoutes(app, liveTrackingWorkerManager);
 
-  // --- LiveTracking passing history reset
-  // Done server-side so subscribers get one whole-document replace instead of a JSON-Patch
-  // diff with one remove op per passing, and the control page never has to load the history.
-  app.post("/live-tracking/passing-history/reset", async () => {
-    const doc = hub.commitServerDocUpdate(makeLiveTrackingPassingHistoryDocId(), () => ({
-      ...createLiveTrackingPassingHistoryDocument(),
-      updatedAt: new Date().toISOString(),
-    }));
-    return { ok: true, rev: doc.rev };
-  });
+  // --- Timing layer: passing store + API (doc/timing-architecture.md)
+  const timingPassingStore = new TimingPassingStore(docStore.database);
+  registerTimingRoutes(app, timingPassingStore);
+  const migratedDecoders = migrateLegacySetupDecoders(
+    loadDoc,
+    (id, updater) => hub.commitServerDocUpdate(id, updater),
+    (oldId, newId) => timingPassingStore.renameDecoder(oldId, newId),
+  );
+  if (migratedDecoders > 0) app.log.info({ migratedDecoders }, "registered decoders of LiveTracking setups in the timing register");
+
+  // LiveTracking session documents of older versions (prepare/ready/stopping) → current model.
+  if (migrateLegacySession(loadDoc, (id, updater) => hub.commitServerDocUpdate(id, updater))) {
+    app.log.info("migrated the LiveTracking session document to the start/stop/reset model");
+  }
+  migrateActiveSetup(loadDoc, (id, updater) => hub.commitServerDocUpdate(id, updater));
 
   // --- P3 protocol test client control routes
   registerP3TestClientRoutes(app, p3TestClientService);

@@ -53,7 +53,7 @@ export type AmmcProcessManagerOptions = {
 type DecoderExecutableKind = "amb" | "sim";
 
 
-function resolveWorkspaceRoot(): string {
+export function resolveWorkspaceRoot(): string {
   // src/decoder/ammc/ammcProcessManager.ts -> ammc -> decoder -> src -> livetracking-worker -> apps -> workspace root
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
@@ -63,7 +63,7 @@ function resolveWorkspaceRoot(): string {
 /**
  * Resolves platform-specific default AMM converter binaries shipped in this repository.
  */
-function defaultBinaryPath(kind: DecoderExecutableKind): string {
+export function defaultBinaryPath(kind: DecoderExecutableKind): string {
   const root = resolveWorkspaceRoot();
   const ammcPath = "tools/ammc/";
   const suffix = kind === "sim" ? "sim" : "amb";

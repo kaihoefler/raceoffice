@@ -3,9 +3,13 @@
  *
  * Responsibilities (single orchestration point):
  * - keep live subscriptions to session/runtime/results/setup/participants documents
- * - execute session command queue transitions (prepare/start/stop/shutdown/reset)
- * - manage decoder adapter lifecycle (start/stop based on session state)
- * - continuously project sporting results from runtime passings + setup + participant pool
+ * - execute the session command queue (start/stop/reset): measurement windows on the timing
+ *   passing store (doc/timing-architecture.md)
+ * - timing layer: connect exactly the decoders listed in timingConnection (explicit, never
+ *   automatic), upload every passing to the timing passing store, publish the decoder status
+ * - LiveTracking as consumer: read the passings of the measurement window from the store and map
+ *   them through the setup to timing points (TimingPassingFeed + toTimingPointPassings)
+ * - continuously project sporting results from those passings + setup + participant pool
  *
  * Important design rule:
  * This class intentionally keeps business rules delegated to domain helpers.
@@ -24,30 +28,49 @@ import {
   isLiveTrackingWorkerStatusCheck,
   makeLiveTrackingParticipantPoolDocId,
   makeLiveTrackingResultsDocId,
-  makeLiveTrackingPassingHistoryDocId,
   makeLiveTrackingRuntimeDocId,
   makeLiveTrackingSessionDocId,
   makeLiveTrackingSetupDocId,
   normalizeTimingPoints,
   startLiveTrackingCommand,
-  transitionLiveTrackingSessionState,
   type LiveTrackingAthlete,
   type LiveTrackingParticipantPoolDocument,
   type LiveTrackingResultsDocument,
-  type LiveTrackingPassingHistoryDocument,
   type LiveTrackingRuntimeDocument,
-  type LiveTrackingRuntimeRawPayload,
   type LiveTrackingSessionDocument,
   type LiveTrackingSetupDocument,
+  applyLiveTrackingMeasurementCommand,
+  getLiveTrackingMeasurementFromSeq,
+  getSetupDecoderIds,
+  isSeqInLiveTrackingMeasurement,
+  normalizeLiveTrackingSessionDocument,
+  toTimingPointPassings,
+  createTimingDecodersDocument,
+  findTimingDecoder,
+  isTimingConnectionDocument,
+  isTimingDecodersDocument,
+  mergeLegacySetupDecoders,
+  TIMING_CONNECTION_DOC_ID,
+  TIMING_DECODERS_DOC_ID,
+  TIMING_STATUS_DOC_ID,
+  TIMING_SIMULATOR_DOC_ID,
+  isTimingSimulatorDocument,
+  type TimingSimulatorDocument,
+  type LiveTrackingCommandIntent,
+  type TimingConnectionDocument,
+  type TimingDecodersDocument,
+  type TimingPassingInput,
+  type TimingStatusDocument,
 } from "@raceoffice/domain";
-import { createDecoderSourceAdapter } from "./decoder/adapters/createDecoderSourceAdapter.js";
-import type { DecoderHealthPatch, DecoderSourceAdapter, NormalizedPassing } from "./decoder/adapters/decoderSourceAdapter.js";
-import { normalizedToRuntimePassing } from "./decoder/adapters/normalizedPassing.js";
-import { PassingHistoryWriter } from "./passingHistoryWriter.js";
 import { RealtimeDocClient } from "./realtimeDocClient.js";
+import { TimingConnectionManager, type DesiredDecoder } from "./timing/connectionManager.js";
+import { TimingPassingFeed } from "./timing/passingFeed.js";
+import { SimulatorProcess } from "./timing/simulatorProcess.js";
+import { TimingPassingUploader } from "./timing/passingUploader.js";
 
-/** How often buffered passings are appended to the history document. */
-const HISTORY_FLUSH_INTERVAL_MS = 1_000;
+/** Decoder status is written at most this often (passings update it constantly). */
+const TIMING_STATUS_FLUSH_MS = 500;
+
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -117,6 +140,7 @@ function deriveTimingOptions(setup: { minLapTimeSecs?: number; track: { timingPo
   return { minLapTimeMs, minSectorTimeMs };
 }
 
+
 export class SessionLoop {
   readonly sessionDocId: string;
   readonly runtimeDocId: string;
@@ -124,10 +148,6 @@ export class SessionLoop {
   readonly sessionClient: RealtimeDocClient<LiveTrackingSessionDocument>;
   readonly runtimeClient: RealtimeDocClient<LiveTrackingRuntimeDocument>;
   readonly resultsClient: RealtimeDocClient<LiveTrackingResultsDocument>;
-  readonly historyClient: RealtimeDocClient<LiveTrackingPassingHistoryDocument>;
-  private readonly historyWriter: PassingHistoryWriter;
-  private historyFlushTimer: NodeJS.Timeout | null = null;
-  private unsubscribeHistory: (() => void) | null = null;
 
   private setupClient: RealtimeDocClient<LiveTrackingSetupDocument> | null = null;
   private activeSetupDocId: string | null = null;
@@ -153,7 +173,26 @@ export class SessionLoop {
   private lastWorkerStatus: LiveTrackingRuntimeDocument["workerStatus"] | null = null;
   private lastHandledWorkerStatusCheckRequestId: string | null = null;
 
-  private adapter: DecoderSourceAdapter | null = null;
+  // Timing layer (doc/timing-architecture.md)
+  readonly decodersClient: RealtimeDocClient<TimingDecodersDocument>;
+  readonly connectionClient: RealtimeDocClient<TimingConnectionDocument>;
+  readonly timingStatusClient: RealtimeDocClient<TimingStatusDocument>;
+  readonly simulatorClient: RealtimeDocClient<TimingSimulatorDocument>;
+  /** Decoder simulator (ammc-sim) – replaces hardware, started/stopped on the decoder page. */
+  private readonly simulator: SimulatorProcess;
+  private readonly connectionManager: TimingConnectionManager;
+  private readonly uploader: TimingPassingUploader;
+  private unsubscribeTiming: Array<() => void> = [];
+  private timingStatusTimer: NodeJS.Timeout | null = null;
+  /** Passings of the measurement window (LiveTracking as consumer of the passing store). */
+  private readonly passingFeed: TimingPassingFeed;
+  /** A command is being executed (it needs the store seq, fetched asynchronously). */
+  private commandInFlight = false;
+  /**
+   * Commands already executed. The own session update arrives only after the server confirmed
+   * it; until then the command still looks "running" and must not be executed a second time.
+   */
+  private readonly executedCommandIds = new Set<string>();
 
   constructor(
     private readonly baseHttpUrl: string,
@@ -166,25 +205,44 @@ export class SessionLoop {
     this.sessionClient = new RealtimeDocClient<LiveTrackingSessionDocument>(this.sessionDocId, baseHttpUrl);
     this.runtimeClient = new RealtimeDocClient<LiveTrackingRuntimeDocument>(this.runtimeDocId, baseHttpUrl);
     this.resultsClient = new RealtimeDocClient<LiveTrackingResultsDocument>(this.resultsDocId, baseHttpUrl);
-    this.historyClient = new RealtimeDocClient<LiveTrackingPassingHistoryDocument>(
-      makeLiveTrackingPassingHistoryDocId(),
-      baseHttpUrl,
+    this.passingFeed = new TimingPassingFeed(baseHttpUrl, () => this.scheduleUpdateResultsProjection());
+
+    this.decodersClient = new RealtimeDocClient<TimingDecodersDocument>(TIMING_DECODERS_DOC_ID, baseHttpUrl);
+    this.connectionClient = new RealtimeDocClient<TimingConnectionDocument>(TIMING_CONNECTION_DOC_ID, baseHttpUrl);
+    this.timingStatusClient = new RealtimeDocClient<TimingStatusDocument>(TIMING_STATUS_DOC_ID, baseHttpUrl);
+    this.simulatorClient = new RealtimeDocClient<TimingSimulatorDocument>(TIMING_SIMULATOR_DOC_ID, baseHttpUrl);
+    this.simulator = new SimulatorProcess(() => this.scheduleTimingStatusFlush());
+    this.uploader = new TimingPassingUploader(baseHttpUrl, { onWarning: (m) => this.appendRuntimeWarning(m) });
+    this.connectionManager = new TimingConnectionManager(
+      {
+        onPassing: (passing) => this.handleTimingPassing(passing),
+        onStatusChange: () => this.scheduleTimingStatusFlush(),
+        onWarning: (m) => this.appendRuntimeWarning(m),
+      },
+      { fetchResumePoint: (decoderId) => this.fetchHighestPassingNumber(decoderId) },
     );
-    this.historyWriter = new PassingHistoryWriter(this.historyClient);
   }
 
   start() {
     this.sessionClient.connect();
     this.runtimeClient.connect();
     this.resultsClient.connect();
-    this.historyClient.connect();
+    this.decodersClient.connect();
+    this.connectionClient.connect();
+    this.timingStatusClient.connect();
+    this.simulatorClient.connect();
+    this.unsubscribeTiming = [
+      this.decodersClient.onData(() => this.scheduleAdapterSync()),
+      this.connectionClient.onData(() => this.scheduleAdapterSync()),
+      this.simulatorClient.onData(() => {
+        const doc = this.simulatorClient.data;
+        if (isTimingSimulatorDocument(doc)) this.simulator.apply(doc.running, doc.config);
+      }),
+    ];
 
-    this.unsubscribeHistory = this.historyClient.onData(() => {
-      this.historyWriter.onDocumentChanged();
-      this.scheduleUpdateResultsProjection();
-    });
 
     this.unsubscribeSession = this.sessionClient.onData(() => {
+      if (this.migrateSessionDocument()) return;
       this.logSessionStateTransition();
       this.syncHeartbeatLifecycle();
       this.scheduleTickCommands();
@@ -219,10 +277,19 @@ export class SessionLoop {
     for (const unsub of this.unsubscribeParticipantPools.values()) unsub();
     this.unsubscribeParticipantPools.clear();
 
-    if (this.adapter) {
-      this.adapter.stop().catch(() => {});
-      this.adapter = null;
-    }
+    for (const unsub of this.unsubscribeTiming) unsub();
+    this.unsubscribeTiming = [];
+    void this.connectionManager.stop();
+    this.simulator.stop();
+    void this.uploader.flush();
+    this.uploader.stop();
+    this.timingStatusClient.update((doc) => ({
+      ...doc,
+      workerHeartbeatAt: null,
+      simulator: { state: "stopped", startedAt: null, lastError: null, lastLine: null },
+      decoders: doc.decoders.map((d) => ({ ...d, connection: "disconnected", reasons: [], connectionSessionId: null, connectedSince: null })),
+      updatedAt: nowIso(),
+    }));
 
     this.logWorkerStatusTransition("offline");
 
@@ -242,15 +309,15 @@ export class SessionLoop {
     for (const client of this.participantPoolClients.values()) client.close();
     this.participantPoolClients.clear();
 
-    // Best effort: write passings that are still buffered before the socket closes.
-    this.historyWriter.flush();
-    this.unsubscribeHistory?.();
-    this.unsubscribeHistory = null;
+    this.passingFeed.close();
 
     this.sessionClient.close();
     this.runtimeClient.close();
     this.resultsClient.close();
-    this.historyClient.close();
+    this.decodersClient.close();
+    this.connectionClient.close();
+    this.timingStatusClient.close();
+    this.simulatorClient.close();
   }
 
   private clearScheduledTimers() {
@@ -270,21 +337,12 @@ export class SessionLoop {
       clearTimeout(this.resultsTimer);
       this.resultsTimer = null;
     }
-    if (this.historyFlushTimer) {
-      clearTimeout(this.historyFlushTimer);
-      this.historyFlushTimer = null;
+    if (this.timingStatusTimer) {
+      clearTimeout(this.timingStatusTimer);
+      this.timingStatusTimer = null;
     }
   }
 
-  /** Flushes buffered passings at most once per interval; retries while some remain. */
-  private scheduleHistoryFlush() {
-    if (this.historyFlushTimer) return;
-    this.historyFlushTimer = setTimeout(() => {
-      this.historyFlushTimer = null;
-      this.historyWriter.flush();
-      if (this.historyWriter.hasPending()) this.scheduleHistoryFlush();
-    }, HISTORY_FLUSH_INTERVAL_MS);
-  }
 
   private scheduleTickCommands() {
     if (this.commandTimer) return;
@@ -311,129 +369,76 @@ export class SessionLoop {
   }
 
   /**
-   * Reconciles the decoder adapter lifecycle against current session/setup state.
-   *
-   * Replaces the former `syncAmmConnections` method. The adapter is created when the
-   * session enters `running` state and stopped when it leaves. Setup changes while running
-   * are forwarded to the existing adapter via `syncPoints`.
+   * Reconciles the decoder connections of the timing layer: exactly the decoders listed in
+   * `timingConnection`. Nothing connects automatically – decoders accept only few connections
+   * (doc/timing-architecture.md, 5.1). The LiveTracking session no longer connects anything.
    */
   private syncAdapterLifecycle() {
-    const session = this.sessionClient.data;
     const setup = this.ensureSetupClient();
+    // Decoders of the active setup appear in the register (and thus in the hardware view).
+    if (setup) this.registerLegacySetupDecoders(setup);
 
-    if (setup) {
-      const enabledIds = new Set(
-        normalizeTimingPoints(setup.track.timingPoints)
-          .filter((p) => p.enabled)
-          .map((p) => p.id),
-      );
-      this.pruneRuntimeDecoders(enabledIds);
-    }
-
-    const shouldCollect =
-      !!session && isLiveTrackingSessionDocument(session) && session.state === "running";
-
-    if (!shouldCollect || !setup) {
-      if (this.adapter) {
-        this.adapter.stop().catch(() => {});
-        this.adapter = null;
+    const register = isTimingDecodersDocument(this.decodersClient.data) ? this.decodersClient.data : null;
+    const desired: DesiredDecoder[] = [];
+    const connection = this.connectionClient.data;
+    if (register && isTimingConnectionDocument(connection)) {
+      for (const id of connection.connectedDecoderIds) {
+        const decoder = findTimingDecoder(register, id);
+        if (decoder) desired.push({ decoder, reasons: ["explicit"] });
       }
-      return;
     }
+    this.connectionManager.sync(desired);
+  }
 
-    const enabledPoints = normalizeTimingPoints(setup.track.timingPoints).filter((p) => p.enabled);
+  /** Adds the decoders of the setup to the register (only once it is loaded, never overwriting). */
+  private registerLegacySetupDecoders(setup: LiveTrackingSetupDocument) {
+    const current = this.decodersClient.data;
+    if (current === null) return;
+    const base = isTimingDecodersDocument(current) ? current : createTimingDecodersDocument();
+    const merged = mergeLegacySetupDecoders(base, [setup], nowIso());
+    if (merged !== base) this.decodersClient.update(() => merged);
+  }
 
-    if (this.adapter) {
-      this.adapter.syncPoints(enabledPoints);
-    } else {
-      const adapter = createDecoderSourceAdapter(setup.decoderBackend ?? "ammc", enabledPoints, {
-        onPassing: (passing: NormalizedPassing) => this.handleNormalizedPassing(passing),
-        onWarning: (msg: string) => this.appendRuntimeWarning(msg),
-        onHealth: (update: DecoderHealthPatch) => this.applyDecoderHealth(update),
-      });
-      this.adapter = adapter;
-      adapter.start().catch((err: unknown) => {
-        this.appendRuntimeWarning(
-          `[adapter] start failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
-    }
+
+  /** A passing of a physical decoder: stored in the timing passing store (consumers read it there). */
+  private handleTimingPassing(passing: TimingPassingInput) {
+    this.uploader.add(passing);
+  }
+
+  /** Highest passing number stored for the decoder (timing store), null if unknown. */
+  private async fetchHighestPassingNumber(decoderId: string): Promise<number | null> {
+    const res = await fetch(`${this.baseHttpUrl}/timing/passings/stats`);
+    if (!res.ok) return null;
+    const stats = (await res.json()) as { decoders?: Array<{ decoderId: string; maxPassingNumber: number | null }> };
+    return stats.decoders?.find((d) => d.decoderId === decoderId)?.maxPassingNumber ?? null;
+  }
+
+  private scheduleTimingStatusFlush() {
+    if (this.timingStatusTimer) return;
+    this.timingStatusTimer = setTimeout(() => {
+      this.timingStatusTimer = null;
+      this.flushTimingStatus();
+    }, TIMING_STATUS_FLUSH_MS);
+  }
+
+  /** Writes the decoder status of the timing layer. */
+  private flushTimingStatus() {
+    const statuses = this.connectionManager.statusList;
+    const t = nowIso();
+    this.timingStatusClient.update((doc) => {
+      const byId = new Map(doc.decoders.map((d) => [d.decoderId, d]));
+      for (const status of statuses) byId.set(status.decoderId, status);
+      return { ...doc, workerHeartbeatAt: t, decoders: [...byId.values()], simulator: this.simulator.status, updatedAt: t };
+    });
   }
 
   // ---------------------------------------------------------------------------
   // Adapter callbacks
 
-  private handleNormalizedPassing(passing: NormalizedPassing) {
-    const runtimePassing = normalizedToRuntimePassing(passing);
-    const t = nowIso();
 
-    // Decoder signals only go to the passing log; results need athlete passings only.
-    if (!passing.signalKind) {
-      this.historyWriter.append({
-        id: runtimePassing.id,
-        timestamp: runtimePassing.timestamp,
-        transponderId: runtimePassing.transponderId,
-        timingPointId: runtimePassing.timingPointId,
-        decoderId: runtimePassing.decoderId,
-      });
-      this.scheduleHistoryFlush();
-    }
-    this.commitRuntimeUpdate((doc) => {
-      let recentRawPayloads = doc.recentRawPayloads ?? [];
-      if (typeof passing.raw === "string") {
-        const entry: LiveTrackingRuntimeRawPayload = {
-          receivedAt: t,
-          timingPointId: passing.timingPointId,
-          decoderId: passing.decoderId,
-          payload: passing.raw,
-        };
-        recentRawPayloads = appendBounded(recentRawPayloads, entry, 50);
-      }
-      return {
-        ...doc,
-        recentPassings: appendBounded(doc.recentPassings ?? [], runtimePassing, 200),
-        recentRawPayloads,
-        updatedAt: t,
-      };
-    });
-  }
-
-  private applyDecoderHealth(update: DecoderHealthPatch) {
-    const t = nowIso();
-    this.commitRuntimeUpdate((doc) => {
-      const decoders = [...(doc.decoders ?? [])];
-      const index = decoders.findIndex((d) => d.timingPointId === update.timingPointId);
-
-      const base: LiveTrackingRuntimeDocument["decoders"][number] =
-        index >= 0
-          ? decoders[index]!
-          : {
-              decoderId: update.decoderName,
-              timingPointId: update.timingPointId,
-              processStatus: "stopped",
-              websocketStatus: "disconnected",
-              lastConnectedAt: null,
-              lastMessageAt: null,
-              lastError: null,
-            };
-
-      const next: LiveTrackingRuntimeDocument["decoders"][number] = { ...base, ...update.patch };
-      if (index >= 0) decoders[index] = next;
-      else decoders.push(next);
-
-      return { ...doc, decoders, updatedAt: t };
-    });
-  }
 
   // ---------------------------------------------------------------------------
 
-  private pruneRuntimeDecoders(enabledTimingPointIds: Set<string>) {
-    this.commitRuntimeUpdate((doc) => ({
-      ...doc,
-      decoders: (doc.decoders ?? []).filter((decoder) => enabledTimingPointIds.has(decoder.timingPointId)),
-      updatedAt: nowIso(),
-    }));
-  }
 
   private hasRuntimeContentChanged(previous: LiveTrackingRuntimeDocument, next: LiveTrackingRuntimeDocument): boolean {
     const previousComparable = JSON.stringify({ ...previous, updatedAt: null });
@@ -481,6 +486,7 @@ export class SessionLoop {
   private writeHeartbeat(sessionOverride?: LiveTrackingSessionDocument | null) {
     const workerStatus = this.mapWorkerStatus(sessionOverride);
     this.logWorkerStatusTransition(workerStatus);
+    this.scheduleTimingStatusFlush();
     this.commitRuntimeUpdate((doc) => {
       const t = nowIso();
       return {
@@ -514,7 +520,6 @@ export class SessionLoop {
     const session = sessionOverride ?? this.sessionClient.data;
     if (!session || !isLiveTrackingSessionDocument(session)) return "ready";
     if (session.state === "running") return "running";
-    if (session.state === "stopping") return "stopping";
     if (session.state === "error") return "error";
     return "ready";
   }
@@ -635,9 +640,14 @@ export class SessionLoop {
     const athletes = this.ensureParticipantPoolAthletes();
     if (athletes === null) return;
 
-    // Full session history (not the small runtime window), so no lap ever drops out.
-    const passings = this.historyWriter.allPassings();
-    if (passings === null) return;
+    // Passings of the measurement window, read from the timing passing store and mapped
+    // through the setup to timing points. Without measurement the results are empty.
+    const measurement = session.measurement ?? null;
+    this.passingFeed.configure(getSetupDecoderIds(setup), getLiveTrackingMeasurementFromSeq(measurement));
+    if (measurement && !this.passingFeed.isLive) return; // catch-up still running
+    const register = isTimingDecodersDocument(this.decodersClient.data) ? this.decodersClient.data : null;
+    const inWindow = this.passingFeed.passings.filter((p) => isSeqInLiveTrackingMeasurement(p.seq, measurement));
+    const passings = toTimingPointPassings(inWindow, setup, register);
 
     const warnings: string[] = [];
 
@@ -684,186 +694,80 @@ export class SessionLoop {
   }
 
   /**
-   * Executes one command-queue tick.
+   * Executes one command-queue tick: starts the next queued command and runs it. Commands need
+   * the current last seq of the timing passing store (the measurement window boundary), so the
+   * execution is asynchronous; one command at a time.
    */
   private tickCommands() {
+    if (this.commandInFlight) return;
     const session = this.sessionClient.data;
     if (!session || !isLiveTrackingSessionDocument(session)) return;
 
     const t = nowIso();
-    let nextSession = session;
-
-    const running = getRunningLiveTrackingCommand(nextSession);
-    if (!running) {
-      const queued = getNextQueuedLiveTrackingCommand(nextSession);
-      if (queued) {
-        nextSession = startLiveTrackingCommand(nextSession, queued.id, t);
-      }
+    let next = session;
+    if (!getRunningLiveTrackingCommand(next)) {
+      const queued = getNextQueuedLiveTrackingCommand(next);
+      if (queued) next = startLiveTrackingCommand(next, queued.id, t);
     }
+    const active = getRunningLiveTrackingCommand(next);
+    this.commitIfChanged(session, next);
+    if (!active || this.executedCommandIds.has(active.id)) return;
+    this.executedCommandIds.add(active.id);
 
-    const active = getRunningLiveTrackingCommand(nextSession);
-    if (!active) {
-      this.commitIfChanged(session, nextSession);
+    this.commandInFlight = true;
+    void this.executeCommand(active.id, active.intent).finally(() => {
+      this.commandInFlight = false;
+      this.scheduleTickCommands();
+    });
+  }
+
+  private async executeCommand(commandId: string, intent: LiveTrackingCommandIntent) {
+    let lastSeq: number;
+    try {
+      lastSeq = await this.fetchLastSeq();
+    } catch (err) {
+      const message = `${intent} failed: passing store unreachable (${err instanceof Error ? err.message : String(err)})`;
+      this.applySessionUpdate((s) =>
+        failLiveTrackingCommand(s, { commandId, processedAt: nowIso(), message, nextState: "error", updatedAt: nowIso() }),
+      );
       return;
     }
+    const t = nowIso();
+    this.applySessionUpdate((s) => {
+      const running = s.state === "running";
+      const nextState = intent === "start" ? "running" : intent === "stop" ? "idle" : running ? "running" : "idle";
+      const measurement = applyLiveTrackingMeasurementCommand(s.measurement, intent, { lastSeq, at: t, running });
+      return completeLiveTrackingCommand(
+        { ...s, measurement, desiredState: nextState },
+        { commandId, processedAt: t, nextState, updatedAt: t },
+      );
+    });
+  }
 
-    switch (active.intent) {
-      case "prepare": {
-        if (nextSession.state === "idle" || nextSession.state === "ready" || nextSession.state === "error") {
-          nextSession = transitionLiveTrackingSessionState(nextSession, "preparing", t);
-          nextSession = completeLiveTrackingCommand(nextSession, {
-            commandId: active.id,
-            processedAt: t,
-            nextState: "ready",
-            updatedAt: t,
-          });
-          break;
-        }
-        if (nextSession.state === "preparing") {
-          nextSession = completeLiveTrackingCommand(nextSession, {
-            commandId: active.id,
-            processedAt: t,
-            nextState: "ready",
-            updatedAt: t,
-          });
-          break;
-        }
-        nextSession = failLiveTrackingCommand(nextSession, {
-          commandId: active.id,
-          processedAt: t,
-          message: `prepare is invalid from state ${nextSession.state}`,
-          nextState: "error",
-          updatedAt: t,
-        });
-        break;
-      }
+  private applySessionUpdate(mutate: (s: LiveTrackingSessionDocument) => LiveTrackingSessionDocument) {
+    const before = this.sessionClient.data;
+    if (!before || !isLiveTrackingSessionDocument(before)) return;
+    this.commitIfChanged(before, mutate(before));
+  }
 
-      case "start": {
-        if (nextSession.state === "ready") {
-          nextSession = completeLiveTrackingCommand(nextSession, {
-            commandId: active.id,
-            processedAt: t,
-            nextState: "running",
-            updatedAt: t,
-          });
-          break;
-        }
-        nextSession = failLiveTrackingCommand(nextSession, {
-          commandId: active.id,
-          processedAt: t,
-          message: `start is invalid from state ${nextSession.state}`,
-          nextState: "error",
-          updatedAt: t,
-        });
-        break;
-      }
+  /** Current last seq of the timing passing store (start/stop boundary of a measurement). */
+  private async fetchLastSeq(): Promise<number> {
+    const res = await fetch(`${this.baseHttpUrl}/timing/passings/stats`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const stats = (await res.json()) as { lastSeq?: unknown };
+    if (typeof stats.lastSeq !== "number") throw new Error("no lastSeq");
+    return stats.lastSeq;
+  }
 
-      case "stop": {
-        if (nextSession.state === "running") {
-          nextSession = transitionLiveTrackingSessionState(nextSession, "stopping", t);
-          nextSession = completeLiveTrackingCommand(nextSession, {
-            commandId: active.id,
-            processedAt: t,
-            nextState: "ready",
-            updatedAt: t,
-          });
-          break;
-        }
-        if (nextSession.state === "stopping") {
-          nextSession = completeLiveTrackingCommand(nextSession, {
-            commandId: active.id,
-            processedAt: t,
-            nextState: "ready",
-            updatedAt: t,
-          });
-          break;
-        }
-        if (nextSession.state === "ready") {
-          nextSession = completeLiveTrackingCommand(nextSession, {
-            commandId: active.id,
-            processedAt: t,
-            updatedAt: t,
-          });
-          break;
-        }
-        nextSession = failLiveTrackingCommand(nextSession, {
-          commandId: active.id,
-          processedAt: t,
-          message: `stop is invalid from state ${nextSession.state}`,
-          nextState: "error",
-          updatedAt: t,
-        });
-        break;
-      }
-
-      case "shutdown": {
-        if (nextSession.state === "ready" || nextSession.state === "error") {
-          nextSession = completeLiveTrackingCommand(nextSession, {
-            commandId: active.id,
-            processedAt: t,
-            nextState: "idle",
-            updatedAt: t,
-          });
-          break;
-        }
-        if (nextSession.state === "idle") {
-          nextSession = completeLiveTrackingCommand(nextSession, {
-            commandId: active.id,
-            processedAt: t,
-            updatedAt: t,
-          });
-          break;
-        }
-        nextSession = failLiveTrackingCommand(nextSession, {
-          commandId: active.id,
-          processedAt: t,
-          message: `shutdown is invalid from state ${nextSession.state}`,
-          nextState: "error",
-          updatedAt: t,
-        });
-        break;
-      }
-
-      case "reset": {
-        if (nextSession.state === "preparing" || nextSession.state === "stopping") {
-          nextSession = transitionLiveTrackingSessionState(nextSession, "ready", t);
-          nextSession = completeLiveTrackingCommand(nextSession, {
-            commandId: active.id,
-            processedAt: t,
-            nextState: "idle",
-            updatedAt: t,
-          });
-          break;
-        }
-        if (nextSession.state === "ready" || nextSession.state === "error") {
-          nextSession = completeLiveTrackingCommand(nextSession, {
-            commandId: active.id,
-            processedAt: t,
-            nextState: "idle",
-            updatedAt: t,
-          });
-          break;
-        }
-        if (nextSession.state === "idle") {
-          nextSession = completeLiveTrackingCommand(nextSession, {
-            commandId: active.id,
-            processedAt: t,
-            updatedAt: t,
-          });
-          break;
-        }
-        nextSession = failLiveTrackingCommand(nextSession, {
-          commandId: active.id,
-          processedAt: t,
-          message: `reset is invalid from state ${nextSession.state}`,
-          nextState: "error",
-          updatedAt: t,
-        });
-        break;
-      }
-    }
-
-    this.commitIfChanged(session, nextSession);
+  /** Session documents of older versions (prepare/ready/stopping) are migrated in place. */
+  private migrateSessionDocument(): boolean {
+    const data = this.sessionClient.data;
+    if (!data || isLiveTrackingSessionDocument(data)) return false;
+    const migrated = normalizeLiveTrackingSessionDocument(data);
+    if (!migrated) return false;
+    console.log("[livetracking-worker] migrating session document from an older version");
+    this.sessionClient.update(() => migrated);
+    return true;
   }
 
   private commitIfChanged(previous: LiveTrackingSessionDocument, next: LiveTrackingSessionDocument) {

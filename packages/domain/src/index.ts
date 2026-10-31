@@ -112,3 +112,6 @@ export type {
 // LiveTracking domain model (phase 0 baseline).
 export * from "./livetracking/index.js";
 
+// Timing layer: decoder register, connection, status, passings (doc/timing-architecture.md).
+export * from "./timing/index.js";
+
