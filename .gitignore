@@ -42,3 +42,7 @@ examples/58_rec2.bin
 # RMonitor recordings of full competition days: local only (size, personal data).
 packages/rmonitor/test/fixtures/recordings-local/
 packages/rmonitor/test/fixtures/golden-local/
+
+# Leaderboard service runtime data: uploaded/recorded RMonitor files and runtime config.
+apps/server/data/leaderboard/
+apps/leaderboard-service/data/
