@@ -118,6 +118,27 @@ export default function LiveTrackingLayout() {
           <Box sx={{ flexGrow: 1 }} />
 
           <Box sx={{ display: "flex", gap: 1, mr: 1 }}>
+            <Chip
+              size="small"
+              clickable
+              component={Link}
+              to="/timing/control"
+              label={`Worker: ${online ? "läuft" : "aus"}`}
+              color={online ? "success" : "default"}
+            />
+            <Chip
+              size="small"
+              label={wanted === 0 ? "Hardware: getrennt" : `Hardware: ${connected}/${wanted} verbunden`}
+              color={wanted === 0 ? "default" : connected === wanted ? "success" : "warning"}
+            />
+            <Chip
+              size="small"
+              clickable
+              component={Link}
+              to="/live-tracking/measurement"
+              label={`Messung: ${measurementState === "running" ? "läuft" : measurementState === "error" ? "Fehler" : "bereit"}`}
+              color={measurementState === "running" ? "success" : measurementState === "error" ? "error" : "default"}
+            />
             {simulatorState ? (
               <Tooltip describeChild title="Ein simulierter Decoder ist aktiv – zur Simulation" arrow>
                 <Chip
@@ -126,22 +147,20 @@ export default function LiveTrackingLayout() {
                   component={Link}
                   to="/timing/decoders?tab=simulation"
                   icon={<ScienceIcon />}
-                  label={simulatorState === "error" ? "Simulation: Fehler" : simulatorState === "running" ? "Simulation aktiv" : "Simulation startet"}
-                  color={simulatorState === "error" ? "error" : "warning"}
+                  label={
+                    simulatorState === "error"
+                      ? "Decoder Simulation: Fehler"
+                      : simulatorState === "running"
+                        ? "Decoder Simulation aktiv"
+                        : "Decoder Simulation startet"
+                  }
+                  // Information, not an alert: light blue; only a failed simulator is shown as error.
+                  {...(simulatorState === "error"
+                    ? { color: "error" as const }
+                    : { sx: { bgcolor: "#e1f5fe", color: "#01579b", "& .MuiChip-icon": { color: "#0277bd" }, "&:hover": { bgcolor: "#b3e5fc" } } })}
                 />
               </Tooltip>
             ) : null}
-            <Chip size="small" label={`Worker: ${online ? "läuft" : "aus"}`} color={online ? "success" : "default"} />
-            <Chip
-              size="small"
-              label={wanted === 0 ? "Hardware: getrennt" : `Hardware: ${connected}/${wanted} verbunden`}
-              color={wanted === 0 ? "default" : connected === wanted ? "success" : "warning"}
-            />
-            <Chip
-              size="small"
-              label={`Messung: ${measurementState === "running" ? "läuft" : measurementState === "error" ? "Fehler" : "bereit"}`}
-              color={measurementState === "running" ? "success" : measurementState === "error" ? "error" : "default"}
-            />
           </Box>
 
           <Tooltip title="Zurück zu RaceOffice" arrow>

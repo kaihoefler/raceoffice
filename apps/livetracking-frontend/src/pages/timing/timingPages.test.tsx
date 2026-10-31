@@ -181,11 +181,19 @@ describe("simulator label in the app bar", () => {
         [TIMING_STATUS_DOC_ID]: { ...createTimingStatusDocument(), simulator: { state: "running", startedAt: null, lastError: null, lastLine: null } },
       },
     });
-    await user.click(await screen.findByRole("link", { name: /Simulation aktiv/ }));
+    await user.click(await screen.findByRole("link", { name: "Decoder Simulation aktiv" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/livetracking/timing/decoders"));
     expect(router.state.location.search).toBe("?tab=simulation");
     expect(await screen.findByRole("tab", { name: "Simulation", selected: true })).toBeInTheDocument();
     expect(await screen.findByText("Decoder-Simulation")).toBeInTheDocument();
+  });
+
+  it("worker and measurement labels lead to the Control Center and the measurement page", async () => {
+    const { user, router } = renderApp({ route: "/timing/decoders" });
+    await user.click(await screen.findByRole("link", { name: "Messung: bereit" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/livetracking/live-tracking/measurement"));
+    await user.click(screen.getByRole("link", { name: "Worker: aus" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/livetracking/timing/control"));
   });
 
   it("is hidden while the simulator is off", async () => {
