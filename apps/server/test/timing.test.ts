@@ -11,7 +11,9 @@ import WebSocket from "ws";
 import {
   createLiveTrackingListDocument,
   createLiveTrackingSetupDocument,
+  createLiveTrackingSessionDocument,
   makeLiveTrackingListDocId,
+  makeLiveTrackingSessionDocId,
   makeLiveTrackingSetupDocId,
   TIMING_DECODERS_DOC_ID,
   type TimingPassingInput,
@@ -181,5 +183,18 @@ describe("timing API and stream", () => {
     const register = docs.loadDoc(TIMING_DECODERS_DOC_ID).data;
     docs.close();
     expect(register.decoders).toEqual([expect.objectContaining({ id: "p3@10.0.0.7:5403", name: "Ziel", backend: "p3" })]);
+  });
+
+  it("migrates an old session document (prepare/ready) at startup", async () => {
+    await start((docs) => {
+      docs.saveDoc(makeLiveTrackingSessionDocId(), {
+        rev: 3,
+        data: { ...createLiveTrackingSessionDocument({ setupId: "s1", eventId: "" }), state: "ready", desiredState: "ready" },
+      });
+    });
+    const docs = new DocStore(path.join(tmpDir, "raceoffice.db"));
+    const session = docs.loadDoc(makeLiveTrackingSessionDocId());
+    docs.close();
+    expect(session).toMatchObject({ rev: 4, data: { state: "idle", desiredState: "idle" } });
   });
 });

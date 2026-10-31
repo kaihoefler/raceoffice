@@ -13,6 +13,7 @@ export * from "./connection.js";
 export * from "./decoders.js";
 export * from "./legacySetup.js";
 export * from "./passing.js";
+export * from "./setupMapping.js";
 export * from "./status.js";
 
 /** Singleton realtime documents of the timing layer. */

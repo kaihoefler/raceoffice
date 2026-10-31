@@ -14,6 +14,9 @@ import {
   TIMING_CONNECTION_DOC_ID,
   TIMING_DECODERS_DOC_ID,
   TIMING_STATUS_DOC_ID,
+  getSetupDecoderIds,
+  toTimingPointPassings,
+  type TimingPassing,
   type TimingPassingInput,
 } from "./index.js";
 
@@ -123,5 +126,46 @@ describe("migration of LiveTracking setups", () => {
     expect(migrated.track.timingPoints.map((p) => p.decoderId)).toEqual(["ammc@192.168.1.50:9001", "40-24-04-00"]);
     expect(migrated.track.timingPoints[0]).toMatchObject({ decoderIp: "192.168.1.50", websocketPortAMM: 9001 });
     expect(assignLegacyDecoderIds(migrated)).toBe(migrated);
+  });
+});
+
+describe("setup mapping (consumer side)", () => {
+  const stored = (n: number, decoderId: string, overrides: Partial<TimingPassing> = {}): TimingPassing => ({
+    seq: n,
+    id: `p${n}`,
+    decoderId,
+    connectionSessionId: null,
+    decoderTime: "2026-10-31T10:00:00.000Z",
+    timeSource: "rtc",
+    receivedAt: "2026-10-31T10:00:00.000Z",
+    passingNumber: n,
+    transponderId: "1234",
+    transponderType: "tranx",
+    signalStrength: null,
+    hits: null,
+    lowBattery: null,
+    signalKind: null,
+    backend: "p3",
+    raw: null,
+    ...overrides,
+  });
+
+  it("maps decoder passings to timing points with the register offset; two setups share the passings", () => {
+    const decoders = mergeLegacySetupDecoders(createTimingDecodersDocument(), [setup([point({})])], "t");
+    const withOffset = { ...decoders, decoders: decoders.decoders.map((d) => ({ ...d, clockOffsetSecs: 1 })) };
+    const a = setup([point({ id: "finish", decoderId: "ammc@192.168.1.50:9001" })]);
+    const b = setup([point({ id: "ziel-b", decoderId: "ammc@192.168.1.50:9001" }), point({ id: "off", enabled: false, decoderId: "x" })]);
+    const passings = [stored(1, "ammc@192.168.1.50:9001"), stored(2, "other"), stored(3, "ammc@192.168.1.50:9001", { signalKind: "start_signal" })];
+
+    expect(getSetupDecoderIds(a)).toEqual(["ammc@192.168.1.50:9001"]);
+    expect(toTimingPointPassings(passings, a, withOffset)).toEqual([
+      { id: "finish:p1", timestamp: "2026-10-31T10:00:01.000Z", transponderId: "1234", timingPointId: "finish", decoderId: "ammc@192.168.1.50:9001" },
+    ]);
+    expect(toTimingPointPassings(passings, b, withOffset).map((p) => p.timingPointId)).toEqual(["ziel-b"]);
+  });
+
+  it("uses the timing point offset for decoders missing in the register", () => {
+    const s = setup([point({ decoderTimestampOffsetSecs: -2 })]);
+    expect(toTimingPointPassings([stored(1, "ammc@192.168.1.50:9001")], s, null)[0]?.timestamp).toBe("2026-10-31T09:59:58.000Z");
   });
 });

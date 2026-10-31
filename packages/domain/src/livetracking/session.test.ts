@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyLiveTrackingMeasurementCommand,
   canIssueLiveTrackingCommand,
   completeLiveTrackingCommand,
   createLiveTrackingCommand,
@@ -8,118 +9,112 @@ import {
   enqueueLiveTrackingCommand,
   failLiveTrackingCommand,
   getLiveTrackingCommandTargetState,
+  getLiveTrackingMeasurementFromSeq,
   getNextQueuedLiveTrackingCommand,
   getRunningLiveTrackingCommand,
+  isSeqInLiveTrackingMeasurement,
+  normalizeLiveTrackingSessionDocument,
   startLiveTrackingCommand,
   transitionLiveTrackingSessionState,
 } from "./session.js";
 
-describe("livetracking/session command model", () => {
-  it("maps command intents to stable target states", () => {
-    expect(getLiveTrackingCommandTargetState("prepare")).toBe("ready");
+const session = () => createLiveTrackingSessionDocument({ setupId: "s1", eventId: "e1" });
+const cmd = (id: string, intent: "start" | "stop" | "reset") => createLiveTrackingCommand({ id, intent, requestedAt: "t" });
+
+describe("live tracking session state machine", () => {
+  it("allows start from idle/error, stop only while running, reset always", () => {
+    expect(canIssueLiveTrackingCommand("idle", "start")).toBe(true);
+    expect(canIssueLiveTrackingCommand("error", "start")).toBe(true);
+    expect(canIssueLiveTrackingCommand("running", "start")).toBe(false);
+    expect(canIssueLiveTrackingCommand("idle", "stop")).toBe(false);
+    expect(canIssueLiveTrackingCommand("running", "stop")).toBe(true);
+    for (const state of ["idle", "running", "error"] as const) expect(canIssueLiveTrackingCommand(state, "reset")).toBe(true);
     expect(getLiveTrackingCommandTargetState("start")).toBe("running");
-    expect(getLiveTrackingCommandTargetState("stop")).toBe("ready");
-    expect(getLiveTrackingCommandTargetState("shutdown")).toBe("idle");
-    expect(getLiveTrackingCommandTargetState("reset")).toBe("idle");
+    expect(getLiveTrackingCommandTargetState("stop")).toBe("idle");
   });
 
-  it("enqueues prepare from idle and sets desiredState", () => {
-    const session = createLiveTrackingSessionDocument({
-      setupId: "setup-1",
-      eventId: "event-1",
-    });
-
-    expect(canIssueLiveTrackingCommand(session.state, "prepare")).toBe(true);
-
-    const command = createLiveTrackingCommand({
-      id: "cmd-1",
-      intent: "prepare",
-      requestedAt: "2026-01-01T10:00:00.000Z",
-    });
-
-    const next = enqueueLiveTrackingCommand(session, command, "2026-01-01T10:00:01.000Z");
-
-    expect(next.desiredState).toBe("ready");
-    expect(next.commandQueue).toHaveLength(1);
-    expect(next.commandQueue[0].status).toBe("queued");
-    expect(next.updatedAt).toBe("2026-01-01T10:00:01.000Z");
+  it("queues commands FIFO with one running command", () => {
+    let s = enqueueLiveTrackingCommand(session(), cmd("a", "start"), "t1");
+    expect(s.desiredState).toBe("running");
+    // stop is not allowed while still idle
+    expect(enqueueLiveTrackingCommand(s, cmd("b", "stop"))).toBe(s);
+    s = startLiveTrackingCommand(s, "a", "t2");
+    expect(getRunningLiveTrackingCommand(s)?.id).toBe("a");
+    expect(getNextQueuedLiveTrackingCommand(s)).toBeNull();
+    s = completeLiveTrackingCommand(s, { commandId: "a", processedAt: "t3", nextState: "running" });
+    expect(s.state).toBe("running");
+    expect(s.commandQueue[0]?.status).toBe("completed");
   });
 
-  it("allows only one running command and returns next queued only when idle", () => {
-    let session = createLiveTrackingSessionDocument({
-      setupId: "setup-1",
-      eventId: "event-1",
-    });
+  it("validates transitions and records failures", () => {
+    const s = session();
+    expect(transitionLiveTrackingSessionState(s, "running").state).toBe("running");
+    const running = startLiveTrackingCommand(enqueueLiveTrackingCommand(s, cmd("a", "start")), "a");
+    const failed = failLiveTrackingCommand(running, { commandId: "a", processedAt: "t", message: "no store", nextState: "error" });
+    expect(failed).toMatchObject({ state: "error", lastError: "no store" });
+  });
+});
 
-    session = transitionLiveTrackingSessionState(session, "preparing");
-    session = transitionLiveTrackingSessionState(session, "ready");
+describe("measurement window", () => {
+  const measurement = {
+    segments: [
+      { fromSeq: 10, toSeq: 20, startedAt: "a", stoppedAt: "b" },
+      { fromSeq: 30, toSeq: null, startedAt: "c", stoppedAt: null },
+    ],
+  };
 
-    const startCommand = createLiveTrackingCommand({
-      id: "cmd-start",
-      intent: "start",
-      requestedAt: "2026-01-01T10:01:00.000Z",
-    });
-    const stopCommand = createLiveTrackingCommand({
-      id: "cmd-stop",
-      intent: "stop",
-      requestedAt: "2026-01-01T10:01:10.000Z",
-    });
+  it("includes passings of all segments but not the pause", () => {
+    expect(isSeqInLiveTrackingMeasurement(10, measurement)).toBe(false);
+    expect(isSeqInLiveTrackingMeasurement(11, measurement)).toBe(true);
+    expect(isSeqInLiveTrackingMeasurement(20, measurement)).toBe(true);
+    expect(isSeqInLiveTrackingMeasurement(25, measurement)).toBe(false);
+    expect(isSeqInLiveTrackingMeasurement(999, measurement)).toBe(true);
+    expect(isSeqInLiveTrackingMeasurement(5, null)).toBe(false);
+    expect(getLiveTrackingMeasurementFromSeq(measurement)).toBe(10);
+    expect(getLiveTrackingMeasurementFromSeq(undefined)).toBeNull();
+  });
+});
 
-    session = enqueueLiveTrackingCommand(session, startCommand);
-    session = enqueueLiveTrackingCommand(session, stopCommand);
-
-    expect(getNextQueuedLiveTrackingCommand(session)?.id).toBe("cmd-start");
-
-    session = startLiveTrackingCommand(session, "cmd-start");
-    expect(getRunningLiveTrackingCommand(session)?.id).toBe("cmd-start");
-    expect(getNextQueuedLiveTrackingCommand(session)).toBeNull();
-
-    // Starting another command while one is running is ignored.
-    const unchanged = startLiveTrackingCommand(session, "cmd-stop");
-    expect(unchanged).toEqual(session);
+describe("migration of old session documents", () => {
+  it("maps the former stages to idle and settles old prepare/shutdown commands", () => {
+    const legacy = {
+      ...session(),
+      state: "ready",
+      desiredState: "ready",
+      commandQueue: [
+        { id: "a", intent: "prepare", status: "completed", requestedAt: "t", processedAt: "t", message: null },
+        { id: "b", intent: "shutdown", status: "queued", requestedAt: "t", processedAt: null, message: null },
+      ],
+    };
+    const migrated = normalizeLiveTrackingSessionDocument(legacy)!;
+    expect(migrated).toMatchObject({ state: "idle", desiredState: "idle" });
+    expect(migrated.commandQueue.map((c) => [c.intent, c.status])).toEqual([
+      ["start", "completed"],
+      ["stop", "completed"],
+    ]);
+    expect(getNextQueuedLiveTrackingCommand(migrated)).toBeNull();
   });
 
-  it("completes and fails commands with traceable status updates", () => {
-    let session = createLiveTrackingSessionDocument({
-      setupId: "setup-1",
-      eventId: "event-1",
-    });
+  it("returns current documents unchanged and rejects non-sessions", () => {
+    const s = session();
+    expect(normalizeLiveTrackingSessionDocument(s)).toBe(s);
+    expect(normalizeLiveTrackingSessionDocument({ kind: "other" })).toBeNull();
+  });
+});
 
-    const prepare = createLiveTrackingCommand({
-      id: "cmd-prepare",
-      intent: "prepare",
-      requestedAt: "2026-01-01T10:02:00.000Z",
-    });
-
-    session = enqueueLiveTrackingCommand(session, prepare);
-    session = startLiveTrackingCommand(session, "cmd-prepare");
-    session = transitionLiveTrackingSessionState(session, "preparing");
-    session = completeLiveTrackingCommand(session, {
-      commandId: "cmd-prepare",
-      processedAt: "2026-01-01T10:02:02.000Z",
-      nextState: "ready",
-    });
-
-    expect(session.commandQueue[0].status).toBe("completed");
-    expect(session.state).toBe("ready");
-
-    const start = createLiveTrackingCommand({
-      id: "cmd-start",
-      intent: "start",
-      requestedAt: "2026-01-01T10:03:00.000Z",
-    });
-
-    session = enqueueLiveTrackingCommand(session, start);
-    session = startLiveTrackingCommand(session, "cmd-start");
-    session = failLiveTrackingCommand(session, {
-      commandId: "cmd-start",
-      processedAt: "2026-01-01T10:03:02.000Z",
-      message: "decoder timeout",
-      nextState: "error",
-    });
-
-    expect(session.commandQueue[1].status).toBe("failed");
-    expect(session.lastError).toBe("decoder timeout");
-    expect(session.state).toBe("error");
+describe("measurement commands", () => {
+  it("start/stop/start keeps segments, reset starts over", () => {
+    let m = applyLiveTrackingMeasurementCommand(null, "start", { lastSeq: 10, at: "a", running: false });
+    expect(m).toEqual({ segments: [{ fromSeq: 10, toSeq: null, startedAt: "a", stoppedAt: null }] });
+    m = applyLiveTrackingMeasurementCommand(m, "stop", { lastSeq: 20, at: "b", running: true });
+    m = applyLiveTrackingMeasurementCommand(m, "start", { lastSeq: 30, at: "c", running: false });
+    expect(m?.segments.map((s) => [s.fromSeq, s.toSeq])).toEqual([
+      [10, 20],
+      [30, null],
+    ]);
+    expect(applyLiveTrackingMeasurementCommand(m, "reset", { lastSeq: 40, at: "d", running: true })?.segments).toEqual([
+      { fromSeq: 40, toSeq: null, startedAt: "d", stoppedAt: null },
+    ]);
+    expect(applyLiveTrackingMeasurementCommand(m, "reset", { lastSeq: 40, at: "d", running: false })).toBeNull();
   });
 });

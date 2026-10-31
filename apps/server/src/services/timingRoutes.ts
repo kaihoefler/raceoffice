@@ -7,7 +7,10 @@ import {
   isTimingDecodersDocument,
   isTimingPassingInput,
   makeLiveTrackingListDocId,
+  makeLiveTrackingSessionDocId,
   makeLiveTrackingSetupDocId,
+  normalizeLiveTrackingSessionDocument,
+  isLiveTrackingSessionDocument,
   mergeLegacySetupDecoders,
   TIMING_DECODERS_DOC_ID,
   type LiveTrackingSetupDocument,
@@ -158,4 +161,18 @@ export function migrateLegacySetupDecoders(
   if (merged === base) return 0;
   commit(TIMING_DECODERS_DOC_ID, () => merged);
   return merged.decoders.length - base.decoders.length;
+}
+
+/** Migrates the LiveTracking session document of older versions; true if it was rewritten. */
+export function migrateLegacySession(
+  loadDoc: (id: string) => Doc,
+  commit: (docId: string, updater: (current: unknown) => unknown) => Doc,
+): boolean {
+  const id = makeLiveTrackingSessionDocId();
+  const current = loadDoc(id).data;
+  if (isLiveTrackingSessionDocument(current)) return false;
+  const migrated = normalizeLiveTrackingSessionDocument(current);
+  if (!migrated) return false;
+  commit(id, () => migrated);
+  return true;
 }

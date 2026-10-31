@@ -2,7 +2,7 @@
 
 Dieses Dokument beschreibt die Zielarchitektur für Zeitmess-Hardware, Passings und deren Abnehmer in RaceOffice. Es ist die Referenz für alle weiteren Arbeiten an Livetracking, Decoder-Anbindung und einer späteren vollständigen Zeitmessung.
 
-- **Status:** Zielbild beschlossen. Umsetzung in Phasen, siehe [Migrationspfad](#8-migrationspfad-vom-ist-zustand).
+- **Status:** Phasen 0–3 umgesetzt (Branch `livetracking-control-center`), siehe [Migrationspfad](#8-migrationspfad-vom-ist-zustand).
 - **Verwandt:** [architecture.md](architecture.md) (Realtime-Dokumentmodell), [livetracking-decoder-backend-plan.md](livetracking-decoder-backend-plan.md) (Adapter-Schicht AMMC/P3).
 
 ---
@@ -199,13 +199,20 @@ Der Messablauf im Livetracking besteht nur aus **Start** und **Stop**. Die früh
 
 | Phase | Inhalt |
 |---|---|
-| 0 | Dieses Dokument. |
-| 1 – Timing-Ebene | Passing-Tabelle und API im Server, Decoder-Register, explizite Verbindungssteuerung, erweiterter Decoder-Status (P3-Status, Hardware-Info). Die Adapter arbeiten auf Register-Einträgen statt auf Timing-Points. Bestehende Setups werden migriert: Aus den Decoder-Angaben der Timing-Points werden Register-Einträge, gleiche Adresse und gleiches Backend ergeben denselben Decoder, der Timing-Point bekommt dessen ID. |
-| 2 – Livetracking als Abnehmer | Session auf `idle / running / error` mit `start / stop / reset` vereinfachen (alte Zustände werden migriert). Messfenster `startSeq/stopSeq`. Projektion aus dem Passing-Store über `toTimingPointPassings(passings, setup, decoders)`. Getrenntes Löschen. Altes Dokument `liveTrackingPassingHistory` und dessen Writer werden nach Import in die Tabelle entfernt. |
-| 3 – Oberfläche | Control Center „Zeitmessung“ und „Livetracking“ wie in Abschnitt 7. Die bisherige Steuerseite wird aufgeteilt. |
+| 0 ✓ | Dieses Dokument. |
+| 1 ✓ Timing-Ebene | Passing-Tabelle und API im Server, Decoder-Register, explizite Verbindungssteuerung, erweiterter Decoder-Status (P3-Status, Hardware-Info). Die Adapter arbeiten auf Register-Einträgen statt auf Timing-Points. Bestehende Setups werden migriert: Aus den Decoder-Angaben der Timing-Points werden Register-Einträge, gleiche Adresse und gleiches Backend ergeben denselben Decoder, der Timing-Point bekommt dessen ID. |
+| 2 ✓ Livetracking als Abnehmer | Session auf `idle / running / error` mit `start / stop / reset` vereinfachen (alte Zustände werden migriert). Messfenster `startSeq/stopSeq`. Projektion aus dem Passing-Store über `toTimingPointPassings(passings, setup, decoders)`. Getrenntes Löschen. Altes Dokument `liveTrackingPassingHistory` und dessen Writer werden nach Import in die Tabelle entfernt. |
+| 3 ✓ Oberfläche | Control Center „Zeitmessung“ und „Livetracking“ wie in Abschnitt 7. Die bisherige Steuerseite wird aufgeteilt. |
 | später | Livetracking-Projektion als eigener Prozess, Abnehmer „Zeitmessung“ (Rennen, Wertung), weitere Hardware, Export der Passings. |
 
-### Ist-Zustand (zur Einordnung)
+### Umsetzungsnotizen
+- **Messfenster:** Die Session führt `measurement.segments` (je Laufabschnitt `fromSeq`/`toSeq` auf dem Passing-Store). Start nach Stop setzt die Messung mit einem neuen Abschnitt fort, die Pause zählt nicht. „Messung zurücksetzen“ verwirft alle Abschnitte, eine laufende Messung beginnt sofort neu.
+- **Livetracking als Abnehmer:** Der Worker liest die Passings der Decoder des Setups ab dem ersten Abschnitt über den Stream `/timing/passings/stream` (`TimingPassingFeed`), filtert sie auf die Abschnitte und übersetzt sie mit `toTimingPointPassings` (Zuordnung und Uhr-Offset aus dem Register).
+- **Migration:** Alte Session-Dokumente (`preparing`/`ready`/`stopping`, Kommandos `prepare`/`shutdown`) werden beim Serverstart und im Worker auf `idle` bzw. `start`/`stop` umgestellt (`normalizeLiveTrackingSessionDocument`). Die frühere Passing-History (Dokument `liveTrackingPassingHistory`) wird nicht mehr geschrieben und nicht übernommen. Sie enthielt nur die Durchfahrten der jeweils laufenden Session.
+- **Setups:** Timing-Points speichern die `decoderId`. Die alten Adressfelder bleiben im Dokument, werden aber nicht mehr bearbeitet.
+- **Oberfläche:** `/timing/control`, `/timing/decoders`, `/timing/setups`, `/live-tracking/measurement`. Die alte Seite `/live-tracking/setup` leitet auf „Messung“ um.
+
+### Ist-Zustand vor dem Umbau (zur Einordnung)
 - `apps/livetracking-worker`: verbindet die Decoder abhängig vom Session-Zustand `running`, schreibt Passings in das Realtime-Dokument `liveTrackingPassingHistory` (`PassingHistoryWriter`) und rechnet die Ergebnisse.
 - `LiveTrackingSetupDocument`: vermischt Strecke, Timing-Points, Decoder-Adressen, Simulationsparameter und Teilnehmer-Pools.
 - `runtime.decoders[]`: enthält Verbindungsstatus je Timing-Point. Gerätestatus von P3 wird bisher verworfen.
