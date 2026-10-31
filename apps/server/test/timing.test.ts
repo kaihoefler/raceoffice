@@ -197,4 +197,14 @@ describe("timing API and stream", () => {
     docs.close();
     expect(session).toMatchObject({ rev: 4, data: { state: "idle", desiredState: "idle" } });
   });
+
+  it("takes the session setup as active setup of the timing layer at startup", async () => {
+    await start((docs) => {
+      docs.saveDoc(makeLiveTrackingSessionDocId(), { rev: 1, data: createLiveTrackingSessionDocument({ setupId: "s9", eventId: "" }) });
+    });
+    const docs = new DocStore(path.join(tmpDir, "raceoffice.db"));
+    const connection = docs.loadDoc("timingConnection").data;
+    docs.close();
+    expect(connection.activeSetupId).toBe("s9");
+  });
 });

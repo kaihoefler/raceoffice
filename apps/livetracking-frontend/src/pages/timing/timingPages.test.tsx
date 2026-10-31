@@ -131,6 +131,32 @@ describe("timing control center", () => {
   });
 });
 
+describe("active setup in the control center", () => {
+  it("activates a setup for the measurement and connects exactly its decoders", async () => {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const { server, user } = renderApp({
+      route: "/timing/control",
+      fetch: fetchStub(calls),
+      docs: {
+        [makeLiveTrackingSessionDocId()]: createLiveTrackingSessionDocument({ setupId: "", eventId: "" }),
+        [makeLiveTrackingListDocId()]: { kind: "liveTrackingList", version: 1, setups: [{ setupId: "s1", name: "Arena", updatedAt: null }], participantPools: [] },
+        [makeLiveTrackingSetupDocId("s1")]: setup(),
+        [TIMING_DECODERS_DOC_ID]: register(P3, SIM),
+        [TIMING_CONNECTION_DOC_ID]: { ...createTimingConnectionDocument(), connectedDecoderIds: [SIM.id] },
+      },
+    });
+    expect(await screen.findByText("Noch kein Setup aktiviert.")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("combobox", { name: "Setup" })[0]!);
+    await user.click(await screen.findByRole("option", { name: "Arena" }));
+    await waitFor(() => expect(server.doc(TIMING_CONNECTION_DOC_ID).data.activeSetupId).toBe("s1"));
+    await waitFor(() => expect(server.doc(makeLiveTrackingSessionDocId()).data.setupId).toBe("s1"));
+
+    expect(await screen.findByText("Ziel: getrennt")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Nur diese verbinden" }));
+    await waitFor(() => expect(server.doc(TIMING_CONNECTION_DOC_ID).data.connectedDecoderIds).toEqual([P3.id]));
+  });
+});
+
 describe("decoder register", () => {
   it("adds a P3 decoder with an address id", async () => {
     const { server, user } = renderApp({ route: "/timing/decoders" });
@@ -217,7 +243,9 @@ describe("measurement", () => {
       measurement: { segments: [{ fromSeq: 10, toSeq: null, startedAt: new Date().toISOString(), stoppedAt: null }] },
     });
     expect(await screen.findByRole("button", { name: "Messung stoppen" })).toBeEnabled();
-    expect(screen.getByRole("combobox", { name: "Setup" })).toHaveAttribute("aria-disabled", "true");
+    // The setup is shown only; it is chosen in the Control Center.
+    expect(screen.getByRole("textbox", { name: "Setup" })).toHaveValue("Arena");
+    expect(screen.getByRole("textbox", { name: "Setup" })).toHaveAttribute("readonly");
 
     await user.click(screen.getByRole("button", { name: "Messung zurücksetzen …" }));
     await user.click(await screen.findByRole("button", { name: "Zurücksetzen" }));

@@ -98,23 +98,19 @@ export default function LiveTrackingMeasurementPage() {
         <Divider />
         <CardContent>
           <Stack spacing={2}>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+            <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ alignItems: { md: "flex-start" } }}>
+              {/* The setup is activated in the timing Control Center – one place to choose. */}
               <TextField
-                select
                 size="small"
                 label="Setup"
-                value={setupId}
-                disabled={running || busy}
-                onChange={(e) => updateSession((prev) => ({ ...prev, setupId: e.target.value, updatedAt: nowIso() }))}
+                value={(list?.setups ?? []).find((s) => s.setupId === setupId)?.name || setup?.name || (setupId ? setupId : "— kein Setup aktiv —")}
+                slotProps={{ input: { readOnly: true } }}
                 sx={{ minWidth: 260 }}
-                helperText={running ? "Während einer Messung nicht änderbar" : undefined}
-              >
-                {(list?.setups ?? []).map((s) => (
-                  <MenuItem key={s.setupId} value={s.setupId}>
-                    {s.name || s.setupId}
-                  </MenuItem>
-                ))}
-              </TextField>
+                helperText="Wird im Control Center aktiviert"
+              />
+              <Button size="small" component={RouterLink} to="/timing/control" sx={{ mt: 0.5 }}>
+                Setup wählen
+              </Button>
               <TextField
                 select
                 size="small"

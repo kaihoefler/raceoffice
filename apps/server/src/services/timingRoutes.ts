@@ -18,6 +18,7 @@ import {
   normalizeSimulatorPassingDelay,
   normalizeTimingDecodersDocument,
   TIMING_SIMULATOR_DOC_ID,
+  TIMING_CONNECTION_DOC_ID,
   type LegacySimulatorSettings,
   removeMisderivedLegacyDecoders,
   TIMING_DECODERS_DOC_ID,
@@ -200,6 +201,21 @@ function migrateSimulatorSettings(
     },
     updatedAt: at,
   }));
+}
+
+/**
+ * The setup chosen in the LiveTracking session becomes the active setup of the timing layer
+ * (once, when none is set yet) – it is chosen in the Control Center from now on.
+ */
+export function migrateActiveSetup(
+  loadDoc: (id: string) => Doc,
+  commit: (docId: string, updater: (current: unknown) => unknown) => Doc,
+): boolean {
+  const connection = loadDoc(TIMING_CONNECTION_DOC_ID).data as { activeSetupId?: unknown } | null;
+  if (!connection || connection.activeSetupId !== undefined) return false;
+  const session = normalizeLiveTrackingSessionDocument(loadDoc(makeLiveTrackingSessionDocId()).data);
+  commit(TIMING_CONNECTION_DOC_ID, (current) => ({ ...(current as object), activeSetupId: session?.setupId || null }));
+  return true;
 }
 
 /** Migrates the LiveTracking session document of older versions; true if it was rewritten. */

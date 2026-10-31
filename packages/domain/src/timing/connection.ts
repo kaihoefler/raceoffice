@@ -17,6 +17,11 @@ export type TimingConnectionDocument = {
   version: 1;
   /** Decoders to connect (register ids). Every other decoder is disconnected. */
   connectedDecoderIds: string[];
+  /**
+   * Setup activated in the Control Center: its decoders are offered for connecting, and the
+   * LiveTracking measurement uses it (one place to choose). Absent in older documents.
+   */
+  activeSetupId?: string | null;
   updatedAt: string | null;
 };
 
@@ -31,8 +36,24 @@ export function isTimingConnectionDocument(value: unknown): value is TimingConne
     doc.kind === "timingConnection" &&
     doc.version === 1 &&
     Array.isArray(doc.connectedDecoderIds) &&
-    doc.connectedDecoderIds.every((id) => typeof id === "string")
+    doc.connectedDecoderIds.every((id) => typeof id === "string") &&
+    (doc.activeSetupId === undefined || doc.activeSetupId === null || typeof doc.activeSetupId === "string")
   );
+}
+
+/**
+ * Connection wish for the decoders of a setup: `add` connects them in addition, `only` connects
+ * exactly them (other decoders are disconnected).
+ */
+export function connectTimingDecoders(
+  doc: TimingConnectionDocument,
+  decoderIds: readonly string[],
+  mode: "add" | "only",
+  updatedAt: string,
+): TimingConnectionDocument {
+  const next = mode === "only" ? [...new Set(decoderIds)] : [...new Set([...doc.connectedDecoderIds, ...decoderIds])];
+  if (JSON.stringify(next) === JSON.stringify(doc.connectedDecoderIds)) return doc;
+  return { ...doc, connectedDecoderIds: next, updatedAt };
 }
 
 /** Returns the document with the decoder (dis)connected; unchanged if already so. */

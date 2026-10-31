@@ -1,6 +1,7 @@
 // Zeitmessung – Control Center (doc/timing-architecture.md, section 7)
 //
 // - Worker: start/stop the timing worker process
+// - Aktives Setup: choose the setup (used by the measurement too) and connect its decoders
 // - Hardware: one row per physical decoder of the register; connecting is explicit (decoders
 //   accept only few connections), status incl. P3 device values and re-requested passings
 // - Passings: newest passings of the store, counts per decoder, deleting with confirmation
@@ -37,6 +38,7 @@ import {
 import { Link as RouterLink } from "react-router-dom";
 
 import { ConfirmDialog, JsonAccordion } from "../../components/common/Dialogs";
+import { ActiveSetupCard } from "./ActiveSetupCard";
 import {
   BACKEND_LABEL,
   decoderHealth,
@@ -62,6 +64,7 @@ export default function TimingControlCenterPage() {
   return (
     <Box sx={{ display: "grid", gap: 2 }}>
       <WorkerCard online={online} runtime={runtime} />
+      <ActiveSetupCard timing={timing} now={now} />
       <HardwareCard timing={timing} workerOnline={online} now={now} />
       <PassingsCard decoders={timing.decoders} />
       <Card variant="outlined">

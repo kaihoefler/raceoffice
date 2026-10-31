@@ -31,7 +31,7 @@ import {
   registerP3DiscoveryRoutes,
 } from "./services/p3DiscoveryRoutes.js";
 import { TimingPassingStore } from "./services/timingPassingStore.js";
-import { migrateLegacySession, migrateLegacySetupDecoders, registerTimingRoutes } from "./services/timingRoutes.js";
+import { migrateActiveSetup, migrateLegacySession, migrateLegacySetupDecoders, registerTimingRoutes } from "./services/timingRoutes.js";
 
 // Public non-realtime endpoints for service discovery/fallback responses.
 export const PUBLIC_SERVICE_ENDPOINTS = [
@@ -176,6 +176,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   if (migrateLegacySession(loadDoc, (id, updater) => hub.commitServerDocUpdate(id, updater))) {
     app.log.info("migrated the LiveTracking session document to the start/stop/reset model");
   }
+  migrateActiveSetup(loadDoc, (id, updater) => hub.commitServerDocUpdate(id, updater));
 
   // --- P3 protocol test client control routes
   registerP3TestClientRoutes(app, p3TestClientService);

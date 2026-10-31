@@ -193,8 +193,10 @@ Zwei klar getrennte Bereiche, zunächst in `apps/livetracking-frontend`:
 - **Decoder:** Register pflegen, inklusive Übernahme aus dem P3-Netzwerk-Scan.
 - **Setups:** Strecke und Timing-Points, je Timing-Point Auswahl eines Decoders.
 
+- **Aktives Setup** (Control Center): Hier wird das Setup gewählt. Seine Decoder werden angezeigt und lassen sich verbinden („Decoder des Setups verbinden“ oder „Nur diese verbinden“). Gespeichert ist es in `timingConnection.activeSetupId`. Die Livetracking-Messung übernimmt es, es gibt also nur eine Stelle zur Auswahl. Während einer Messung lässt es sich nicht ändern.
+
 **Livetracking**
-- **Messung:** starten/stoppen, Modus, Teilnehmer-Pools, „Messung zurücksetzen“, Kennzahlen
+- **Messung:** starten/stoppen, Modus, Teilnehmer-Pools, „Messung zurücksetzen“, Kennzahlen. Das Setup wird nur angezeigt.
 - **Live:** Board
 - **Visualisierung**
 
