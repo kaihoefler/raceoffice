@@ -32,6 +32,8 @@ import {
   P3_DISCOVERY_SERVICE_ENDPOINTS,
   registerP3DiscoveryRoutes,
 } from "./services/p3DiscoveryRoutes.js";
+import { TimingPassingStore } from "./services/timingPassingStore.js";
+import { migrateLegacySetupDecoders, registerTimingRoutes } from "./services/timingRoutes.js";
 
 // Public non-realtime endpoints for service discovery/fallback responses.
 export const PUBLIC_SERVICE_ENDPOINTS = [
@@ -165,6 +167,12 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   // --- LiveTracking worker process lifecycle
   registerLiveTrackingWorkerRoutes(app, liveTrackingWorkerManager);
+
+  // --- Timing layer: passing store + API (doc/timing-architecture.md)
+  const timingPassingStore = new TimingPassingStore(docStore.database);
+  registerTimingRoutes(app, timingPassingStore);
+  const migratedDecoders = migrateLegacySetupDecoders(loadDoc, (id, updater) => hub.commitServerDocUpdate(id, updater));
+  if (migratedDecoders > 0) app.log.info({ migratedDecoders }, "registered decoders of LiveTracking setups in the timing register");
 
   // --- LiveTracking passing history reset
   // Done server-side so subscribers get one whole-document replace instead of a JSON-Patch
