@@ -4,7 +4,11 @@
  * Responsibilities (single orchestration point):
  * - keep live subscriptions to session/runtime/results/setup/participants documents
  * - execute session command queue transitions (prepare/start/stop/shutdown/reset)
- * - manage decoder adapter lifecycle (start/stop based on session state)
+ * - reconcile decoder connections of the timing layer (TimingConnectionManager): explicitly
+ *   connected decoders (timingConnection) plus – phase 1 bridge – the decoders of the setup
+ *   while the session is running
+ * - upload every passing to the timing passing store, and map it through the setup to timing
+ *   points for the LiveTracking passing history / passing log / decoder status
  * - continuously project sporting results from runtime passings + setup + participant pool
  *
  * Important design rule:
@@ -39,12 +43,33 @@ import {
   type LiveTrackingRuntimeRawPayload,
   type LiveTrackingSessionDocument,
   type LiveTrackingSetupDocument,
+  applyTimingClockOffset,
+  createTimingDecodersDocument,
+  findTimingDecoder,
+  isTimingConnectionDocument,
+  isTimingDecodersDocument,
+  mergeLegacySetupDecoders,
+  resolveTimingPointDecoderId,
+  timingDecoderFromLegacyPoint,
+  TIMING_CONNECTION_DOC_ID,
+  TIMING_DECODERS_DOC_ID,
+  TIMING_STATUS_DOC_ID,
+  type LiveTrackingTimingPoint,
+  type TimingConnectionDocument,
+  type TimingDecoderStatus,
+  type TimingDecodersDocument,
+  type TimingPassingInput,
+  type TimingStatusDocument,
 } from "@raceoffice/domain";
-import { createDecoderSourceAdapter } from "./decoder/adapters/createDecoderSourceAdapter.js";
-import type { DecoderHealthPatch, DecoderSourceAdapter, NormalizedPassing } from "./decoder/adapters/decoderSourceAdapter.js";
+import type { DecoderHealthPatch, NormalizedPassing } from "./decoder/adapters/decoderSourceAdapter.js";
 import { normalizedToRuntimePassing } from "./decoder/adapters/normalizedPassing.js";
 import { PassingHistoryWriter } from "./passingHistoryWriter.js";
 import { RealtimeDocClient } from "./realtimeDocClient.js";
+import { TimingConnectionManager, type DesiredDecoder } from "./timing/connectionManager.js";
+import { TimingPassingUploader } from "./timing/passingUploader.js";
+
+/** Decoder status is written at most this often (passings update it constantly). */
+const TIMING_STATUS_FLUSH_MS = 500;
 
 /** How often buffered passings are appended to the history document. */
 const HISTORY_FLUSH_INTERVAL_MS = 1_000;
@@ -117,6 +142,22 @@ function deriveTimingOptions(setup: { minLapTimeSecs?: number; track: { timingPo
   return { minLapTimeMs, minSectorTimeMs };
 }
 
+/** Old per-timing-point decoder state (runtime.decoders) from the timing-layer status. */
+function legacyHealthPatch(status: TimingDecoderStatus): DecoderHealthPatch["patch"] {
+  const map = {
+    connected: { processStatus: "running", websocketStatus: "connected" },
+    connecting: { processStatus: "starting", websocketStatus: "connecting" },
+    error: { processStatus: "error", websocketStatus: "error" },
+    disconnected: { processStatus: "stopped", websocketStatus: "disconnected" },
+  } as const;
+  return {
+    ...map[status.connection],
+    lastConnectedAt: status.connectedSince,
+    lastMessageAt: status.lastMessageAt,
+    lastError: status.lastError,
+  };
+}
+
 export class SessionLoop {
   readonly sessionDocId: string;
   readonly runtimeDocId: string;
@@ -153,7 +194,14 @@ export class SessionLoop {
   private lastWorkerStatus: LiveTrackingRuntimeDocument["workerStatus"] | null = null;
   private lastHandledWorkerStatusCheckRequestId: string | null = null;
 
-  private adapter: DecoderSourceAdapter | null = null;
+  // Timing layer (doc/timing-architecture.md)
+  readonly decodersClient: RealtimeDocClient<TimingDecodersDocument>;
+  readonly connectionClient: RealtimeDocClient<TimingConnectionDocument>;
+  readonly timingStatusClient: RealtimeDocClient<TimingStatusDocument>;
+  private readonly connectionManager: TimingConnectionManager;
+  private readonly uploader: TimingPassingUploader;
+  private unsubscribeTiming: Array<() => void> = [];
+  private timingStatusTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly baseHttpUrl: string,
@@ -171,6 +219,16 @@ export class SessionLoop {
       baseHttpUrl,
     );
     this.historyWriter = new PassingHistoryWriter(this.historyClient);
+
+    this.decodersClient = new RealtimeDocClient<TimingDecodersDocument>(TIMING_DECODERS_DOC_ID, baseHttpUrl);
+    this.connectionClient = new RealtimeDocClient<TimingConnectionDocument>(TIMING_CONNECTION_DOC_ID, baseHttpUrl);
+    this.timingStatusClient = new RealtimeDocClient<TimingStatusDocument>(TIMING_STATUS_DOC_ID, baseHttpUrl);
+    this.uploader = new TimingPassingUploader(baseHttpUrl, { onWarning: (m) => this.appendRuntimeWarning(m) });
+    this.connectionManager = new TimingConnectionManager({
+      onPassing: (passing, normalized) => this.handleTimingPassing(passing, normalized),
+      onStatusChange: () => this.scheduleTimingStatusFlush(),
+      onWarning: (m) => this.appendRuntimeWarning(m),
+    });
   }
 
   start() {
@@ -178,6 +236,13 @@ export class SessionLoop {
     this.runtimeClient.connect();
     this.resultsClient.connect();
     this.historyClient.connect();
+    this.decodersClient.connect();
+    this.connectionClient.connect();
+    this.timingStatusClient.connect();
+    this.unsubscribeTiming = [
+      this.decodersClient.onData(() => this.scheduleAdapterSync()),
+      this.connectionClient.onData(() => this.scheduleAdapterSync()),
+    ];
 
     this.unsubscribeHistory = this.historyClient.onData(() => {
       this.historyWriter.onDocumentChanged();
@@ -219,10 +284,17 @@ export class SessionLoop {
     for (const unsub of this.unsubscribeParticipantPools.values()) unsub();
     this.unsubscribeParticipantPools.clear();
 
-    if (this.adapter) {
-      this.adapter.stop().catch(() => {});
-      this.adapter = null;
-    }
+    for (const unsub of this.unsubscribeTiming) unsub();
+    this.unsubscribeTiming = [];
+    void this.connectionManager.stop();
+    void this.uploader.flush();
+    this.uploader.stop();
+    this.timingStatusClient.update((doc) => ({
+      ...doc,
+      workerHeartbeatAt: null,
+      decoders: doc.decoders.map((d) => ({ ...d, connection: "disconnected", reasons: [], connectionSessionId: null, connectedSince: null })),
+      updatedAt: nowIso(),
+    }));
 
     this.logWorkerStatusTransition("offline");
 
@@ -251,6 +323,9 @@ export class SessionLoop {
     this.runtimeClient.close();
     this.resultsClient.close();
     this.historyClient.close();
+    this.decodersClient.close();
+    this.connectionClient.close();
+    this.timingStatusClient.close();
   }
 
   private clearScheduledTimers() {
@@ -273,6 +348,10 @@ export class SessionLoop {
     if (this.historyFlushTimer) {
       clearTimeout(this.historyFlushTimer);
       this.historyFlushTimer = null;
+    }
+    if (this.timingStatusTimer) {
+      clearTimeout(this.timingStatusTimer);
+      this.timingStatusTimer = null;
     }
   }
 
@@ -311,11 +390,13 @@ export class SessionLoop {
   }
 
   /**
-   * Reconciles the decoder adapter lifecycle against current session/setup state.
+   * Reconciles the decoder connections of the timing layer.
    *
-   * Replaces the former `syncAmmConnections` method. The adapter is created when the
-   * session enters `running` state and stopped when it leaves. Setup changes while running
-   * are forwarded to the existing adapter via `syncPoints`.
+   * - Explicit: every decoder listed in `timingConnection` (nothing connects automatically).
+   * - Phase 1 bridge: while the LiveTracking session is `running`, the decoders of its setup are
+   *   connected too, exactly as before – the old control page has no "connect" button yet. Their
+   *   configuration comes from the timing points of the setup (still edited there); they are
+   *   also registered in the decoder register.
    */
   private syncAdapterLifecycle() {
     const session = this.sessionClient.data;
@@ -330,45 +411,105 @@ export class SessionLoop {
       this.pruneRuntimeDecoders(enabledIds);
     }
 
-    const shouldCollect =
-      !!session && isLiveTrackingSessionDocument(session) && session.state === "running";
+    const register = isTimingDecodersDocument(this.decodersClient.data) ? this.decodersClient.data : null;
+    const desired = new Map<string, DesiredDecoder>();
 
-    if (!shouldCollect || !setup) {
-      if (this.adapter) {
-        this.adapter.stop().catch(() => {});
-        this.adapter = null;
+    const connection = this.connectionClient.data;
+    if (register && isTimingConnectionDocument(connection)) {
+      for (const id of connection.connectedDecoderIds) {
+        const decoder = findTimingDecoder(register, id);
+        if (decoder) desired.set(id, { decoder, reasons: ["explicit"] });
       }
-      return;
     }
 
-    const enabledPoints = normalizeTimingPoints(setup.track.timingPoints).filter((p) => p.enabled);
+    const running = !!session && isLiveTrackingSessionDocument(session) && session.state === "running";
+    if (running && setup) {
+      this.registerLegacySetupDecoders(setup);
+      for (const point of normalizeTimingPoints(setup.track.timingPoints).filter((p) => p.enabled)) {
+        const decoder = timingDecoderFromLegacyPoint(point, setup.decoderBackend);
+        if (!decoder.ip) continue;
+        const existing = desired.get(decoder.id);
+        desired.set(decoder.id, { decoder, reasons: existing ? [...existing.reasons, "livetracking"] : ["livetracking"] });
+      }
+    }
 
-    if (this.adapter) {
-      this.adapter.syncPoints(enabledPoints);
-    } else {
-      const adapter = createDecoderSourceAdapter(setup.decoderBackend ?? "ammc", enabledPoints, {
-        onPassing: (passing: NormalizedPassing) => this.handleNormalizedPassing(passing),
-        onWarning: (msg: string) => this.appendRuntimeWarning(msg),
-        onHealth: (update: DecoderHealthPatch) => this.applyDecoderHealth(update),
-      });
-      this.adapter = adapter;
-      adapter.start().catch((err: unknown) => {
-        this.appendRuntimeWarning(
-          `[adapter] start failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
+    this.connectionManager.sync([...desired.values()]);
+  }
+
+  /** Adds the decoders of the setup to the register (only once it is loaded, never overwriting). */
+  private registerLegacySetupDecoders(setup: LiveTrackingSetupDocument) {
+    const current = this.decodersClient.data;
+    if (current === null) return;
+    const base = isTimingDecodersDocument(current) ? current : createTimingDecodersDocument();
+    const merged = mergeLegacySetupDecoders(base, [setup], nowIso());
+    if (merged !== base) this.decodersClient.update(() => merged);
+  }
+
+  /** Enabled timing points of the active setup that use this physical decoder. */
+  private timingPointsOfDecoder(decoderId: string): LiveTrackingTimingPoint[] {
+    const setup = this.setupClient?.data;
+    if (!setup || !isLiveTrackingSetupDocument(setup)) return [];
+    return normalizeTimingPoints(setup.track.timingPoints).filter(
+      (p) => p.enabled && resolveTimingPointDecoderId(p, setup.decoderBackend) === decoderId,
+    );
+  }
+
+  /**
+   * A passing of a physical decoder: always stored in the timing passing store; additionally
+   * mapped to the timing points of the setup for LiveTracking (passing log, and the history the
+   * results are computed from – only while the session is running, as before).
+   */
+  private handleTimingPassing(passing: TimingPassingInput, normalized: NormalizedPassing) {
+    this.uploader.add(passing);
+
+    const session = this.sessionClient.data;
+    const running = !!session && isLiveTrackingSessionDocument(session) && session.state === "running";
+    for (const point of this.timingPointsOfDecoder(passing.decoderId)) {
+      this.handleNormalizedPassing(
+        {
+          ...normalized,
+          passingId: `${point.id}:${normalized.passingId}`,
+          timingPointId: point.id,
+          timestamp: applyTimingClockOffset(passing.decoderTime, point.decoderTimestampOffsetSecs ?? 0),
+        },
+        running,
+      );
+    }
+  }
+
+  private scheduleTimingStatusFlush() {
+    if (this.timingStatusTimer) return;
+    this.timingStatusTimer = setTimeout(() => {
+      this.timingStatusTimer = null;
+      this.flushTimingStatus();
+    }, TIMING_STATUS_FLUSH_MS);
+  }
+
+  /** Writes the decoder status (timing layer) and mirrors it into runtime.decoders per timing point. */
+  private flushTimingStatus() {
+    const statuses = this.connectionManager.statusList;
+    const t = nowIso();
+    this.timingStatusClient.update((doc) => {
+      const byId = new Map(doc.decoders.map((d) => [d.decoderId, d]));
+      for (const status of statuses) byId.set(status.decoderId, status);
+      return { ...doc, workerHeartbeatAt: t, decoders: [...byId.values()], updatedAt: t };
+    });
+    for (const status of statuses) {
+      for (const point of this.timingPointsOfDecoder(status.decoderId)) {
+        this.applyDecoderHealth({ timingPointId: point.id, decoderName: point.name, patch: legacyHealthPatch(status) });
+      }
     }
   }
 
   // ---------------------------------------------------------------------------
   // Adapter callbacks
 
-  private handleNormalizedPassing(passing: NormalizedPassing) {
+  private handleNormalizedPassing(passing: NormalizedPassing, recordHistory: boolean) {
     const runtimePassing = normalizedToRuntimePassing(passing);
     const t = nowIso();
 
     // Decoder signals only go to the passing log; results need athlete passings only.
-    if (!passing.signalKind) {
+    if (recordHistory && !passing.signalKind) {
       this.historyWriter.append({
         id: runtimePassing.id,
         timestamp: runtimePassing.timestamp,
@@ -481,6 +622,7 @@ export class SessionLoop {
   private writeHeartbeat(sessionOverride?: LiveTrackingSessionDocument | null) {
     const workerStatus = this.mapWorkerStatus(sessionOverride);
     this.logWorkerStatusTransition(workerStatus);
+    this.scheduleTimingStatusFlush();
     this.commitRuntimeUpdate((doc) => {
       const t = nowIso();
       return {

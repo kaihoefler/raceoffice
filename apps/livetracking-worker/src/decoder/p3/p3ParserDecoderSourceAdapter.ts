@@ -3,6 +3,7 @@ import { normalizeTimingPoints } from "@raceoffice/domain";
 import {
   P3DecoderConnection,
   type DecoderInfoEvent,
+  type DecoderStatusEvent,
   type PassingEvent,
 } from "@raceoffice/p3parser";
 import type { DecoderHealthPatch, DecoderSourceAdapter, NormalizedPassing } from "../adapters/decoderSourceAdapter.js";
@@ -116,7 +117,7 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
         onConnected: (info: DecoderInfoEvent) => this._onConnected(managed, info),
         onDisconnected: (reason: string) => this._onDisconnected(managed, reason),
         onPassing: (event: PassingEvent) => this._onPassing(managed, event),
-        onStatus: () => {},
+        onStatus: (status: DecoderStatusEvent) => this._onStatus(managed, status),
         onError: (error: Error) => this._onError(managed, error),
       },
       { autoReconnect: true, reconnectDelayMs: 3_000 },
@@ -174,6 +175,22 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
       websocketStatus: "connected",
       lastConnectedAt: nowIso(),
       lastError: null,
+      hardware: { hardwareId: info.decoderId, decoderType: info.decoderType || null, firmwareVersion: info.firmwareVersion || null },
+    });
+  }
+
+  /** P3 STATUS records (sent periodically): device health for the hardware status view. */
+  private _onStatus(managed: ManagedConnection, status: DecoderStatusEvent): void {
+    const t = nowIso();
+    this._emitHealth(managed.point, {
+      lastMessageAt: t,
+      device: {
+        noise: Number.isFinite(status.noise) ? status.noise : null,
+        gpsLocked: typeof status.gpsLocked === "boolean" ? status.gpsLocked : null,
+        temperatureC: Number.isFinite(status.temperature) ? status.temperature : null,
+        voltage: Number.isFinite(status.voltage) ? status.voltage : null,
+        at: t,
+      },
     });
   }
 

@@ -39,6 +39,10 @@ export type DecoderHealthPatch = {
     lastConnectedAt?: string | null;
     lastMessageAt?: string | null;
     lastError?: string | null;
+    /** Device identity reported on connect (P3 DecoderInfo). */
+    hardware?: { hardwareId: string; decoderType: string | null; firmwareVersion: string | null };
+    /** Device status (P3 STATUS record: noise, GPS, temperature, voltage). */
+    device?: { noise: number | null; gpsLocked: boolean | null; temperatureC: number | null; voltage: number | null; at: string };
   };
 };
 
