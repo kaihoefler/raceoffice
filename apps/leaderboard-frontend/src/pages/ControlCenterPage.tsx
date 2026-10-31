@@ -433,6 +433,7 @@ function PlayerCard(props: { status: LeaderboardServiceStatus | null; recordings
   const player = status?.player;
   const [file, setFile] = useState("");
   const [speed, setSpeed] = useState(1);
+  const [skipGaps, setSkipGaps] = useState(true);
   const [seekValue, setSeekValue] = useState<number | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
 
@@ -445,6 +446,8 @@ function PlayerCard(props: { status: LeaderboardServiceStatus | null; recordings
   const duration = loadedHere ? (player?.durationMs ?? 0) : (recordings.find((r) => r.file === file)?.durationMs ?? 0);
   const position = loadedHere ? (player?.positionMs ?? 0) : 0;
   const live = status?.source === "rmonitor" && status.client.state !== "stopped";
+  const active = state !== "idle" && loadedHere;
+  const skipGapsShown = active ? (player?.skipGaps ?? true) : skipGaps;
 
   const upload = (f: File) =>
     run(async () => {
@@ -501,7 +504,27 @@ function PlayerCard(props: { status: LeaderboardServiceStatus | null; recordings
                 </Button>
               ))}
             </ButtonGroup>
+            <FormControlLabel
+              sx={{ ml: 1 }}
+              control={
+                <Switch
+                  size="small"
+                  checked={skipGapsShown}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    setSkipGaps(enabled);
+                    if (active) void run(() => api.setPlayerSkipGaps(enabled));
+                  }}
+                />
+              }
+              label="Pausen überspringen"
+            />
           </Box>
+          {skipGapsShown ? (
+            <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+              Pausen über 10 s in der Aufnahme (z. B. Mittagspause, Recorder lief über Nacht) dauern nur 1 s.
+            </Typography>
+          ) : null}
 
           <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
             {state === "playing" && loadedHere ? (
@@ -512,7 +535,7 @@ function PlayerCard(props: { status: LeaderboardServiceStatus | null; recordings
               <IconButton
                 aria-label="Abspielen"
                 disabled={!file}
-                onClick={() => run(() => (state === "paused" && loadedHere ? api.resumePlayer() : api.startPlayer(file, speed)))}
+                onClick={() => run(() => (state === "paused" && loadedHere ? api.resumePlayer() : api.startPlayer(file, speed, skipGaps)))}
               >
                 <PlayArrowIcon />
               </IconButton>

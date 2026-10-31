@@ -73,8 +73,22 @@ describe("control center", () => {
     await user.click(screen.getByRole("button", { name: "10×" }));
     await user.click(screen.getByRole("button", { name: "Abspielen" }));
     await waitFor(() =>
-      expect(calls.find((c) => c.url.endsWith("api/player/start"))?.body).toEqual({ file: "2026-10-20_elim.txt", speedup: 10 }),
+      expect(calls.find((c) => c.url.endsWith("api/player/start"))?.body).toEqual({ file: "2026-10-20_elim.txt", speedup: 10, skipGaps: true }),
     );
+  });
+
+  it("switches gap skipping of a running replay", async () => {
+    const { user } = renderControl();
+    await pushStatus(
+      defaultStatus({
+        source: "player",
+        player: { ...defaultStatus().player, state: "playing", file: "2026-10-20_elim.txt", skipGaps: true },
+      }),
+    );
+    const toggle = await screen.findByRole("switch", { name: "Pausen überspringen" });
+    await waitFor(() => expect(toggle).toBeChecked());
+    await user.click(toggle);
+    await waitFor(() => expect(calls.find((c) => c.url.endsWith("api/player/skip-gaps"))?.body).toEqual({ enabled: false }));
   });
 
   it("shows REPLAY and asks for the control token when the service demands one", async () => {

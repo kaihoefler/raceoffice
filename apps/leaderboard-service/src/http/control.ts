@@ -36,7 +36,15 @@ const playerStartSchema = {
     file: { type: "string", minLength: 1 },
     speedup: { type: "number", exclusiveMinimum: 0 },
     startAtMs: { type: "number", minimum: 0 },
+    skipGaps: { type: "boolean" },
   },
+} as const;
+
+const skipGapsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["enabled"],
+  properties: { enabled: { type: "boolean" } },
 } as const;
 
 const seekSchema = {
@@ -171,7 +179,7 @@ export function registerControlRoutes(app: FastifyInstance, service: Leaderboard
   });
 
   app.post("/api/player/start", { schema: { body: playerStartSchema } }, async (req, reply) => {
-    const body = req.body as { file: string; speedup?: number; startAtMs?: number };
+    const body = req.body as { file: string; speedup?: number; startAtMs?: number; skipGaps?: boolean };
     return withRecordingErrors(reply, async () => {
       await service.startPlayer(body);
       return service.status();
@@ -196,6 +204,11 @@ export function registerControlRoutes(app: FastifyInstance, service: Leaderboard
   app.post("/api/player/seek", { schema: { body: seekSchema } }, async (req, reply) => {
     if (!service.player.loadedFile) return reply.code(409).send({ error: "no_recording", message: "no replay loaded" });
     service.player.seek((req.body as { positionMs: number }).positionMs);
+    return service.status();
+  });
+
+  app.post("/api/player/skip-gaps", { schema: { body: skipGapsSchema } }, async (req) => {
+    service.player.setSkipGaps((req.body as { enabled: boolean }).enabled);
     return service.status();
   });
 

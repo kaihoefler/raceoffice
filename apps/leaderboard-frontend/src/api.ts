@@ -92,7 +92,7 @@ export type RecordingInfo = { file: string; size: number; modifiedAt: number; li
 export type PersistedConfig = {
   client: { host: string; port: number; encoding: string; autoConnect: boolean; retryMax: number; retryTimeoutMs: number };
   recorder: { autoStart: boolean; name: string };
-  player: { file: string | null; speedup: number; fileEncoding: string };
+  player: { file: string | null; speedup: number; fileEncoding: string; skipGaps: boolean };
   publish: { coalesceMs: number };
   state: { corrections: "apply" | "ignore"; maxRaces: number };
   compat: { catchAllRace: boolean };
@@ -112,12 +112,14 @@ export const api = {
   uploadRecording: (file: string, data: Blob) =>
     request<{ file: string }>("PUT", `api/recordings/${encodeURIComponent(file)}`, undefined, data),
   deleteRecording: (file: string) => request<null>("DELETE", `api/recordings/${encodeURIComponent(file)}`),
-  startPlayer: (file: string, speedup: number) =>
-    request<LeaderboardServiceStatus>("POST", "api/player/start", { file, speedup }),
+  startPlayer: (file: string, speedup: number, skipGaps: boolean) =>
+    request<LeaderboardServiceStatus>("POST", "api/player/start", { file, speedup, skipGaps }),
   pausePlayer: () => request<LeaderboardServiceStatus>("POST", "api/player/pause"),
   resumePlayer: () => request<LeaderboardServiceStatus>("POST", "api/player/resume"),
   stopPlayer: () => request<LeaderboardServiceStatus>("POST", "api/player/stop"),
   seekPlayer: (positionMs: number) => request<LeaderboardServiceStatus>("POST", "api/player/seek", { positionMs }),
+  setPlayerSkipGaps: (enabled: boolean) =>
+    request<LeaderboardServiceStatus>("POST", "api/player/skip-gaps", { enabled }),
   setPlayerSpeed: (speedup: number) => request<LeaderboardServiceStatus>("POST", "api/player/speed", { speedup }),
   resetState: () => request<LeaderboardServiceStatus>("POST", "api/state/reset"),
 };

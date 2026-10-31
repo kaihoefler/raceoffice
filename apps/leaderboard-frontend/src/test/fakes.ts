@@ -64,7 +64,7 @@ export function defaultConfig() {
   return {
     client: { host: "192.168.1.20", port: 50000, encoding: "windows-1252", autoConnect: false, retryMax: -1, retryTimeoutMs: 5000 },
     recorder: { autoStart: false, name: "recording" },
-    player: { file: null, speedup: 1, fileEncoding: "auto" },
+    player: { file: null, speedup: 1, fileEncoding: "auto", skipGaps: true },
     publish: { coalesceMs: 100 },
     state: { corrections: "apply", maxRaces: 200 },
     compat: { catchAllRace: true },

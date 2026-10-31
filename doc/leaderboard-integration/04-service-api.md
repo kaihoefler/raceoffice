@@ -94,9 +94,10 @@ type LeaderboardServiceStatus = {
 | GET | `/api/recordings/:file` | – | Download |
 | POST | `/api/recordings` | multipart | Upload (z. B. Java-Recordings) |
 | DELETE | `/api/recordings/:file` | – | löschen |
-| POST | `/api/player/start` | `{file, speedup, startAtMs?}` | Replay starten (trennt den Live-Client, setzt den Store zurück) |
+| POST | `/api/player/start` | `{file, speedup, startAtMs?, skipGaps?}` | Replay starten (trennt den Live-Client, setzt den Store zurück) |
 | POST | `/api/player/pause` / `resume` / `stop` | – | |
 | POST | `/api/player/seek` | `{positionMs}` | Store zurücksetzen und bis zur Position im Schnelllauf abspielen |
+| POST | `/api/player/skip-gaps` | `{enabled}` | Pausen > 10 s in der Aufnahme als 1 s abspielen (auch während des Replays). Position und Dauer beziehen sich dann auf die verkürzte Zeitachse. |
 | POST | `/api/state/reset` | – | Rennzustand verwerfen |
 | GET | `/api/race/:id/passings` | – | Ringpuffer der letzten 500 `$J`-Passings (Finish Line Log); live per WS `/ws/race/current/passings` (append-only) |
 | GET | `/health` | – | `{ok:true, version}` |
@@ -139,6 +140,7 @@ type LeaderboardServiceStatus = {
 | `server.port` | `PORT` | `--server-port` | `8080` |
 | `recorder.autoStart` | `RECORDER_AUTOSTART` | `-r` / `--recorder-file` | `false` |
 | `player.file` / `player.speedup` | – | `-p` / `--player-file` / `--player-speedup` | – / `1` |
+| `player.skipGaps` | `PLAYER_SKIP_GAPS` | `--player-skip-gaps` | `true` |
 | `publish.coalesceMs` | `PUBLISH_COALESCE_MS` | – | `100` |
 | `dataDir` | `LEADERBOARD_DATA_DIR` | `--data-dir` | `./data` (Docker: `/data`) |
 

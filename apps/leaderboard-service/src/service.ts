@@ -61,6 +61,7 @@ export class LeaderboardService {
       onStateChange: () => this.emitStatus(),
       onEnd: () => this.log.info("replay finished"),
     });
+    this.player.setSkipGaps(config.player.skipGaps);
   }
 
   setLogger(log: ServiceLogger): void {
@@ -141,9 +142,11 @@ export class LeaderboardService {
 
   // -- Player ----------------------------------------------------------------------------------
 
-  async startPlayer(options: { file: string; speedup?: number; startAtMs?: number }): Promise<void> {
+  async startPlayer(options: { file: string; speedup?: number; startAtMs?: number; skipGaps?: boolean }): Promise<void> {
     const path = this.recordings.pathOf(options.file);
-    await this.player.load(path, this.config.player.fileEncoding);
+    await this.player.load(path, this.config.player.fileEncoding, {
+      skipGaps: options.skipGaps ?? this.player.status().skipGaps,
+    });
     this.tcp?.stop();
     this.tcp = null;
     this.source = "player";
@@ -219,6 +222,7 @@ export class LeaderboardService {
         state: player.state,
         file: player.file,
         speedup: player.speedup,
+        skipGaps: player.skipGaps,
         progress: player.progress,
         positionMs: player.positionMs,
         durationMs: player.durationMs,

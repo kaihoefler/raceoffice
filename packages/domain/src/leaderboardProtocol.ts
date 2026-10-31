@@ -44,6 +44,8 @@ export type LeaderboardServiceStatus = {
     state: "idle" | "playing" | "paused";
     file: string | null;
     speedup: number;
+    /** Pauses > 10 s in the recording are played as 1 s; position/duration refer to that timeline. */
+    skipGaps?: boolean;
     progress: number;
     positionMs: number;
     durationMs: number;

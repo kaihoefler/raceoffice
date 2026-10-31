@@ -38,6 +38,8 @@ export type LeaderboardConfig = {
     speedup: number;
     /** Encoding of recording files: `auto` detects UTF-8 vs windows-1252 per file. */
     fileEncoding: string;
+    /** Play pauses in a recording longer than 10 s as 1 s (recorder kept running while Orbits was silent). */
+    skipGaps: boolean;
   };
   publish: { coalesceMs: number };
   state: { corrections: CorrectionsMode; maxRaces: number };
@@ -70,7 +72,7 @@ export function defaultConfig(): LeaderboardConfig {
       idleTimeoutMs: 10_000,
     },
     recorder: { autoStart: false, name: "recording" },
-    player: { file: null, speedup: 1, fileEncoding: "auto" },
+    player: { file: null, speedup: 1, fileEncoding: "auto", skipGaps: true },
     publish: { coalesceMs: 100 },
     state: { corrections: "apply", maxRaces: 200 },
     compat: { catchAllRace: true },
@@ -145,6 +147,11 @@ const FLAGS: FlagSpec[] = [
     apply: (l, v) => set(l, "player", { speedup: Number(v) }),
   },
   { names: ["--player-file-encoding"], takesValue: true, apply: (l, v) => set(l, "player", { fileEncoding: v }) },
+  {
+    names: ["--player-skip-gaps"],
+    takesValue: true,
+    apply: (l, v) => set(l, "player", { skipGaps: bool("--player-skip-gaps", v) }),
+  },
   { names: ["--player-port", "--player-stream-encoding"], takesValue: true, apply: () => {} },
   { names: ["-r", "--start-recorder"], takesValue: false, apply: (l) => set(l, "recorder", { autoStart: true }) },
   {
@@ -220,6 +227,7 @@ Player / recorder:
       --player-file <file>         replay a recording at startup
       --player-speedup <n>         replay speed (default 1)
       --player-file-encoding <e>   auto | windows-1252 | utf-8 (default auto)
+      --player-skip-gaps <bool>    play pauses > 10 s as 1 s (default true)
   -r, --start-recorder             record the live stream at startup
       --recorder-file <name>       recording name (implies -r)
 Service:
@@ -260,6 +268,7 @@ export function readEnv(env: NodeJS.ProcessEnv): ConfigLayer {
   if ((v = get("AUTOCONNECT"))) set(layer, "client", { autoConnect: bool("AUTOCONNECT", v) });
   if ((v = get("LEADERBOARD_HOST") ?? get("HOST"))) set(layer, "server", { host: v });
   if ((v = get("LEADERBOARD_PORT") ?? get("PORT"))) set(layer, "server", { port: toInt("PORT", v) });
+  if ((v = get("PLAYER_SKIP_GAPS"))) set(layer, "player", { skipGaps: bool("PLAYER_SKIP_GAPS", v) });
   if ((v = get("RECORDER_AUTOSTART"))) set(layer, "recorder", { autoStart: bool("RECORDER_AUTOSTART", v) });
   if ((v = get("PUBLISH_COALESCE_MS"))) set(layer, "publish", { coalesceMs: toInt("PUBLISH_COALESCE_MS", v) });
   if ((v = get("LEADERBOARD_DATA_DIR"))) layer.dataDir = v;
