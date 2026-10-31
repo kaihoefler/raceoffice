@@ -4,13 +4,15 @@
 // lap time, total time, position. Photo-finish corrections ($COR) are marked.
 // - Newest at the top (default) or at the bottom with auto-scroll; scrolling pauses while the
 //   pointer is over the list
-// - Row height adjustable (default 24 px, like finishLineLog.rowHeight of the Java app)
+// - Row height freely adjustable (default 24 px, like finishLineLog.rowHeight of the Java app)
+// - Compact view: number, name, lap, position only (e.g. for the commentator or a small screen)
+// - URL parameters for kiosk screens (no controls there): ?compact=1&rowHeight=40
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryParam } from "../App";
 import {
   Alert,
   Box,
-  MenuItem,
   Table,
   TableBody,
   TableCell,
@@ -30,9 +32,15 @@ import { useLeaderboardStream, useNow } from "../hooks/useLeaderboardStream";
 import { usePassings } from "../hooks/usePassings";
 import { useStoredState } from "../hooks/useStoredState";
 
-export type FinishLogSettings = { order: "newest-top" | "newest-bottom"; rowHeight: number };
-export const DEFAULT_FINISH_LOG: FinishLogSettings = { order: "newest-top", rowHeight: 24 };
-const ROW_HEIGHTS = [24, 32, 40, 56];
+export type FinishLogSettings = { order: "newest-top" | "newest-bottom"; rowHeight: number; compact?: boolean };
+export const DEFAULT_FINISH_LOG: FinishLogSettings = { order: "newest-top", rowHeight: 24, compact: false };
+export const ROW_HEIGHT_MIN = 16;
+export const ROW_HEIGHT_MAX = 200;
+
+function validRowHeight(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= ROW_HEIGHT_MIN && n <= ROW_HEIGHT_MAX ? n : null;
+}
 const NEW_HIGHLIGHT_MS = 3000;
 
 export function FinishLinePage({ ui, kiosk }: { ui: UiSettings; kiosk: boolean }) {
@@ -42,6 +50,14 @@ export function FinishLinePage({ ui, kiosk }: { ui: UiSettings; kiosk: boolean }
   const now = useNow(1000);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState(false);
+  // URL parameters (kiosk screens) win over the settings stored on the device.
+  const compactParam = useQueryParam("compact");
+  const rowHeightParam = validRowHeight(useQueryParam("rowHeight"));
+  const compact = compactParam !== null ? compactParam === "1" || compactParam === "true" : (settings.compact ?? false);
+  const rowHeight = rowHeightParam ?? validRowHeight(settings.rowHeight) ?? DEFAULT_FINISH_LOG.rowHeight;
+  // Free text while typing ("4" on the way to "40"); stored once it is a valid height.
+  const [rowHeightText, setRowHeightText] = useState(String(rowHeight));
+  useEffect(() => setRowHeightText(String(rowHeight)), [rowHeight]);
 
   const rows = useMemo(
     () => (settings.order === "newest-top" ? [...passings].reverse() : passings),
@@ -55,8 +71,9 @@ export function FinishLinePage({ ui, kiosk }: { ui: UiSettings; kiosk: boolean }
     el.scrollTop = settings.order === "newest-top" ? 0 : el.scrollHeight;
   }, [rows, hover, settings.order]);
 
-  const fontSize = `${Math.max(0.75, (settings.rowHeight / 24) * 0.875) * ui.scale}rem`;
-  const cellSx = { py: 0, height: settings.rowHeight, fontSize, whiteSpace: "nowrap" } as const;
+  const fontSize = `${Math.max(0.75, (rowHeight / 24) * 0.875) * ui.scale}rem`;
+  const cellSx = { py: 0, height: rowHeight, fontSize, whiteSpace: "nowrap" } as const;
+  const columns = compact ? 4 : 7;
   const numSx = { ...cellSx, fontVariantNumeric: "tabular-nums" } as const;
   const raceName = race && race.raceID === raceId ? race.raceName : null;
 
@@ -76,20 +93,32 @@ export function FinishLinePage({ ui, kiosk }: { ui: UiSettings; kiosk: boolean }
             <ToggleButton value="newest-top">Neueste oben</ToggleButton>
             <ToggleButton value="newest-bottom">Neueste unten</ToggleButton>
           </ToggleButtonGroup>
-          <TextField
-            select
+          <ToggleButtonGroup
             size="small"
-            label="Zeilenhöhe"
-            value={settings.rowHeight}
-            onChange={(e) => setSettings({ ...settings, rowHeight: Number(e.target.value) })}
-            sx={{ minWidth: 120 }}
+            exclusive
+            value={compact ? "compact" : "full"}
+            disabled={compactParam !== null}
+            onChange={(_, v: "compact" | "full" | null) => v && setSettings({ ...settings, compact: v === "compact" })}
           >
-            {ROW_HEIGHTS.map((h) => (
-              <MenuItem key={h} value={h}>
-                {h} px
-              </MenuItem>
-            ))}
-          </TextField>
+            <ToggleButton value="full">Alle Spalten</ToggleButton>
+            <ToggleButton value="compact">Kompakt</ToggleButton>
+          </ToggleButtonGroup>
+          <TextField
+            type="number"
+            size="small"
+            label="Zeilenhöhe (px)"
+            value={rowHeightText}
+            disabled={rowHeightParam !== null}
+            error={validRowHeight(rowHeightText) === null}
+            onChange={(e) => {
+              setRowHeightText(e.target.value);
+              const valid = validRowHeight(e.target.value);
+              if (valid !== null) setSettings({ ...settings, rowHeight: valid });
+            }}
+            onBlur={() => setRowHeightText(String(rowHeight))}
+            slotProps={{ htmlInput: { min: ROW_HEIGHT_MIN, max: ROW_HEIGHT_MAX, step: 2 } }}
+            sx={{ width: 140 }}
+          />
         </Box>
       )}
       {connected ? null : <Alert severity="warning">Verbindung zum Leaderboard-Service getrennt – neuer Versuch läuft.</Alert>}
@@ -103,7 +132,7 @@ export function FinishLinePage({ ui, kiosk }: { ui: UiSettings; kiosk: boolean }
         <Table size="small" stickyHeader aria-label="Zieldurchfahrten">
           <TableHead>
             <TableRow>
-              <TableCell sx={cellSx}>Zeit</TableCell>
+              {compact ? null : <TableCell sx={cellSx}>Zeit</TableCell>}
               <TableCell sx={cellSx} align="right">
                 #
               </TableCell>
@@ -111,21 +140,25 @@ export function FinishLinePage({ ui, kiosk }: { ui: UiSettings; kiosk: boolean }
               <TableCell sx={cellSx} align="right">
                 Runde
               </TableCell>
+              {compact ? null : (
+                <>
+                  <TableCell sx={cellSx} align="right">
+                    Rundenzeit
+                  </TableCell>
+                  <TableCell sx={cellSx} align="right">
+                    Gesamt
+                  </TableCell>
+                </>
+              )}
               <TableCell sx={cellSx} align="right">
-                Rundenzeit
-              </TableCell>
-              <TableCell sx={cellSx} align="right">
-                Gesamt
-              </TableCell>
-              <TableCell sx={cellSx} align="right">
-                Pos
+                {compact ? "Platz" : "Pos"}
               </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} sx={{ ...cellSx, color: "text.secondary", py: 2 }}>
+                <TableCell colSpan={columns} sx={{ ...cellSx, color: "text.secondary", py: 2 }}>
                   {raceId === null ? "Kein aktives Rennen" : "Noch keine Durchfahrten"}
                 </TableCell>
               </TableRow>
@@ -140,7 +173,7 @@ export function FinishLinePage({ ui, kiosk }: { ui: UiSettings; kiosk: boolean }
                       transition: "background-color 1s",
                     }}
                   >
-                    <TableCell sx={numSx}>{p.timeOfDay}</TableCell>
+                    {compact ? null : <TableCell sx={numSx}>{p.timeOfDay}</TableCell>}
                     <TableCell sx={{ ...cellSx, fontWeight: 700 }} align="right">
                       {p.number}
                     </TableCell>
@@ -148,17 +181,21 @@ export function FinishLinePage({ ui, kiosk }: { ui: UiSettings; kiosk: boolean }
                     <TableCell sx={cellSx} align="right">
                       {p.lap ?? ""}
                     </TableCell>
-                    <TableCell sx={numSx} align="right">
-                      {p.lapTime === "0:00" ? "–" : p.lapTime}
-                    </TableCell>
-                    <TableCell sx={numSx} align="right">
-                      {p.correctionMs !== undefined ? (
-                        <Tooltip title={`Zielfoto-Korrektur ${p.correctionMs > 0 ? "+" : ""}${(p.correctionMs / 1000).toFixed(3)} s`}>
-                          <PhotoCameraIcon aria-label="Zielfoto-Korrektur" sx={{ fontSize: "1em", mr: 0.5, verticalAlign: "-0.1em" }} />
-                        </Tooltip>
-                      ) : null}
-                      {p.totalTime}
-                    </TableCell>
+                    {compact ? null : (
+                      <>
+                        <TableCell sx={numSx} align="right">
+                          {p.lapTime === "0:00" ? "–" : p.lapTime}
+                        </TableCell>
+                        <TableCell sx={numSx} align="right">
+                          {p.correctionMs !== undefined ? (
+                            <Tooltip title={`Zielfoto-Korrektur ${p.correctionMs > 0 ? "+" : ""}${(p.correctionMs / 1000).toFixed(3)} s`}>
+                              <PhotoCameraIcon aria-label="Zielfoto-Korrektur" sx={{ fontSize: "1em", mr: 0.5, verticalAlign: "-0.1em" }} />
+                            </Tooltip>
+                          ) : null}
+                          {p.totalTime}
+                        </TableCell>
+                      </>
+                    )}
                     <TableCell sx={cellSx} align="right">
                       {p.position ?? ""}
                     </TableCell>

@@ -129,6 +129,7 @@ Eine Seite mit vier Karten statt vier Fenstern. Status kommt live über `/ws/sta
 
 - Chronologische Liste der Durchfahrten aus `$J`-Passings: Zeit, #, Name, Runde, Rundenzeit, Position.
 - Zeilenhöhe konfigurierbar (Default 24 px, wie `finishLineLog.rowHeight`). Neueste oben oder unten, mit Auto-Scroll und Pause beim Hovern.
+- Zeilenhöhe frei eingebbar (16–200 px). Kompaktansicht nur mit Startnummer, Name, Runde und Platz. Für Kiosk-Bildschirme per URL: `?compact=1&rowHeight=40`.
 - **Datenquelle:** Das Log braucht Ereignisse, keine Zustände. Der Service führt deshalb einen Ringpuffer der letzten 500 Passings je Rennen und bietet ihn an:
   - per `GET /api/race/:id/passings`
   - per WS-Kanal `/ws/race/current/passings` (append-only)

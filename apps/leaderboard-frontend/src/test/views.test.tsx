@@ -1,6 +1,7 @@
 // Start Signal, Lap Counter and Finish Line Log with the real app shell; the service is a fake WebSocket.
 
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LeaderboardPassing } from "@raceoffice/domain";
@@ -119,5 +120,43 @@ describe("finish line log", () => {
     // Another race: new snapshot replaces the list.
     ws.emit({ type: "passings", raceId: null, passings: [] });
     expect(await screen.findByText("Kein aktives Rennen")).toBeInTheDocument();
+  });
+});
+
+describe("finish line log settings", () => {
+  const headers = () =>
+    within(screen.getByRole("table", { name: "Zieldurchfahrten" }))
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
+
+  it("switches to the compact view and takes a typed row height", async () => {
+    const user = userEvent.setup();
+    renderAt("/finish-line-log");
+    const ws = await socket("/ws/race/current/passings");
+    ws.emit({ type: "passings", raceId: 12, passings: [passing()] });
+    await screen.findByText("Muster, Max");
+    expect(headers()).toEqual(["Zeit", "#", "Name", "Runde", "Rundenzeit", "Gesamt", "Pos"]);
+
+    await user.click(screen.getByRole("button", { name: "Kompakt" }));
+    expect(headers()).toEqual(["#", "Name", "Runde", "Platz"]);
+
+    const input = screen.getByRole("spinbutton", { name: "Zeilenhöhe (px)" });
+    await user.clear(input);
+    await user.type(input, "44");
+    await waitFor(() => expect(JSON.parse(localStorage.getItem("leaderboard.finishLog")!)).toMatchObject({ rowHeight: 44, compact: true }));
+    // Out of range: marked, not stored.
+    await user.clear(input);
+    await user.type(input, "5");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(JSON.parse(localStorage.getItem("leaderboard.finishLog")!)).toMatchObject({ rowHeight: 44 });
+  });
+
+  it("takes compact view and row height from the URL in kiosk mode", async () => {
+    renderAt("/finish-line-log?kiosk=1&compact=1&rowHeight=48");
+    const ws = await socket("/ws/race/current/passings");
+    ws.emit({ type: "passings", raceId: 12, passings: [passing()] });
+    await screen.findByText("Muster, Max");
+    expect(headers()).toEqual(["#", "Name", "Runde", "Platz"]);
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
   });
 });
