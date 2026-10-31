@@ -72,7 +72,10 @@ export function FinishLinePage({ ui, kiosk }: { ui: UiSettings; kiosk: boolean }
   }, [rows, hover, settings.order]);
 
   const fontSize = `${Math.max(0.75, (rowHeight / 24) * 0.875) * ui.scale}rem`;
-  const cellSx = { py: 0, height: rowHeight, fontSize, whiteSpace: "nowrap" } as const;
+  // Every column only as wide as its content ("1%" + nowrap); the name takes all remaining space
+  // and is cut off (ellipsis) only when the screen is really too narrow.
+  const cellSx = { py: 0, height: rowHeight, fontSize, whiteSpace: "nowrap", width: "1%" } as const;
+  const nameSx = { ...cellSx, width: "auto", maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis" } as const;
   const columns = compact ? 4 : 7;
   const numSx = { ...cellSx, fontVariantNumeric: "tabular-nums" } as const;
   const raceName = race && race.raceID === raceId ? race.raceName : null;
@@ -136,7 +139,7 @@ export function FinishLinePage({ ui, kiosk }: { ui: UiSettings; kiosk: boolean }
               <TableCell sx={cellSx} align="right">
                 #
               </TableCell>
-              <TableCell sx={cellSx}>Name</TableCell>
+              <TableCell sx={nameSx}>Name</TableCell>
               <TableCell sx={cellSx} align="right">
                 Runde
               </TableCell>
@@ -158,7 +161,7 @@ export function FinishLinePage({ ui, kiosk }: { ui: UiSettings; kiosk: boolean }
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns} sx={{ ...cellSx, color: "text.secondary", py: 2 }}>
+                <TableCell colSpan={columns} sx={{ ...cellSx, width: "auto", color: "text.secondary", py: 2 }}>
                   {raceId === null ? "Kein aktives Rennen" : "Noch keine Durchfahrten"}
                 </TableCell>
               </TableRow>
@@ -177,7 +180,9 @@ export function FinishLinePage({ ui, kiosk }: { ui: UiSettings; kiosk: boolean }
                     <TableCell sx={{ ...cellSx, fontWeight: 700 }} align="right">
                       {p.number}
                     </TableCell>
-                    <TableCell sx={{ ...cellSx, maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis" }}>{riderName(p)}</TableCell>
+                    <TableCell sx={nameSx} title={riderName(p)}>
+                      {riderName(p)}
+                    </TableCell>
                     <TableCell sx={cellSx} align="right">
                       {p.lap ?? ""}
                     </TableCell>
