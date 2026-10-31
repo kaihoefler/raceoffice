@@ -7,10 +7,10 @@ import { describe, expect, it } from "vitest";
 import { renderApp } from "./renderApp";
 
 describe("component test infrastructure", () => {
-  it("redirects the app root to the setup page inside the LiveTracking layout", async () => {
+  it("redirects the app root to the timing Control Center inside the layout", async () => {
     const { router } = renderApp({ route: "/" });
 
-    expect(await screen.findByText("Live Tracking")).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/livetracking/live-tracking/setup");
+    expect(await screen.findByText("Zeitmessung")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/livetracking/timing/control");
   });
 });

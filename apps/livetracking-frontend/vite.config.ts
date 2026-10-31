@@ -30,6 +30,8 @@ export default defineConfig({
       "/sse": { target: "http://localhost:8787", changeOrigin: true },
       "/health": { target: "http://localhost:8787" },
       "/live-tracking": { target: "http://localhost:8787", changeOrigin: true },
+      // Timing layer API (passing store: stats, query, delete).
+      "/timing": { target: "http://localhost:8787", changeOrigin: true },
     },
   },
 });

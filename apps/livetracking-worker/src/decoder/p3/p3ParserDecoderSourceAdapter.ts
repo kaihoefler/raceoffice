@@ -1,11 +1,20 @@
 import type { LiveTrackingTimingPoint } from "@raceoffice/domain";
 import { normalizeTimingPoints } from "@raceoffice/domain";
 import {
+  decoderIdToRequestOrder,
   P3DecoderConnection,
+  type P3Record,
   type DecoderInfoEvent,
+  type DecoderStatusEvent,
   type PassingEvent,
 } from "@raceoffice/p3parser";
 import type { DecoderHealthPatch, DecoderSourceAdapter, NormalizedPassing } from "../adapters/decoderSourceAdapter.js";
+import { PassingSequenceTracker, type PassingRange } from "./passingSequenceTracker.js";
+
+/** How often timed-out RESEND requests are checked. */
+const RESEND_CHECK_MS = 2_000;
+/** SESSION waits this long for the resume point (highest stored passing number). */
+const RESUME_WAIT_MS = 3_000;
 
 const P3_PORT = 5403;
 
@@ -26,6 +35,16 @@ type P3AdapterCallbacks = {
 type ManagedConnection = {
   point: LiveTrackingTimingPoint;
   connection: P3DecoderConnection;
+  /** Detects gaps in the passing numbers and decides what to request again (RESEND). */
+  tracker: PassingSequenceTracker;
+  /** Decoder id as reported on connect (display order); needed for SESSION/RESEND. */
+  hardwareId: string | null;
+  resendTimer: ReturnType<typeof setInterval> | null;
+  /** The resume point is known (or waiting for it timed out). */
+  resumeKnown: boolean;
+  /** SESSION already sent for the current connection. */
+  sessionAsked: boolean;
+  sessionTimer: ReturnType<typeof setTimeout> | null;
 };
 
 /**
@@ -40,6 +59,8 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
   private readonly callbacks: P3AdapterCallbacks;
 
   private readonly connections = new Map<string, ManagedConnection>(); // keyed by timingPoint.id
+  /** Resume points given before the connection object existed. */
+  private readonly pendingResume = new Map<string, number | null>();
   private started = false;
 
   constructor(timingPoints: LiveTrackingTimingPoint[], callbacks: P3AdapterCallbacks) {
@@ -56,10 +77,21 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
 
   async stop(): Promise<void> {
     this.started = false;
-    for (const { connection } of this.connections.values()) {
-      connection.disconnect();
-    }
+    for (const managed of this.connections.values()) this._close(managed);
     this.connections.clear();
+  }
+
+  /**
+   * Highest passing number already stored for this decoder: after the next connect, everything
+   * the decoder numbered since then is requested again (catch-up after an outage).
+   */
+  resumeFrom(configId: string, highestPassingNumber: number | null): void {
+    this.pendingResume.set(configId, highestPassingNumber);
+    const managed = this.connections.get(configId);
+    if (!managed) return;
+    managed.tracker.resumeFrom(highestPassingNumber);
+    managed.resumeKnown = true;
+    this._askSession(managed);
   }
 
   onPassing(cb: (passing: NormalizedPassing) => void): void {
@@ -81,9 +113,9 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
     const enabledPoints = normalizeTimingPoints(points).filter((p) => p.enabled);
     const enabledIds = new Set(enabledPoints.map((p) => p.id));
 
-    for (const [id, { connection }] of this.connections) {
+    for (const [id, managed] of this.connections) {
       if (!enabledIds.has(id)) {
-        connection.disconnect();
+        this._close(managed);
         this.connections.delete(id);
       }
     }
@@ -108,7 +140,18 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
   private async _openConnection(point: LiveTrackingTimingPoint): Promise<void> {
     if (this.connections.has(point.id)) return;
 
-    const managed: ManagedConnection = { point, connection: null! };
+    const tracker = new PassingSequenceTracker();
+    tracker.resumeFrom(this.pendingResume.get(point.id) ?? null);
+    const managed: ManagedConnection = {
+      point,
+      connection: null!,
+      tracker,
+      hardwareId: null,
+      resendTimer: null,
+      resumeKnown: this.pendingResume.has(point.id),
+      sessionAsked: false,
+      sessionTimer: null,
+    };
 
     const connection = new P3DecoderConnection(
       { ip: point.decoderIp, port: P3_PORT, label: point.name },
@@ -116,13 +159,15 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
         onConnected: (info: DecoderInfoEvent) => this._onConnected(managed, info),
         onDisconnected: (reason: string) => this._onDisconnected(managed, reason),
         onPassing: (event: PassingEvent) => this._onPassing(managed, event),
-        onStatus: () => {},
+        onStatus: (status: DecoderStatusEvent) => this._onStatus(managed, status),
         onError: (error: Error) => this._onError(managed, error),
+        onRawRecord: (record: P3Record) => this._onRawRecord(managed, record),
       },
       { autoReconnect: true, reconnectDelayMs: 3_000 },
     );
 
     managed.connection = connection;
+    managed.resendTimer = setInterval(() => this._requestAgain(managed, managed.tracker.due(Date.now())), RESEND_CHECK_MS);
     this.connections.set(point.id, managed);
 
     this._emitHealth(point, { processStatus: "starting", websocketStatus: "connecting" });
@@ -131,6 +176,9 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
 
   private _onPassing(managed: ManagedConnection, event: PassingEvent): void {
     const { point } = managed;
+    if (!managed.hardwareId) this._identified(managed, { decoderId: event.decoderId, decoderType: "", firmwareVersion: "" });
+    // Every passing record (also sync pulses) takes a number: gaps are requested again.
+    this._requestAgain(managed, managed.tracker.onPassing(event.passingNumber, Date.now()));
 
     // Sync pulses only keep decoders in step; they carry no athlete and would
     // otherwise crowd real passings out of the bounded recentPassings buffer.
@@ -165,21 +213,96 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
   }
 
   private _onConnected(managed: ManagedConnection, info: DecoderInfoEvent): void {
-    const { point } = managed;
     console.log(
-      `[p3-adapter] connected: timingPoint=${point.id} ip=${point.decoderIp} decoderId=${info.decoderId} type=${info.decoderType} fw=${info.firmwareVersion}`,
+      `[p3-adapter] connected: timingPoint=${managed.point.id} ip=${managed.point.decoderIp} decoderId=${info.decoderId} type=${info.decoderType} fw=${info.firmwareVersion}`,
     );
+    this._identified(managed, info);
+  }
+
+  /**
+   * The decoder is known: from its VERSION record, or – for devices that do not send one, like
+   * the ammc-sim simulator – from the decoder id in its first passing or status record. Marks the
+   * connection as connected and starts the catch-up (SESSION).
+   */
+  private _identified(managed: ManagedConnection, info: DecoderInfoEvent): void {
+    const { point } = managed;
+    const known = managed.hardwareId === info.decoderId;
+    managed.hardwareId = info.decoderId;
+    if (known && !info.decoderType) return;
+    // Ask for the last passing index (everything numbered while we were away is requested) –
+    // once the highest stored number is known, so the catch-up starts at the right place.
+    managed.sessionAsked = false;
+    if (managed.sessionTimer) clearTimeout(managed.sessionTimer);
+    managed.sessionTimer = managed.resumeKnown
+      ? null
+      : setTimeout(() => {
+          managed.resumeKnown = true;
+          this._askSession(managed);
+        }, RESUME_WAIT_MS);
+    this._askSession(managed);
     this._emitHealth(point, {
       processStatus: "running",
       websocketStatus: "connected",
       lastConnectedAt: nowIso(),
       lastError: null,
+      hardware: { hardwareId: info.decoderId, decoderType: info.decoderType || null, firmwareVersion: info.firmwareVersion || null },
+    });
+  }
+
+  /** SESSION answer: last passing index of the decoder → catch-up of missed passings. */
+  private _onRawRecord(managed: ManagedConnection, record: P3Record): void {
+    if (record.kind !== "session" || typeof record.lastPassingIndex !== "number") return;
+    this._requestAgain(managed, managed.tracker.onSession(record.lastPassingIndex, Date.now()));
+  }
+
+  /** Sends RESEND requests for missing passing numbers and reports the counters. */
+  private _requestAgain(managed: ManagedConnection, ranges: PassingRange[]): void {
+    if (ranges.length > 0 && managed.hardwareId && managed.connection.state === "connected") {
+      const decoderId = decoderIdToRequestOrder(managed.hardwareId);
+      for (const range of ranges) {
+        console.warn(`[p3-adapter] requesting passings ${range.from}-${range.to} again: timingPoint=${managed.point.id}`);
+        managed.connection.requestPassings(decoderId, range.from, range.to);
+      }
+    }
+    if (ranges.length > 0) this._emitHealth(managed.point, { sequence: managed.tracker.snapshot });
+  }
+
+  private _askSession(managed: ManagedConnection): void {
+    if (managed.sessionAsked || !managed.resumeKnown || !managed.hardwareId) return;
+    if (managed.connection.state !== "connected") return;
+    managed.sessionAsked = true;
+    managed.connection.requestSession(decoderIdToRequestOrder(managed.hardwareId));
+  }
+
+  private _close(managed: ManagedConnection): void {
+    if (managed.resendTimer) clearInterval(managed.resendTimer);
+    if (managed.sessionTimer) clearTimeout(managed.sessionTimer);
+    managed.resendTimer = null;
+    managed.sessionTimer = null;
+    managed.connection.disconnect();
+  }
+
+  /** P3 STATUS records (sent periodically): device health for the hardware status view. */
+  private _onStatus(managed: ManagedConnection, status: DecoderStatusEvent): void {
+    if (!managed.hardwareId) this._identified(managed, { decoderId: status.decoderId, decoderType: "", firmwareVersion: "" });
+    const t = nowIso();
+    this._emitHealth(managed.point, {
+      lastMessageAt: t,
+      device: {
+        noise: Number.isFinite(status.noise) ? status.noise : null,
+        gpsLocked: typeof status.gpsLocked === "boolean" ? status.gpsLocked : null,
+        temperatureC: Number.isFinite(status.temperature) ? status.temperature : null,
+        voltage: Number.isFinite(status.voltage) ? status.voltage : null,
+        at: t,
+      },
     });
   }
 
   private _onDisconnected(managed: ManagedConnection, reason: string): void {
     const { point } = managed;
     console.warn(`[p3-adapter] disconnected: timingPoint=${point.id} ip=${point.decoderIp} reason=${reason}`);
+    // Identify again after reconnecting (and ask SESSION again for the catch-up).
+    managed.hardwareId = null;
     this._emitHealth(point, { processStatus: "stopped", websocketStatus: "disconnected" });
   }
 

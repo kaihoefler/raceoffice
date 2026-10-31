@@ -20,6 +20,12 @@ type AmmcAdapterCallbacks = {
   onHealth: (update: DecoderHealthPatch) => void;
 };
 
+/** Numeric field of an AMM payload, or null. */
+function numberField(item: unknown, key: string): number | null {
+  const v = item && typeof item === "object" ? (item as Record<string, unknown>)[key] : undefined;
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
 /**
  * DecoderSourceAdapter für das AMMC-Backend.
  *
@@ -229,9 +235,10 @@ export class AmmcDecoderSourceAdapter implements DecoderSourceAdapter {
         decoderId: result.passing.decoderId,
         passingNumber: result.passingNumber,
         transponderType: "tranx",
-        signalStrength: 0,
-        hits: 0,
-        lowBattery: false,
+        // AMM PASSING carries strength/hits/low_battery; older converters may omit them.
+        signalStrength: numberField(item, "strength") ?? 0,
+        hits: numberField(item, "hits") ?? 0,
+        lowBattery: (item as Record<string, unknown> | null)?.low_battery === true,
         backend: "ammc",
         raw: rawText,
       };

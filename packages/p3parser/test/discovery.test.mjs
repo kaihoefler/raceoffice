@@ -80,3 +80,11 @@ test("discovery: run() rejects when the local reply port is already bound", asyn
     blocker.close();
   }
 });
+
+import { decoderIdToRequestOrder } from "../dist/index.js";
+
+test("decoderIdToRequestOrder reverses the display order for SESSION/RESEND", () => {
+  assert.equal(decoderIdToRequestOrder("00-0C-03-92"), "92-03-0C-00");
+  assert.equal(decoderIdToRequestOrder("40240400"), "00-04-24-40");
+  assert.equal(decoderIdToRequestOrder("abc"), "abc");
+});

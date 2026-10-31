@@ -23,6 +23,17 @@ export type LiveTrackingTimingPoint = {
 
   id: string;
   name: string;
+
+  /**
+   * Physical decoder of this timing point (id in the timing decoder register,
+   * doc/timing-architecture.md). Absent in setups written before the register existed; then the
+   * decoder is resolved from the address fields below (resolveTimingPointDecoderId).
+   *
+   * Not to be confused with `decoderId` found in old setup documents: that was the AMMC decoder
+   * label (e.g. "SF") and is ignored.
+   */
+  timingDecoderId?: string;
+
   decoderIp: string;
   websocketPortAMM: number;
 
@@ -399,6 +410,7 @@ export function isLiveTrackingTimingPoint(value: unknown): value is LiveTracking
     typeof value.name === "string" &&
     typeof value.decoderIp === "string" &&
         typeof value.websocketPortAMM === "number" &&
+    (value.timingDecoderId === undefined || typeof value.timingDecoderId === "string") &&
     (value.decoderType === undefined || value.decoderType === "amb" || value.decoderType === "sim") &&
     (value.simTranCodes === undefined || (Array.isArray(value.simTranCodes) && value.simTranCodes.every((x) => typeof x === "string"))) &&
         (value.simPassingDelay === undefined || typeof value.simPassingDelay === "string") &&

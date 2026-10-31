@@ -81,6 +81,11 @@ export class DocStore {
     this.upsertDocStmt.run({ id, rev: doc.rev, json: JSON.stringify(doc.data) });
   }
 
+  /** The underlying SQLite connection, shared with other stores (e.g. the timing passing table). */
+  get database(): Database.Database {
+    return this.db;
+  }
+
   close(): void {
     this.db.close();
   }

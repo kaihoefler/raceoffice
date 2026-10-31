@@ -28,6 +28,9 @@ Potentielle TODOs
 
 export type RealtimeStatus = "connecting" | "connected" | "disconnected" | "error";
 
+/** Pause before reconnecting a closed document socket (e.g. after a server restart). */
+const RECONNECT_DELAY_MS = 2000;
+
 export function useRealtimeDoc<T>(docId: string | null) {
     const [data, setData] = useState<T | null>(null);
     const [status, setStatus] = useState<RealtimeStatus>("disconnected");
@@ -67,6 +70,7 @@ export function useRealtimeDoc<T>(docId: string | null) {
         wsRef.current = ws;
 
         const isCurrent = () => wsRef.current === ws;
+        let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
         ws.onopen = () => {
             if (!isCurrent()) return;
@@ -86,6 +90,9 @@ export function useRealtimeDoc<T>(docId: string | null) {
             if (!isCurrent()) return;
             setStatus("disconnected");
             report("disconnected");
+            // Reconnect (fresh snapshot): without it the page keeps showing old data and silently
+            // drops every change, e.g. after the server was restarted while the page stayed open.
+            reconnectTimer = setTimeout(() => setReconnectNonce((n) => n + 1), RECONNECT_DELAY_MS);
         };
 
         ws.onmessage = (ev) => {
@@ -150,6 +157,7 @@ export function useRealtimeDoc<T>(docId: string | null) {
         };
 
         return () => {
+            if (reconnectTimer) clearTimeout(reconnectTimer);
             // Prevent cleanup of an old effect from nulling the ref of a newer socket
             if (wsRef.current === ws) {
                 wsRef.current = null;
@@ -166,10 +174,13 @@ export function useRealtimeDoc<T>(docId: string | null) {
         const next = fn(prev);
         const patch = compare(prev as any, next as any) as Operation[];
 
+        if (patch.length === 0) return;
         const ws = wsRef.current;
-        if (ws && ws.readyState === WebSocket.OPEN && patch.length > 0) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ baseRev: revRef.current, patch }));
-            console.log(JSON.stringify({ baseRev: revRef.current, patch }));
+        } else {
+            // Never drop a change silently.
+            setError("Keine Verbindung zum Server – die Änderung wurde nicht gespeichert.");
         }
     }, []);
 
