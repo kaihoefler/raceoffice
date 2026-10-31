@@ -161,7 +161,7 @@ Hinweise:
 
 Der Release-Workflow führt keine Tests aus: Vor dem Tag muss `ci.yml` auf dem Commit grün sein.
 
-[Dependabot](.github/dependabot.yml) öffnet wöchentlich (montags) Update-PRs. Gruppen: `dev-tooling`, `mui`, `react`. Major-Updates von `better-sqlite3` sind ausgenommen, weil v13 bei `npm ci` ohne C++-Toolchain scheitert. Jeder Dependabot-PR durchläuft `ci.yml`. Ein grüner Lauf heißt: Typecheck, Lint, Tests und Build sind mit der neuen Version in Ordnung.
+[Dependabot](.github/dependabot.yml) öffnet wöchentlich (montags) Update-PRs. Gruppen: `dev-tooling`, `mui`, `react`. Ausgenommen sind Major-Updates von `better-sqlite3` (v13 scheitert bei `npm ci` ohne C++-Toolchain) und von `typescript` (typescript-eslint unterstützt TS 7 noch nicht, der Lint bricht ab). Jeder Dependabot-PR durchläuft `ci.yml`. Ein grüner Lauf heißt: Typecheck, Lint, Tests und Build sind mit der neuen Version in Ordnung.
 
 Details: [`doc/build-and-deploy.md`](doc/build-and-deploy.md#continuous-integration--releases).
 

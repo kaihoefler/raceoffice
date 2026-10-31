@@ -191,3 +191,4 @@ docker run -d --name leaderboard -p 8080:8080 -v leaderboard-data:/data \
 - `.github/dependabot.yml`: weekly npm updates (Monday 09:00 Europe/Berlin), at most 5 open PRs.
 - Groups: `dev-tooling` (vitest, typescript, tsx, vite, eslint, …), `mui` (`@mui/*`, `@emotion/*`), `react`.
 - Major updates of `better-sqlite3` / `@types/better-sqlite3` are ignored. v13 ships prebuilt binaries, but `npm ci` still runs `node-gyp`, which fails on machines without Python + C++ build tools. Revisit when that is fixed upstream; `apps/server/test/docStore.test.ts` covers the persistence layer for that upgrade.
+- Major updates of `typescript` are ignored. typescript-eslint 8.x requires TypeScript `<6.1` and refuses to load with TS 7, so the lint step fails (seen in the dev-tooling PR #46). Remove the entry once typescript-eslint supports TS 7; typecheck and install already pass with TS 7.
