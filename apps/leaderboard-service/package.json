@@ -19,7 +19,7 @@
     "node": ">=20.19.0"
   },
   "dependencies": {
-    "@fastify/static": "^10.1.5",
+    "@fastify/static": "^10.1.8",
     "@fastify/websocket": "^11.3.4",
     "@raceoffice/domain": "*",
     "@raceoffice/rmonitor": "*",
