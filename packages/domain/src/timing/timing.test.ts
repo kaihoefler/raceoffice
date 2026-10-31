@@ -15,6 +15,11 @@ import {
   TIMING_DECODERS_DOC_ID,
   TIMING_STATUS_DOC_ID,
   getSetupDecoderIds,
+  legacySimulatorSettings,
+  normalizeSimulatorDecoderId,
+  normalizeSimulatorPassingDelay,
+  normalizeTimingDecodersDocument,
+  simulatorPassingDelayForLap,
   removeMisderivedLegacyDecoders,
   timingDecoderFromLegacyPoint,
   toTimingPointPassings,
@@ -100,16 +105,43 @@ describe("migration of LiveTracking setups", () => {
     expect(mergeLegacySetupDecoders(doc, [a, b], "later")).toBe(doc);
   });
 
-  it("maps P3 setups to the P3 port and simulators with their parameters", () => {
+  it("maps P3 setups to the P3 port; old simulation points become AMMC decoders, their parameters go to the simulator", () => {
     const p3 = setup([point({ decoderIp: "10.0.0.7" })], "p3parser");
     const sim = setup([point({ decoderIp: "127.0.0.1", websocketPortAMM: 9100, decoderType: "sim", simTranCodes: ["1", "2"], simPassingDelay: "900" })]);
     const doc = mergeLegacySetupDecoders(createTimingDecodersDocument(), [p3, sim], "now");
-    expect(doc.decoders[0]).toMatchObject({ id: "p3@10.0.0.7:5403", backend: "p3", port: 5403, simulation: null });
-    expect(doc.decoders[1]).toMatchObject({
-      id: "sim@127.0.0.1:9100",
-      backend: "sim",
-      simulation: { transponderIds: ["1", "2"], passingDelay: "900", startupDelaySecs: 0 },
-    });
+    expect(doc.decoders[0]).toMatchObject({ id: "p3@10.0.0.7:5403", backend: "p3", port: 5403 });
+    expect(doc.decoders[1]).toMatchObject({ id: "ammc@127.0.0.1:9100", backend: "ammc", ip: "127.0.0.1", port: 9100 });
+    expect(legacySimulatorSettings([p3, sim])).toEqual({ transponderIds: ["1", "2"], passingDelay: "900", startupDelaySecs: 0 });
+    expect(legacySimulatorSettings([p3])).toBeNull();
+  });
+
+  it("migrates register entries of the former type sim", () => {
+    const old = {
+      kind: "timingDecoders",
+      version: 1,
+      updatedAt: null,
+      decoders: [
+        { id: "sim@127.0.0.1:9202", name: "Sim", backend: "sim", ip: "127.0.0.1", port: 9202, clockOffsetSecs: 0, hardwareId: null, updatedAt: null, simulation: { transponderIds: ["7"], passingDelay: "1500", startupDelaySecs: 2 } },
+        { id: "p3@10.0.0.7:5403", name: "Ziel", backend: "p3", ip: "10.0.0.7", port: 5403, clockOffsetSecs: 0, hardwareId: null, updatedAt: null, simulation: null },
+      ],
+    };
+    const result = normalizeTimingDecodersDocument(old)!;
+    expect(result.doc.decoders.map((d) => [d.id, d.backend])).toEqual([
+      ["sim@127.0.0.1:9202", "ammc"],
+      ["p3@10.0.0.7:5403", "p3"],
+    ]);
+    expect(result.doc.decoders.every((d) => !("simulation" in d))).toBe(true);
+    expect(result.legacySimulator).toEqual({ transponderIds: ["7"], passingDelay: "1500", startupDelaySecs: 2 });
+    const current = createTimingDecodersDocument();
+    expect(normalizeTimingDecodersDocument(current)?.doc).toBe(current);
+  });
+
+  it("normalizes simulator parameters", () => {
+    expect(normalizeSimulatorDecoderId("Sim Ziel")).toBe("E00000");
+    expect(normalizeSimulatorDecoderId("0a87e5")).toBe("0A87E5");
+    expect(normalizeSimulatorPassingDelay("24000")).toBe("24000-25000");
+    expect(normalizeSimulatorPassingDelay("800 - 1200")).toBe("800-1200");
+    expect(simulatorPassingDelayForLap(200, 30)).toBe("24000-25000");
   });
 
   it("keeps operator edits and assigned ids", () => {

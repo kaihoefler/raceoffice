@@ -12,6 +12,13 @@ import {
   normalizeLiveTrackingSessionDocument,
   isLiveTrackingSessionDocument,
   mergeLegacySetupDecoders,
+  createTimingSimulatorDocument,
+  isTimingSimulatorDocument,
+  legacySimulatorSettings,
+  normalizeSimulatorPassingDelay,
+  normalizeTimingDecodersDocument,
+  TIMING_SIMULATOR_DOC_ID,
+  type LegacySimulatorSettings,
   removeMisderivedLegacyDecoders,
   TIMING_DECODERS_DOC_ID,
   type LiveTrackingSetupDocument,
@@ -157,13 +164,42 @@ export function migrateLegacySetupDecoders(
     if (isLiveTrackingSetupDocument(setup)) setups.push(setup);
   }
   const current = loadDoc(TIMING_DECODERS_DOC_ID).data;
-  const base = isTimingDecodersDocument(current) ? current : createTimingDecodersDocument();
+  // Entries of the former decoder type "sim" become AMMC decoders (simulator settings extracted).
+  const normalized = normalizeTimingDecodersDocument(current);
+  const base = normalized?.doc ?? createTimingDecodersDocument();
   const at = new Date().toISOString();
+  migrateSimulatorSettings(loadDoc, commit, normalized?.legacySimulator ?? legacySimulatorSettings(setups), at);
   const cleaned = removeMisderivedLegacyDecoders(base, setups, at);
   const merged = mergeLegacySetupDecoders(cleaned, setups, at);
-  if (merged === base) return 0;
+  if (merged === current) return 0;
   commit(TIMING_DECODERS_DOC_ID, () => merged);
   return Math.max(1, Math.abs(merged.decoders.length - base.decoders.length));
+}
+
+/**
+ * Takes the simulator parameters of earlier versions (register entry of type "sim" or a
+ * "simulation" timing point) into the simulator document – once, while it was never configured.
+ */
+function migrateSimulatorSettings(
+  loadDoc: (id: string) => Doc,
+  commit: (docId: string, updater: (current: unknown) => unknown) => Doc,
+  legacy: LegacySimulatorSettings | null,
+  at: string,
+): void {
+  if (!legacy) return;
+  const current = loadDoc(TIMING_SIMULATOR_DOC_ID).data;
+  const doc = isTimingSimulatorDocument(current) ? current : createTimingSimulatorDocument();
+  if (doc.updatedAt !== null) return;
+  commit(TIMING_SIMULATOR_DOC_ID, () => ({
+    ...doc,
+    config: {
+      ...doc.config,
+      transponderIds: legacy.transponderIds,
+      passingDelay: normalizeSimulatorPassingDelay(legacy.passingDelay),
+      startupDelaySecs: legacy.startupDelaySecs,
+    },
+    updatedAt: at,
+  }));
 }
 
 /** Migrates the LiveTracking session document of older versions; true if it was rewritten. */

@@ -176,6 +176,7 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
 
   private _onPassing(managed: ManagedConnection, event: PassingEvent): void {
     const { point } = managed;
+    if (!managed.hardwareId) this._identified(managed, { decoderId: event.decoderId, decoderType: "", firmwareVersion: "" });
     // Every passing record (also sync pulses) takes a number: gaps are requested again.
     this._requestAgain(managed, managed.tracker.onPassing(event.passingNumber, Date.now()));
 
@@ -212,8 +213,22 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
   }
 
   private _onConnected(managed: ManagedConnection, info: DecoderInfoEvent): void {
+    console.log(
+      `[p3-adapter] connected: timingPoint=${managed.point.id} ip=${managed.point.decoderIp} decoderId=${info.decoderId} type=${info.decoderType} fw=${info.firmwareVersion}`,
+    );
+    this._identified(managed, info);
+  }
+
+  /**
+   * The decoder is known: from its VERSION record, or – for devices that do not send one, like
+   * the ammc-sim simulator – from the decoder id in its first passing or status record. Marks the
+   * connection as connected and starts the catch-up (SESSION).
+   */
+  private _identified(managed: ManagedConnection, info: DecoderInfoEvent): void {
     const { point } = managed;
+    const known = managed.hardwareId === info.decoderId;
     managed.hardwareId = info.decoderId;
+    if (known && !info.decoderType) return;
     // Ask for the last passing index (everything numbered while we were away is requested) –
     // once the highest stored number is known, so the catch-up starts at the right place.
     managed.sessionAsked = false;
@@ -225,9 +240,6 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
           this._askSession(managed);
         }, RESUME_WAIT_MS);
     this._askSession(managed);
-    console.log(
-      `[p3-adapter] connected: timingPoint=${point.id} ip=${point.decoderIp} decoderId=${info.decoderId} type=${info.decoderType} fw=${info.firmwareVersion}`,
-    );
     this._emitHealth(point, {
       processStatus: "running",
       websocketStatus: "connected",
@@ -272,6 +284,7 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
 
   /** P3 STATUS records (sent periodically): device health for the hardware status view. */
   private _onStatus(managed: ManagedConnection, status: DecoderStatusEvent): void {
+    if (!managed.hardwareId) this._identified(managed, { decoderId: status.decoderId, decoderType: "", firmwareVersion: "" });
     const t = nowIso();
     this._emitHealth(managed.point, {
       lastMessageAt: t,
@@ -288,6 +301,8 @@ export class P3ParserDecoderSourceAdapter implements DecoderSourceAdapter {
   private _onDisconnected(managed: ManagedConnection, reason: string): void {
     const { point } = managed;
     console.warn(`[p3-adapter] disconnected: timingPoint=${point.id} ip=${point.decoderIp} reason=${reason}`);
+    // Identify again after reconnecting (and ask SESSION again for the catch-up).
+    managed.hardwareId = null;
     this._emitHealth(point, { processStatus: "stopped", websocketStatus: "disconnected" });
   }
 

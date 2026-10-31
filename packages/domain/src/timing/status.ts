@@ -7,6 +7,8 @@
  * conflict with configuration changes.
  */
 
+import type { TimingSimulatorStatus } from "./simulator.js";
+
 export type TimingDecoderConnectionState = "disconnected" | "connecting" | "connected" | "error";
 
 /** Why the worker holds a connection (phase 1: explicit wish or a running LiveTracking session). */
@@ -52,6 +54,8 @@ export type TimingStatusDocument = {
   version: 1;
   workerHeartbeatAt: string | null;
   decoders: TimingDecoderStatus[];
+  /** Decoder simulator run by the worker (absent in documents of earlier versions). */
+  simulator?: TimingSimulatorStatus | null;
   updatedAt: string | null;
 };
 

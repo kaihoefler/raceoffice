@@ -40,7 +40,6 @@ const decoder = (id: string, backend: TimingDecoder["backend"], overrides: Parti
   port: backend === "p3" ? 5403 : 9001,
   clockOffsetSecs: -2,
   hardwareId: null,
-  simulation: null,
   updatedAt: null,
   ...overrides,
 });
@@ -90,13 +89,13 @@ describe("TimingConnectionManager", () => {
 
     manager.sync([
       { decoder: decoder("p3@10.0.0.7:5403", "p3"), reasons: ["explicit"] },
-      { decoder: decoder("sim@127.0.0.1:9100", "sim", { ip: "127.0.0.1", port: 9100 }), reasons: ["livetracking"] },
+      { decoder: decoder("ammc@127.0.0.1:9100", "ammc", { ip: "127.0.0.1", port: 9100 }), reasons: ["livetracking"] },
     ]);
     expect(adapters.map((a) => a.backend).sort()).toEqual(["ammc", "p3parser"]);
     const p3 = adapters.find((a) => a.backend === "p3parser")!;
     // Adapter config keyed by decoder id, raw time (offset 0 – applied when reading).
     expect(p3.points[0]).toMatchObject({ id: "p3@10.0.0.7:5403", decoderIp: "10.0.0.7", decoderTimestampOffsetSecs: 0 });
-    expect(adapters.find((a) => a.backend === "ammc")!.points[0]).toMatchObject({ decoderType: "sim", websocketPortAMM: 9100 });
+    expect(adapters.find((a) => a.backend === "ammc")!.points[0]).toMatchObject({ decoderType: "amb", decoderIp: "127.0.0.1", websocketPortAMM: 9100 });
 
     manager.sync([{ decoder: decoder("p3@10.0.0.7:5403", "p3"), reasons: ["explicit"] }]);
     expect(adapters.find((a) => a.backend === "ammc")!.stopped).toBe(true);

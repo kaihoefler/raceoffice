@@ -53,6 +53,9 @@ import {
   TIMING_CONNECTION_DOC_ID,
   TIMING_DECODERS_DOC_ID,
   TIMING_STATUS_DOC_ID,
+  TIMING_SIMULATOR_DOC_ID,
+  isTimingSimulatorDocument,
+  type TimingSimulatorDocument,
   type LiveTrackingCommandIntent,
   type TimingConnectionDocument,
   type TimingDecodersDocument,
@@ -62,6 +65,7 @@ import {
 import { RealtimeDocClient } from "./realtimeDocClient.js";
 import { TimingConnectionManager, type DesiredDecoder } from "./timing/connectionManager.js";
 import { TimingPassingFeed } from "./timing/passingFeed.js";
+import { SimulatorProcess } from "./timing/simulatorProcess.js";
 import { TimingPassingUploader } from "./timing/passingUploader.js";
 
 /** Decoder status is written at most this often (passings update it constantly). */
@@ -173,6 +177,9 @@ export class SessionLoop {
   readonly decodersClient: RealtimeDocClient<TimingDecodersDocument>;
   readonly connectionClient: RealtimeDocClient<TimingConnectionDocument>;
   readonly timingStatusClient: RealtimeDocClient<TimingStatusDocument>;
+  readonly simulatorClient: RealtimeDocClient<TimingSimulatorDocument>;
+  /** Decoder simulator (ammc-sim) – replaces hardware, started/stopped on the decoder page. */
+  private readonly simulator: SimulatorProcess;
   private readonly connectionManager: TimingConnectionManager;
   private readonly uploader: TimingPassingUploader;
   private unsubscribeTiming: Array<() => void> = [];
@@ -203,6 +210,8 @@ export class SessionLoop {
     this.decodersClient = new RealtimeDocClient<TimingDecodersDocument>(TIMING_DECODERS_DOC_ID, baseHttpUrl);
     this.connectionClient = new RealtimeDocClient<TimingConnectionDocument>(TIMING_CONNECTION_DOC_ID, baseHttpUrl);
     this.timingStatusClient = new RealtimeDocClient<TimingStatusDocument>(TIMING_STATUS_DOC_ID, baseHttpUrl);
+    this.simulatorClient = new RealtimeDocClient<TimingSimulatorDocument>(TIMING_SIMULATOR_DOC_ID, baseHttpUrl);
+    this.simulator = new SimulatorProcess(() => this.scheduleTimingStatusFlush());
     this.uploader = new TimingPassingUploader(baseHttpUrl, { onWarning: (m) => this.appendRuntimeWarning(m) });
     this.connectionManager = new TimingConnectionManager(
       {
@@ -221,9 +230,14 @@ export class SessionLoop {
     this.decodersClient.connect();
     this.connectionClient.connect();
     this.timingStatusClient.connect();
+    this.simulatorClient.connect();
     this.unsubscribeTiming = [
       this.decodersClient.onData(() => this.scheduleAdapterSync()),
       this.connectionClient.onData(() => this.scheduleAdapterSync()),
+      this.simulatorClient.onData(() => {
+        const doc = this.simulatorClient.data;
+        if (isTimingSimulatorDocument(doc)) this.simulator.apply(doc.running, doc.config);
+      }),
     ];
 
 
@@ -266,11 +280,13 @@ export class SessionLoop {
     for (const unsub of this.unsubscribeTiming) unsub();
     this.unsubscribeTiming = [];
     void this.connectionManager.stop();
+    this.simulator.stop();
     void this.uploader.flush();
     this.uploader.stop();
     this.timingStatusClient.update((doc) => ({
       ...doc,
       workerHeartbeatAt: null,
+      simulator: { state: "stopped", startedAt: null, lastError: null, lastLine: null },
       decoders: doc.decoders.map((d) => ({ ...d, connection: "disconnected", reasons: [], connectionSessionId: null, connectedSince: null })),
       updatedAt: nowIso(),
     }));
@@ -301,6 +317,7 @@ export class SessionLoop {
     this.decodersClient.close();
     this.connectionClient.close();
     this.timingStatusClient.close();
+    this.simulatorClient.close();
   }
 
   private clearScheduledTimers() {
@@ -411,7 +428,7 @@ export class SessionLoop {
     this.timingStatusClient.update((doc) => {
       const byId = new Map(doc.decoders.map((d) => [d.decoderId, d]));
       for (const status of statuses) byId.set(status.decoderId, status);
-      return { ...doc, workerHeartbeatAt: t, decoders: [...byId.values()], updatedAt: t };
+      return { ...doc, workerHeartbeatAt: t, decoders: [...byId.values()], simulator: this.simulator.status, updatedAt: t };
     });
   }
 

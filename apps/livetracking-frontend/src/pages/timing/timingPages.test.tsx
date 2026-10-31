@@ -15,6 +15,7 @@ import {
   makeLiveTrackingSetupDocId,
   TIMING_CONNECTION_DOC_ID,
   TIMING_DECODERS_DOC_ID,
+  TIMING_SIMULATOR_DOC_ID,
   TIMING_STATUS_DOC_ID,
   type LiveTrackingSessionDocument,
   type LiveTrackingSetupDocument,
@@ -31,10 +32,9 @@ const P3: TimingDecoder = {
   port: 5403,
   clockOffsetSecs: 0,
   hardwareId: null,
-  simulation: null,
   updatedAt: null,
 };
-const SIM: TimingDecoder = { ...P3, id: "sim@127.0.0.1:9100", name: "Sim Gegengerade", backend: "sim", ip: "127.0.0.1", port: 9100 };
+const SIM: TimingDecoder = { ...P3, id: "ammc@127.0.0.1:9100", name: "Sim Gegengerade", backend: "ammc", ip: "127.0.0.1", port: 9100 };
 
 const register = (...decoders: TimingDecoder[]) => ({ ...createTimingDecodersDocument(), decoders });
 
@@ -146,6 +146,28 @@ describe("decoder register", () => {
   });
 });
 
+describe("decoder simulation tab", () => {
+  it("starts the simulator with the entered settings and creates a decoder for it", async () => {
+    const { server, user } = renderApp({ route: "/timing/decoders" });
+    await user.click(await screen.findByRole("tab", { name: "Simulation" }));
+    const start = await screen.findByRole("button", { name: "Simulator starten" });
+    expect(start).toBeDisabled(); // no transponders yet
+    await user.type(screen.getByLabelText("Transponder (kommagetrennt)"), "1001, 1002");
+    await user.clear(screen.getByLabelText("Rundenlänge (m)"));
+    await user.type(screen.getByLabelText("Rundenlänge (m)"), "250");
+    await user.click(screen.getByRole("button", { name: "berechnen" }));
+    expect(screen.getByLabelText("Abstand der Passings (ms, von-bis)")).toHaveValue("30000-31000");
+    await user.click(screen.getByRole("button", { name: "Simulator starten" }));
+    await waitFor(() =>
+      expect(server.doc(TIMING_SIMULATOR_DOC_ID).data).toMatchObject({ running: true, config: { transponderIds: ["1001", "1002"], passingDelay: "30000-31000" } }),
+    );
+    await user.click(screen.getByRole("button", { name: "P3-Decoder anlegen" }));
+    await waitFor(() =>
+      expect(server.doc(TIMING_DECODERS_DOC_ID).data.decoders).toEqual([expect.objectContaining({ id: "p3@127.0.0.1:5403", backend: "p3", ip: "127.0.0.1" })]),
+    );
+  });
+});
+
 describe("setups", () => {
   it("assigns decoders from the register to timing points", async () => {
     const { server, user } = renderApp({
@@ -160,7 +182,7 @@ describe("setups", () => {
     const select = await screen.findByRole("combobox", { name: "Decoder Timing-Point 1" });
     expect(select).toHaveTextContent("Ziel (P3)"); // old address resolved to the register entry
     await user.click(select);
-    await user.click(await screen.findByRole("option", { name: "Sim Gegengerade (Simulation)" }));
+    await user.click(await screen.findByRole("option", { name: "Sim Gegengerade (AMMC)" }));
     await user.click(screen.getByRole("button", { name: "Setup speichern" }));
     await waitFor(() => expect(server.doc(makeLiveTrackingSetupDocId("s1")).data.track.timingPoints[0].timingDecoderId).toBe(SIM.id));
   });

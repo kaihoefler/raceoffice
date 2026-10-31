@@ -58,7 +58,6 @@ export function useWorkerState(now: number) {
 export const BACKEND_LABEL: Record<TimingDecoder["backend"], string> = {
   p3: "P3",
   ammc: "AMMC",
-  sim: "Simulation",
 };
 
 export type DecoderHealth = "connected" | "silent" | "connecting" | "error" | "disconnected";

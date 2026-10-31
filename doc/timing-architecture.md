@@ -58,6 +58,13 @@ flowchart TB
   - Status: Verbindung, Hardware-Info, bei P3 Rauschen, GPS-Lock, Temperatur und Spannung
 - **Neue Hardware** = neuer Adapter, der dieses Interface erfüllt. Darüberliegende Schichten bleiben unverändert.
 
+### 2.1a Decoder-Simulator
+- `ammc-sim` simuliert einen MyLaps-Decoder auf dem Rechner des Timing-Workers. Er lauscht auf dem festen MyLaps-Port 5403, deshalb läuft höchstens ein Simulator pro Rechner.
+- Der Simulator **ersetzt die Hardware** und ist kein Decoder-Typ. Ein normaler P3- oder AMMC-Decoder im Register mit Adresse `127.0.0.1` verbindet sich mit ihm wie mit einem echten Gerät, und seine Passings landen ganz normal im Passing-Store.
+- Bedienung: Decoder-Seite, Reiter „Simulation“. Dort starten und stoppen, Einstellungen bearbeiten (Decoder-ID mit 6 Hex-Zeichen, Transponder, Abstand der Passings mit Berechnung aus Rundenlänge und Tempo, Startverzögerung, optional Sichtbarkeit im Netzwerk-Scan) und einen Decoder für den Simulator anlegen.
+- Gespeichert im Realtime-Dokument `timingSimulator` (Wunsch „läuft“ und Einstellungen). Der Worker startet, stoppt oder startet bei geänderten Einstellungen neu. Der Status steht in `timingStatus.simulator`.
+- `ammc-sim` sendet keinen VERSION-Datensatz. Der P3-Adapter erkennt den Decoder deshalb am ersten Passing oder Status-Datensatz.
+
 ### 2.2 Logische Zeitmess-Ebene (Timing)
 Sie besteht aus vier Bausteinen:
 
@@ -209,7 +216,8 @@ Der Messablauf im Livetracking besteht nur aus **Start** und **Stop**. Die früh
 - **Messfenster:** Die Session führt `measurement.segments` (je Laufabschnitt `fromSeq`/`toSeq` auf dem Passing-Store). Start nach Stop setzt die Messung mit einem neuen Abschnitt fort, die Pause zählt nicht. „Messung zurücksetzen“ verwirft alle Abschnitte, eine laufende Messung beginnt sofort neu.
 - **Livetracking als Abnehmer:** Der Worker liest die Passings der Decoder des Setups ab dem ersten Abschnitt über den Stream `/timing/passings/stream` (`TimingPassingFeed`), filtert sie auf die Abschnitte und übersetzt sie mit `toTimingPointPassings` (Zuordnung und Uhr-Offset aus dem Register).
 - **Migration:** Alte Session-Dokumente (`preparing`/`ready`/`stopping`, Kommandos `prepare`/`shutdown`) werden beim Serverstart und im Worker auf `idle` bzw. `start`/`stop` umgestellt (`normalizeLiveTrackingSessionDocument`). Die frühere Passing-History (Dokument `liveTrackingPassingHistory`) wird nicht mehr geschrieben und nicht übernommen. Sie enthielt nur die Durchfahrten der jeweils laufenden Session.
-- **Setups:** Timing-Points speichern die `decoderId`. Die alten Adressfelder bleiben im Dokument, werden aber nicht mehr bearbeitet.
+- **Simulator:** Frühere Decoder vom Typ „sim“ und Simulations-Timing-Points werden zu AMMC-Decodern an derselben Adresse. Ihre Parameter übernimmt einmalig der Simulator.
+- **Setups:** Timing-Points speichern die Decoder-ID im Feld `timingDecoderId`. Ein älteres Feld `decoderId` (AMMC-Bezeichnung) wird ignoriert. Die alten Adressfelder bleiben im Dokument, werden aber nicht mehr bearbeitet.
 - **Oberfläche:** `/timing/control`, `/timing/decoders`, `/timing/setups`, `/live-tracking/measurement`. Die alte Seite `/live-tracking/setup` leitet auf „Messung“ um.
 
 ### Ist-Zustand vor dem Umbau (zur Einordnung)

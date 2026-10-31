@@ -2,7 +2,8 @@
 //
 // A decoder has a stable id: the hardware id it reports (P3, taken over from the network scan)
 // or one derived from its address. Passings are stored per decoder id; setups only reference it.
-// Connection data, clock offset and simulator parameters live here, not in the setups.
+// Connection data and clock offset live here, not in the setups. The second tab controls the
+// decoder simulator (a simulated MyLaps decoder, connected through a decoder at 127.0.0.1).
 
 import { useState } from "react";
 import {
@@ -20,11 +21,13 @@ import {
   IconButton,
   MenuItem,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  Tabs,
   TextField,
   Typography,
 } from "@mui/material";
@@ -38,6 +41,7 @@ import {
 } from "@raceoffice/domain";
 
 import { ConfirmDialog } from "../../components/common/Dialogs";
+import { SimulatorPanel } from "./SimulatorPanel";
 import { BACKEND_LABEL, nowIso, useTimingDocs } from "../../timing/timingShared";
 
 type DiscoveredDecoder = { ip: string; port: number; decoderId: string | null; decoderType: string | null; firmwareVersion: string | null };
@@ -51,9 +55,6 @@ type Draft = {
   port: string;
   clockOffsetSecs: string;
   hardwareId: string | null;
-  simTransponders: string;
-  simPassingDelay: string;
-  simStartupDelaySecs: string;
 };
 
 const emptyDraft = (): Draft => ({
@@ -64,9 +65,6 @@ const emptyDraft = (): Draft => ({
   port: String(P3_DEFAULT_PORT),
   clockOffsetSecs: "0",
   hardwareId: null,
-  simTransponders: "",
-  simPassingDelay: "1000",
-  simStartupDelaySecs: "0",
 });
 
 function toDraft(d: TimingDecoder): Draft {
@@ -78,9 +76,6 @@ function toDraft(d: TimingDecoder): Draft {
     port: String(d.port),
     clockOffsetSecs: String(d.clockOffsetSecs),
     hardwareId: d.hardwareId,
-    simTransponders: (d.simulation?.transponderIds ?? []).join(", "),
-    simPassingDelay: d.simulation?.passingDelay ?? "1000",
-    simStartupDelaySecs: String(d.simulation?.startupDelaySecs ?? 0),
   };
 }
 
@@ -106,19 +101,24 @@ function fromDraft(draft: Draft): TimingDecoder {
     port,
     clockOffsetSecs: parseNumber(draft.clockOffsetSecs) || 0,
     hardwareId: draft.hardwareId,
-    simulation:
-      draft.backend === "sim"
-        ? {
-            transponderIds: draft.simTransponders.split(",").map((s) => s.trim()).filter(Boolean),
-            passingDelay: draft.simPassingDelay.trim() || "1000",
-            startupDelaySecs: parseNumber(draft.simStartupDelaySecs) || 0,
-          }
-        : null,
     updatedAt: nowIso(),
   };
 }
 
 export default function TimingDecodersPage() {
+  const [tab, setTab] = useState<"decoders" | "simulation">("decoders");
+  return (
+    <Box sx={{ display: "grid", gap: 2 }}>
+      <Tabs value={tab} onChange={(_, v: "decoders" | "simulation") => setTab(v)} aria-label="Decoder-Bereiche">
+        <Tab value="decoders" label="Decoder" />
+        <Tab value="simulation" label="Simulation" />
+      </Tabs>
+      {tab === "decoders" ? <DecoderRegister /> : <SimulatorPanel />}
+    </Box>
+  );
+}
+
+function DecoderRegister() {
   const { decoders, updateDecoders, connectedIds, writeError } = useTimingDocs();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [deleting, setDeleting] = useState<TimingDecoder | null>(null);
@@ -292,13 +292,12 @@ function DecoderDialog(props: { draft: Draft; onCancel: () => void; onSave: (d: 
             disabled={d.id !== null}
             onChange={(e) => {
               const backend = e.target.value as TimingDecoderBackend;
-              set({ backend, port: backend === "p3" ? String(P3_DEFAULT_PORT) : d.port, ip: backend === "sim" && !d.ip ? "127.0.0.1" : d.ip });
+              set({ backend, port: backend === "p3" ? String(P3_DEFAULT_PORT) : d.port });
             }}
             helperText={d.id ? "Der Typ gehört zur Decoder-ID und lässt sich nicht ändern." : undefined}
           >
             <MenuItem value="p3">P3 (direkt, TCP)</MenuItem>
             <MenuItem value="ammc">AMMC (Konverter-Prozess)</MenuItem>
-            <MenuItem value="sim">Simulation (ammc-sim)</MenuItem>
           </TextField>
           <Stack direction="row" spacing={2}>
             <TextField size="small" label="IP-Adresse" value={d.ip} onChange={(e) => set({ ip: e.target.value })} sx={{ flex: 1 }} />
@@ -319,15 +318,6 @@ function DecoderDialog(props: { draft: Draft; onCancel: () => void; onSave: (d: 
             helperText="Korrektur der Decoder-Uhr; wird beim Auswerten angewendet, gespeicherte Passings bleiben unverändert."
             slotProps={{ htmlInput: { inputMode: "decimal" } }}
           />
-          {d.backend === "sim" ? (
-            <>
-              <TextField size="small" label="Transponder (kommagetrennt)" value={d.simTransponders} onChange={(e) => set({ simTransponders: e.target.value })} />
-              <Stack direction="row" spacing={2}>
-                <TextField size="small" label="Abstand der Passings (ms)" value={d.simPassingDelay} onChange={(e) => set({ simPassingDelay: e.target.value })} sx={{ flex: 1 }} />
-                <TextField size="small" label="Startverzögerung (s)" value={d.simStartupDelaySecs} onChange={(e) => set({ simStartupDelaySecs: e.target.value })} sx={{ flex: 1 }} />
-              </Stack>
-            </>
-          ) : null}
           {d.hardwareId ? (
             <Typography variant="caption" color="text.secondary">
               Hardware-ID {d.hardwareId} (aus dem Netzwerk-Scan)

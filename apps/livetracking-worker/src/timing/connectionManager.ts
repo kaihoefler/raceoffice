@@ -54,10 +54,9 @@ export function decoderToAdapterPoint(decoder: TimingDecoder, order: number): Li
     name: decoder.name || decoder.id,
     decoderIp: decoder.ip,
     websocketPortAMM: decoder.port,
-    decoderType: decoder.backend === "sim" ? "sim" : "amb",
-    simTranCodes: decoder.simulation?.transponderIds ?? [],
-    simPassingDelay: decoder.simulation?.passingDelay ?? "1000",
-    simStartupDelaySecs: decoder.simulation?.startupDelaySecs ?? 0,
+    // Always a real (or simulated, see SimulatorProcess) decoder: the AMMC manager must never
+    // start a simulator for a decoder connection.
+    decoderType: "amb",
     decoderTimestampOffsetSecs: 0,
     order,
     distanceFromPreviousM: 0,

@@ -37,7 +37,7 @@ export type TimingPassingInput = {
 
 export type TimingPassing = TimingPassingInput & { seq: number };
 
-const BACKENDS: readonly TimingDecoderBackend[] = ["p3", "ammc", "sim"];
+const BACKENDS: readonly TimingDecoderBackend[] = ["p3", "ammc"];
 
 const nullableNumber = (v: unknown) => v === null || (typeof v === "number" && Number.isFinite(v));
 const nullableString = (v: unknown) => v === null || typeof v === "string";

@@ -17,6 +17,7 @@ import type { LiveTrackingSetupDocument, LiveTrackingTimingPoint } from "../live
 import {
   makeTimingDecoderAddressId,
   P3_DEFAULT_PORT,
+  type LegacySimulatorSettings,
   type TimingDecoder,
   type TimingDecoderBackend,
   type TimingDecodersDocument,
@@ -24,9 +25,28 @@ import {
 
 type SetupBackend = LiveTrackingSetupDocument["decoderBackend"];
 
-function legacyBackend(point: LiveTrackingTimingPoint, setupBackend: SetupBackend): TimingDecoderBackend {
-  if ((setupBackend ?? "ammc") === "p3parser") return "p3";
-  return point.decoderType === "sim" ? "sim" : "ammc";
+/**
+ * P3 setups connect directly; AMMC setups through the converter. A "simulation" timing point of
+ * an old setup connected an AMMC converter to the simulator at its address – so it is an AMMC
+ * decoder too; its simulator parameters move to the simulator (legacySimulatorSettings).
+ */
+function legacyBackend(_point: LiveTrackingTimingPoint, setupBackend: SetupBackend): TimingDecoderBackend {
+  return (setupBackend ?? "ammc") === "p3parser" ? "p3" : "ammc";
+}
+
+/** Simulator parameters of the first "simulation" timing point of old setups, if any. */
+export function legacySimulatorSettings(setups: readonly LiveTrackingSetupDocument[]): LegacySimulatorSettings | null {
+  for (const setup of setups) {
+    const point = (setup.track?.timingPoints ?? []).find((p) => p.decoderType === "sim");
+    if (point) {
+      return {
+        transponderIds: [...(point.simTranCodes ?? [])],
+        passingDelay: String(point.simPassingDelay ?? "1000"),
+        startupDelaySecs: Number(point.simStartupDelaySecs ?? 0) || 0,
+      };
+    }
+  }
+  return null;
 }
 
 function legacyAddress(point: LiveTrackingTimingPoint, backend: TimingDecoderBackend): { ip: string; port: number } {
@@ -62,14 +82,6 @@ export function timingDecoderFromLegacyPoint(
     port,
     clockOffsetSecs: Number(point.decoderTimestampOffsetSecs ?? 0) || 0,
     hardwareId: null,
-    simulation:
-      backend === "sim"
-        ? {
-            transponderIds: [...(point.simTranCodes ?? [])],
-            passingDelay: String(point.simPassingDelay ?? "1000"),
-            startupDelaySecs: Number(point.simStartupDelaySecs ?? 0) || 0,
-          }
-        : null,
     updatedAt,
   };
 }
