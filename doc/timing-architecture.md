@@ -1,0 +1,201 @@
+# Zeitmess-Plattform – Schichtenarchitektur
+
+Dieses Dokument beschreibt die Zielarchitektur für Zeitmess-Hardware, Passings und deren Abnehmer in RaceOffice. Es ist die Referenz für alle weiteren Arbeiten an Livetracking, Decoder-Anbindung und einer späteren vollständigen Zeitmessung.
+
+- **Status:** Zielbild beschlossen. Umsetzung in Phasen, siehe [Migrationspfad](#8-migrationspfad-vom-ist-zustand).
+- **Verwandt:** [architecture.md](architecture.md) (Realtime-Dokumentmodell), [livetracking-decoder-backend-plan.md](livetracking-decoder-backend-plan.md) (Adapter-Schicht AMMC/P3).
+
+---
+
+## 1. Ziel
+
+Es gibt eine **zentrale Zeitmess-Ebene**:
+- Sie steuert die Hardware, erzeugt Passings, speichert sie dauerhaft und stellt sie **mehreren Abnehmern** bereit.
+- Abnehmer sind heute das Livetracking und später eine vollständige Zeitmessung mit Rennen und Wertung, Exporte oder Fremdsysteme.
+- Abnehmer verwalten ihre eigenen Messungen und Ergebnisse. Sie können diese löschen, ohne die Passings oder die Daten anderer Abnehmer anzutasten.
+
+Heute steckt alles in einem Livetracking-Worker und einem Setup-Dokument: Hardware-Anbindung, Passing-Erzeugung, Streckenbeschreibung, Messablauf und Ergebnisberechnung. Diese Architektur trennt das in drei Schichten.
+
+---
+
+## 2. Schichten
+
+```mermaid
+flowchart TB
+  subgraph U["Nutzerebene (Abnehmer)"]
+    LT["Livetracking<br/>Messung · Teilnehmer-Pools · Ergebnisse · Board · Visualisierung"]
+    ZM["Zeitmessung (später)<br/>Rennen · Wertung"]
+    EXT["Weitere (später)<br/>Export · Fremdsysteme"]
+  end
+  subgraph L["Logische Zeitmess-Ebene (Timing)"]
+    DEC["Decoder-Register & Status<br/>physische Decoder (ID, Backend, Adresse, Uhr-Offset)<br/>Verbindung · Hardware-Info · Rauschen/GPS/Temp/Spannung"]
+    CON["Verbindungssteuerung<br/>Decoder explizit verbinden / trennen"]
+    PAS["Passing-Store (SQLite)<br/>je physischem Decoder · append-only · seq<br/>Abfrage & Live-Stream"]
+    SET["Setups (logisch)<br/>Strecke · Timing-Points<br/>Timing-Point ↔ Decoder-ID"]
+  end
+  subgraph P["Physikalische Ebene (Hardware-Adapter)"]
+    P3["P3 (TCP 5403)"]
+    AMMC["AMMC (Prozess + WS)"]
+    SIM["Simulation"]
+    NEW["weitere Hardware"]
+  end
+  P3 & AMMC & SIM & NEW -->|Passings, Status| CON
+  DEC -->|welche Decoder| CON
+  CON -->|Status| DEC
+  CON -->|Passings je Decoder-ID| PAS
+  PAS -->|seit seq X / live| LT
+  PAS --> ZM
+  PAS --> EXT
+  SET -->|Decoder → Timing-Point| LT
+  SET --> ZM
+```
+
+### 2.1 Physikalische Ebene (Hardware-Adapter)
+- Je Hardware-Typ gibt es einen Adapter hinter dem Interface `DecoderSourceAdapter` (`apps/livetracking-worker/src/decoder/adapters/decoderSourceAdapter.ts`). Heute sind das P3 (direkt per TCP über `@raceoffice/p3parser`), AMMC (externer Prozess und WebSocket) und eine Simulation.
+- Ein Adapter kennt nur **physische Decoder**: Adresse, Protokoll, Uhr. Von Strecken, Timing-Points oder Rennen weiß er nichts.
+- Er liefert zwei Arten von Daten:
+  - normalisierte Passings: Decoder-ID, Decoder-Zeit, Transponder, Signal, Rohdaten
+  - Status: Verbindung, Hardware-Info, bei P3 Rauschen, GPS-Lock, Temperatur und Spannung
+- **Neue Hardware** = neuer Adapter, der dieses Interface erfüllt. Darüberliegende Schichten bleiben unverändert.
+
+### 2.2 Logische Zeitmess-Ebene (Timing)
+Sie besteht aus vier Bausteinen:
+
+| Baustein | Aufgabe |
+|---|---|
+| **Decoder-Register** | Liste der physischen Decoder: ID, Name, Backend, Adresse (IP, Port), Uhr-Offset, Simulationsparameter. Dazu der laufende Status je Decoder. Unabhängig von Setups. |
+| **Verbindungssteuerung** | Verbindet und trennt Decoder **explizit** (je Decoder oder als Auswahl) und führt die Adapter. |
+| **Passing-Store** | Speichert jede Durchfahrt dauerhaft in SQLite, je physischem Decoder, append-only, mit fortlaufender `seq`. Bietet Abfrage und Live-Stream. |
+| **Setups** | Logische Streckenbeschreibung: Strecke (Name, Länge), Timing-Points (Position, Rolle, aktiv) und je Timing-Point die zugeordnete **Decoder-ID**. |
+
+### 2.3 Nutzerebene (Abnehmer)
+- Ein Abnehmer liest Passings aus dem Passing-Store und übersetzt sie über ein Setup in Durchfahrten an Timing-Points. Daraus berechnet er seine Ergebnisse.
+- Er führt eigene **Messungen** und eigene Teilnehmerdaten, beim Livetracking zum Beispiel die Teilnehmer-Pools.
+- Mehrere Abnehmer können gleichzeitig dieselben Passings nutzen.
+
+---
+
+## 3. Grundsatz: Physik und Logik sind getrennt
+
+- Der Passing-Store kennt **nur physische Decoder**, keine Setups und keine Timing-Points.
+- Jeder physische Decoder hat eine **stabile ID**:
+  - die vom Gerät gemeldete Hardware-ID (P3: `decoderId`, z. B. `40-24-04-00`), oder
+  - eine generierte ID, wenn das Gerät keine meldet (AMMC, Simulation).
+- Ein **Setup ordnet Timing-Points Decoder-IDs zu**. Erst der Abnehmer wendet diese Zuordnung an.
+- Folgen:
+  - Mehrere Setups können **dieselben Passings** verwenden, z. B. eine zweite Streckeneinteilung mit zusätzlichen Splits oder eine nachträgliche Auswertung mit korrigierter Zuordnung.
+  - Ein Decoder kann in mehreren Setups vorkommen.
+  - Tauscht man ein Gerät, ändert sich nur die Zuordnung im Setup. Die historischen Passings bleiben dem alten Gerät zugeordnet.
+- **Uhr-Offset:** Der Offset eines Decoders steht im Register und wird **beim Lesen** angewendet, über einen gemeinsamen Domain-Helfer. Gespeichert wird die rohe Decoder-Zeit. Ein falsch eingestellter Offset lässt sich so nachträglich korrigieren, ohne Daten umzuschreiben.
+
+---
+
+## 4. Begriffe
+
+| Begriff | Ebene | Bedeutung |
+|---|---|---|
+| **Physischer Decoder** | Timing | Ein Gerät im Decoder-Register mit stabiler ID. |
+| **Verbindungssitzung** | Timing | Zeitraum zwischen explizitem „verbinden“ und „trennen“ eines Decoders. Ab dem Verbinden werden alle Passings dieses Decoders gespeichert. |
+| **Passing** | Timing | Unveränderliches Ereignis: `seq`, Decoder-ID, rohe Decoder-Zeit, Zeitquelle, Empfangszeit, Passing-Nummer, Transponder, Signalstärke, Hits, Batterie, Signalart (z. B. Startsignal), Rohdaten. |
+| **Setup** | Timing | Logische Strecke mit Timing-Points und deren Zuordnung zu Decoder-IDs. |
+| **Messung** | Nutzer | Fenster eines Abnehmers auf den Passing-Store (z. B. ab `startSeq`, bis `stopSeq`), gefiltert auf die Decoder-IDs eines Setups. Ergebnisse gehören zur Messung. |
+
+---
+
+## 5. Regeln
+
+### 5.1 Verbindungsaufbau
+- **Nichts verbindet automatisch.** Viele Decoder erlauben nur wenige gleichzeitige Verbindungen, zum Beispiel neben einer Zeitmess-Software. Das Verbinden ist deshalb immer eine bewusste Bedienhandlung.
+- Läuft der Worker, heißt das noch nicht, dass Decoder verbunden sind. Ein Neustart des Workers stellt den zuletzt **gewünschten** Verbindungszustand wieder her, der Wunsch ist im Dokument gespeichert.
+
+### 5.2 Persistenz
+- Passings werden ab dem Verbinden in einer SQLite-Tabelle des RaceOffice-Servers gespeichert, neben der Dokumenttabelle `docs`, nicht als Realtime-Dokument.
+- Grund: Ein Realtime-Dokument wird bei jeder Änderung vollständig gelesen und neu geschrieben. Bei zehntausenden Passings eines Wettkampftages skaliert das nicht und erlaubt keine Abfragen nach Decoder oder Zeitraum.
+- Die Tabelle ist append-only. Die `seq` steigt streng monoton und ist die Grundlage für Messfenster und Nachlieferung.
+- Das Schreiben ist idempotent über eine stabile Passing-ID, damit ein wiederholter Upload nach einem Fehler keine Duplikate erzeugt.
+
+### 5.3 Löschen
+- **Passings** werden nur auf der Timing-Ebene gelöscht: bewusst, mit Filter (Decoder, Zeitraum oder alles) und mit Rückfrage. Abnehmer werden darüber informiert und rechnen neu.
+- **Messungen und Ergebnisse** löscht jeder Abnehmer selbst, beim Livetracking mit „Messung zurücksetzen“. Die Passings und die Messungen anderer Abnehmer bleiben dabei unberührt.
+
+### 5.4 Status und Diagnose
+- Je Decoder werden geführt:
+  - Verbindungszustand, letzte Meldung, letzter Fehler, Zahl der Passings
+  - Hardware-Info (ID, Typ, Firmware)
+  - Gerätestatus, soweit das Protokoll ihn liefert: P3 meldet Rauschen, GPS-Lock, Temperatur und Spannung (`DecoderStatusEvent`)
+- Eine Warnung erscheint bei Stille über 30 s (P3 sendet regelmäßig Status und Sync-Pulse), bei fehlendem GPS-Lock und bei Verbindungsfehlern.
+
+---
+
+## 6. Prozesse und Datenfluss
+
+| Prozess | Rolle |
+|---|---|
+| **Timing-Worker** (hervorgegangen aus `apps/livetracking-worker`) | Physikalische Ebene und Verbindungssteuerung. Hardware-I/O läuft in einem eigenen Prozess: Ein hängender oder abstürzender Adapter trifft den Server nicht. |
+| **RaceOffice-Server** (`apps/server`) | Passing-Store (Tabelle und API), Decoder-Register, Setups, Verbindungs-Dokument, Realtime-Verteilung. |
+| **Livetracking-Projektion** | Abnehmer. Zunächst ein eigenes Modul im Worker-Prozess ohne Hardware-Abhängigkeit, später als eigener Prozess oder im Server möglich. |
+
+```mermaid
+sequenceDiagram
+  participant UI as Control Center
+  participant S as Server
+  participant W as Timing-Worker
+  participant D as Decoder
+  participant LT as Livetracking-Projektion
+  UI->>S: Decoder X verbinden (timingConnection)
+  S-->>W: Dokument-Update
+  W->>D: Verbindung aufbauen
+  D-->>W: Status, Hardware-Info
+  W->>S: Decoder-Status
+  D-->>W: Passing
+  W->>S: POST /timing/passings (Batch)
+  S-->>LT: Stream ab seq (neue Passings)
+  LT->>LT: Setup-Zuordnung + Offset → Ergebnisse
+  LT->>S: Ergebnisdokument
+```
+
+**Geplante Schnittstellen der Timing-Ebene** (Server):
+- `POST /timing/passings`: Batch vom Worker, idempotent über die Passing-ID
+- `GET /timing/passings?sinceSeq&limit&decoderIds&from&to`: Abfrage
+- `DELETE /timing/passings?…`: Löschen mit Filter, nur mit ausdrücklicher Bestätigung
+- WS `/timing/passings/stream?sinceSeq`: erst Nachlieferung, dann live
+- Realtime-Dokumente `timingDecoders` (Register und Status) und `timingConnection` (gewünschter Verbindungszustand je Decoder)
+
+---
+
+## 7. Bedienung (Oberfläche)
+
+Zwei klar getrennte Bereiche, zunächst in `apps/livetracking-frontend`:
+
+**Zeitmessung**
+- **Control Center:**
+  - Worker starten/stoppen
+  - Hardware-Tabelle je physischem Decoder: verbinden/trennen, Status, Hardware-Info, P3-Gerätestatus, Warnungen, Zusammenfassung „2 von 3 verbunden“
+  - Passing-Log mit Filter, Gesamtzahl, „Passings löschen …“
+  - Diagnose
+- **Decoder:** Register pflegen, inklusive Übernahme aus dem P3-Netzwerk-Scan.
+- **Setups:** Strecke und Timing-Points, je Timing-Point Auswahl eines Decoders.
+
+**Livetracking**
+- **Messung:** starten/stoppen, Modus, Teilnehmer-Pools, „Messung zurücksetzen“, Kennzahlen
+- **Live:** Board
+- **Visualisierung**
+
+Der Messablauf im Livetracking besteht nur aus **Start** und **Stop**. Die früheren Stufen „Prepare“ und „Stopping“ hatten keine Wirkung: Prepare änderte nur den Zustand, verbunden wurde erst beim Start. Sie entfallen.
+
+---
+
+## 8. Migrationspfad vom Ist-Zustand
+
+| Phase | Inhalt |
+|---|---|
+| 0 | Dieses Dokument. |
+| 1 – Timing-Ebene | Passing-Tabelle und API im Server, Decoder-Register, explizite Verbindungssteuerung, erweiterter Decoder-Status (P3-Status, Hardware-Info). Die Adapter arbeiten auf Register-Einträgen statt auf Timing-Points. Bestehende Setups werden migriert: Aus den Decoder-Angaben der Timing-Points werden Register-Einträge, gleiche Adresse und gleiches Backend ergeben denselben Decoder, der Timing-Point bekommt dessen ID. |
+| 2 – Livetracking als Abnehmer | Session auf `idle / running / error` mit `start / stop / reset` vereinfachen (alte Zustände werden migriert). Messfenster `startSeq/stopSeq`. Projektion aus dem Passing-Store über `toTimingPointPassings(passings, setup, decoders)`. Getrenntes Löschen. Altes Dokument `liveTrackingPassingHistory` und dessen Writer werden nach Import in die Tabelle entfernt. |
+| 3 – Oberfläche | Control Center „Zeitmessung“ und „Livetracking“ wie in Abschnitt 7. Die bisherige Steuerseite wird aufgeteilt. |
+| später | Livetracking-Projektion als eigener Prozess, Abnehmer „Zeitmessung“ (Rennen, Wertung), weitere Hardware, Export der Passings. |
+
+### Ist-Zustand (zur Einordnung)
+- `apps/livetracking-worker`: verbindet die Decoder abhängig vom Session-Zustand `running`, schreibt Passings in das Realtime-Dokument `liveTrackingPassingHistory` (`PassingHistoryWriter`) und rechnet die Ergebnisse.
+- `LiveTrackingSetupDocument`: vermischt Strecke, Timing-Points, Decoder-Adressen, Simulationsparameter und Teilnehmer-Pools.
+- `runtime.decoders[]`: enthält Verbindungsstatus je Timing-Point. Gerätestatus von P3 wird bisher verworfen.
