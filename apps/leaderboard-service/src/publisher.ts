@@ -13,10 +13,12 @@
  * - Liveness: every `$F` heartbeat produces a message, an empty patch if nothing visible
  *   changed. Otherwise the scoring would see "stale" while it shows the previous race
  *   (after `$I` the heartbeats go to the new, not yet published race).
+ * - Every snapshot/patch carries `timeOfDay` of the latest heartbeat (store.current), which keeps
+ *   running while the finished previous race is shown.
  */
 import fastJsonPatch from "fast-json-patch";
 import type { LeaderboardWsMessage, RaceStatusRace } from "@raceoffice/domain";
-import { toRaceTO, type RaceStateStore } from "@raceoffice/rmonitor";
+import { formatDuration, toRaceTO, type RaceStateStore } from "@raceoffice/rmonitor";
 
 const { compare } = fastJsonPatch;
 
@@ -127,7 +129,14 @@ export class SnapshotPublisher {
       ch.rev++;
       ch.data = next;
       if (nextId === null) continue; // no race: nothing to patch (snapshot rules cover null)
-      const message: LeaderboardWsMessage = { type: "patch", raceId: nextId, rev: ch.rev, baseRev, patch: ops };
+      const message: LeaderboardWsMessage = {
+        type: "patch",
+        raceId: nextId,
+        rev: ch.rev,
+        baseRev,
+        patch: ops,
+        timeOfDay: this.heartbeatTimeOfDay(),
+      };
       for (const send of ch.subscribers) send(message);
     }
   }
@@ -145,7 +154,13 @@ export class SnapshotPublisher {
   }
 
   private sendSnapshot(ch: Channel, send: Send): void {
-    send({ type: "snapshot", raceId: ch.raceId, rev: ch.rev, data: ch.data });
+    send({ type: "snapshot", raceId: ch.raceId, rev: ch.rev, data: ch.data, timeOfDay: this.heartbeatTimeOfDay() });
+  }
+
+  private heartbeatTimeOfDay(): string {
+    const store = this.getStore();
+    // Right after $I the new race has no heartbeat yet: keep the last known time instead of 0:00.
+    return formatDuration(store.current.timeOfDayMs || store.displayRace.timeOfDayMs);
   }
 
   private cancelTimer(): void {

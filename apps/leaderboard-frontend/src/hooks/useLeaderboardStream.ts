@@ -13,12 +13,20 @@ export type LeaderboardStream = {
   rev: number | null;
   connected: boolean;
   lastUpdateAt: number | null;
+  /** Time of day of the latest heartbeat; keeps running while a finished race is still shown. */
+  timeOfDay: string | null;
 };
 
 export const STALE_AFTER_MS = 3000;
 
 export function useLeaderboardStream(raceId: "current" | number = "current"): LeaderboardStream {
-  const [stream, setStream] = useState<LeaderboardStream>({ race: null, rev: null, connected: false, lastUpdateAt: null });
+  const [stream, setStream] = useState<LeaderboardStream>({
+    race: null,
+    rev: null,
+    connected: false,
+    lastUpdateAt: null,
+    timeOfDay: null,
+  });
 
   useEffect(() => {
     let disposed = false;
@@ -61,7 +69,8 @@ export function useLeaderboardStream(raceId: "current" | number = "current"): Le
         } else {
           return;
         }
-        setStream({ race: data, rev, connected: true, lastUpdateAt: Date.now() });
+        const timeOfDay = msg.timeOfDay ?? null;
+        setStream({ race: data, rev, connected: true, lastUpdateAt: Date.now(), timeOfDay });
       };
       ws.onclose = () => {
         if (disposed) return;

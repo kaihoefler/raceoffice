@@ -13,9 +13,9 @@ import type { RaceStatusRace } from "./raceStatusFeed.js";
 /** Messages from the service on `/ws/race/current` and `/ws/race/:id` (server → client). */
 export type LeaderboardWsMessage =
   /** Full state; sent on connect, on race change and after a resync. `data` is null without a race. */
-  | { type: "snapshot"; raceId: number | null; rev: number; data: RaceStatusRace | null }
+  | { type: "snapshot"; raceId: number | null; rev: number; data: RaceStatusRace | null; timeOfDay?: string }
   /** Diff against the state with `baseRev`; a client whose rev differs must resync. */
-  | { type: "patch"; raceId: number; rev: number; baseRev: number; patch: Operation[] }
+  | { type: "patch"; raceId: number; rev: number; baseRev: number; patch: Operation[]; timeOfDay?: string }
   | { type: "status"; status: LeaderboardServiceStatus }
   /** `/ws/race/current/passings`: all buffered passings of the race; on connect, race change and reset. */
   | { type: "passings"; raceId: number | null; passings: LeaderboardPassing[] }
@@ -47,6 +47,12 @@ export type LeaderboardPassing = {
   /** Photo-finish correction (`$COR`) of this lap: shift of the total time in ms. */
   correctionMs?: number;
 };
+
+/*
+ * `timeOfDay` on snapshot/patch: time of day of the latest `$F` heartbeat. After a race Orbits
+ * resets (`$I`) and the feed keeps showing the finished race (Java behaviour, needed by the
+ * scoring) whose own `timeOfDay` stays frozen; this field keeps running.
+ */
 
 /** Optional client → server message: request a fresh snapshot. */
 export type LeaderboardWsClientMessage = { type: "resync" };

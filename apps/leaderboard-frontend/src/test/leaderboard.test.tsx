@@ -59,6 +59,16 @@ describe("leaderboard", () => {
     expect(third).toHaveTextContent("+1 Lap");
   });
 
+  it("shows the heartbeat time of day while the finished race stays on screen", async () => {
+    renderAt();
+    const ws = await stream();
+    ws.emit({ type: "snapshot", raceId: 12, rev: 1, data: race({ flagStatus: "FINISH" }), timeOfDay: "14:03:22" });
+    await screen.findByRole("heading", { name: "Elimination U17m" });
+    // Orbits reset ($I): the race data is frozen, only the heartbeat time moves on.
+    ws.emit({ type: "patch", raceId: 12, rev: 2, baseRev: 1, patch: [], timeOfDay: "14:12:40" });
+    await waitFor(() => expect(screen.getByLabelText("Tageszeit")).toHaveTextContent("14:12:40"));
+  });
+
   it("applies patches and marks position changes", async () => {
     renderAt();
     const ws = await stream();

@@ -36,8 +36,8 @@ Alle Pfade sind relativ zur Service-Basis. Im Modus A liegt diese hinter dem Pro
 
 ```ts
 type LeaderboardWsMessage =
-  | { type: "snapshot"; raceId: number | null; rev: number; data: RaceStatusRace | null }
-  | { type: "patch";    raceId: number;        rev: number; baseRev: number; patch: JsonPatchOperation[] }
+  | { type: "snapshot"; raceId: number | null; rev: number; data: RaceStatusRace | null; timeOfDay?: string }
+  | { type: "patch";    raceId: number;        rev: number; baseRev: number; patch: JsonPatchOperation[]; timeOfDay?: string }
   | { type: "status";   status: LeaderboardServiceStatus }   // optional, siehe /ws/status
   | { type: "error";    code: string; message: string };
 ```
@@ -47,7 +47,8 @@ type LeaderboardWsMessage =
 2. Bei Änderungen bündelt der `SnapshotPublisher` alle 100 ms (konfigurierbar). Da Orbits jede Sekunde einen `$F`-Heartbeat sendet, entsteht mindestens ein Patch pro Sekunde. Das ist zugleich das Lebenszeichen für die Clients.: Er erzeugt `toRaceTO()`, berechnet `compare(prev, next)` mit `fast-json-patch` (wie in `apps/server/src/services/realtimeHub.ts`) und sendet einen `patch` mit `baseRev`/`rev`.
 3. **Rennwechsel** (andere `raceID`, oder `null` ↔ Rennen): Der Server sendet einen neuen `snapshot`, keinen Patch.
 4. **Client-Regel:** Passt `baseRev` nicht zur eigenen `rev`, verwirft der Client den Zustand und baut die Verbindung neu auf. Er bekommt dann wieder einen Snapshot. Optional kann er auch `{type:"resync"}` senden.
-5. Heartbeat über WS-Ping alle 15 s. Der Client reconnectet mit Backoff (1 s → 10 s), nach dem Vorbild von `apps/livetracking-worker/src/realtimeDocClient.ts`.
+5. `timeOfDay` ist die Tageszeit des letzten `$F`-Heartbeats. Nach einem Rennen setzt Orbits sich zurück (`$I`), und der Feed zeigt weiter das beendete Rennen (Java-Verhalten, das Scoring braucht es). Dessen eigene `timeOfDay` bleibt stehen, dieses Feld läuft weiter. Die Rangliste zeigt es als Tageszeit. Die REST-Antwort bleibt unverändert.
+6. Heartbeat über WS-Ping alle 15 s. Der Client reconnectet mit Backoff (1 s → 10 s), nach dem Vorbild von `apps/livetracking-worker/src/realtimeDocClient.ts`.
 
 **Warum Diffs auf `RaceTO`-Ebene?**
 - Der Client bekommt exakt das REST-Format; es gibt nur ein Datenmodell.

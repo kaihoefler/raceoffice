@@ -75,7 +75,7 @@ const CHANGE_HIGHLIGHT_MS = 4000;
 type Props = { ui: UiSettings; kiosk: boolean };
 
 export function LeaderboardPage({ ui, kiosk }: Props) {
-  const { race, connected, lastUpdateAt } = useLeaderboardStream("current");
+  const { race, connected, lastUpdateAt, timeOfDay } = useLeaderboardStream("current");
   const now = useNow(1000);
   const theme = useTheme();
   const mobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -125,7 +125,7 @@ export function LeaderboardPage({ ui, kiosk }: Props) {
 
       {hasRace ? (
         <Box sx={{ opacity: stale ? 0.55 : 1, transition: "opacity 300ms" }}>
-          <HeaderTiles race={race} />
+          <HeaderTiles race={race} timeOfDay={timeOfDay} />
           {!kiosk && !mobile ? (
             <Box sx={{ display: "flex", justifyContent: "flex-end", px: 2 }}>
               <Tooltip title="Spalten">
@@ -148,14 +148,15 @@ export function LeaderboardPage({ ui, kiosk }: Props) {
   );
 }
 
-function HeaderTiles({ race }: { race: RaceStatusRace }) {
+function HeaderTiles({ race, timeOfDay }: { race: RaceStatusRace; timeOfDay: string | null }) {
   const lapsToGo = race.lapsToGo ?? 0;
   const tiles = [
     { label: "Rennzeit", value: race.elapsedTime || "—" },
     { label: "Runde", value: String(race.lapsComplete ?? 0) },
     // Orbits sends 9999 for races without a lap limit.
     { label: "Noch", value: lapsToGo > 0 && lapsToGo < 9999 ? `${lapsToGo} Runden` : "—" },
-    { label: "Tageszeit", value: race.timeOfDay || "—" },
+    // Current time of the timing system, also while the finished race is still shown.
+    { label: "Tageszeit", value: timeOfDay || race.timeOfDay || "—" },
     { label: "Fahrer:innen", value: String(race.competitors.length) },
   ];
   return (
