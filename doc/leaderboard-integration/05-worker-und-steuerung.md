@@ -26,7 +26,7 @@ class LiveTrackingWorkerManager { … }
 class LeaderboardServiceManager {
   // args: --server-host 127.0.0.1 --server-port <LEADERBOARD_INTERNAL_PORT> --data-dir <RACEOFFICE_DATA>/leaderboard --mode managed
   // env:  LEADERBOARD_CONTROL_TOKEN = zufällig pro Serverstart
-  // optional: autoStart beim Serverstart (LEADERBOARD_AUTOSTART=true)
+  // autoStart beim Serverstart (Standard an, LEADERBOARD_AUTOSTART=false schaltet ab)
   // optional: Restart-Policy bei Crash (max 3 in 60 s)
 }
 ```
@@ -56,9 +56,9 @@ Neues Modul `apps/server/src/services/leaderboardRoutes.ts`, nach dem Muster von
 | `LEADERBOARD_MODE` / `--leaderboard-mode` | `managed` \| `external` \| `off` | `managed` |
 | `LEADERBOARD_URL` / `--leaderboard-url` | URL für `external` | – |
 | `LEADERBOARD_INTERNAL_PORT` | Port für `managed` | `8790` |
-| `LEADERBOARD_AUTOSTART` | `true`/`false` | `false` |
+| `LEADERBOARD_AUTOSTART` | `true`/`false` | `true` |
 
-Auslieferung im Modus A: Das Leaderboard-Frontend wird vom Service selbst ausgeliefert und ist damit unter `/leaderboard/ui/` erreichbar. Der RaceOffice-Server muss dafür keine eigenen statischen Dateien bereitstellen.
+Auslieferung im Modus A: Im Modus `managed` liefert der RaceOffice-Server das gebaute Leaderboard-Frontend (`apps/leaderboard-service/public`) unter `/leaderboard/ui/` selbst aus, unabhängig davon, ob der Service läuft. So öffnet sich das Control Center auch bei gestopptem Service und zeigt „Der Leaderboard-Service läuft nicht“ mit einem Knopf „Service starten“ (`POST /leaderboard-service/start`). Nach dem Start verbinden sich die WebSockets sofort neu. Daten und Steuerung (`/leaderboard/api/*`, `/leaderboard/ws/*`, REST) gehen weiter über den Proxy an den Service. Im Modus `external` und im eigenständigen Betrieb liefert der Service die Oberfläche selbst aus.
 
 ---
 

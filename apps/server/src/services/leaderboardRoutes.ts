@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import WebSocket from "ws";
 
@@ -18,6 +20,9 @@ import type { LeaderboardServiceManager } from "./leaderboardServiceManager.js";
  * - POST /leaderboard-service/mode    { mode, url? }
  * - *    /leaderboard/*               HTTP proxy to the service (managed: adds the control token)
  * - WS   /leaderboard/ws/*            WebSocket proxy
+ * - GET  /leaderboard/ui/*            managed: served by this server from the built frontend
+ *                                     (apps/leaderboard-service/public), so the Control Center
+ *                                     opens – and can start the service – while it is not running
  */
 
 export type LeaderboardMode = "managed" | "external" | "off";
@@ -32,6 +37,8 @@ export type LeaderboardIntegrationOptions = {
   mode: LeaderboardMode;
   externalUrl: string | null;
   manager: LeaderboardServiceManager;
+  /** Built leaderboard frontend; served directly in managed mode. */
+  uiDir?: string | null;
 };
 
 /** Holds the current mode and resolves the proxy target. */
@@ -46,6 +53,10 @@ export class LeaderboardIntegration {
 
   get manager(): LeaderboardServiceManager {
     return this.options.manager;
+  }
+
+  get uiDir(): string | null {
+    return this.options.uiDir ?? null;
   }
 
   /** Current upstream, or null if there is none (off, or managed but not running). */
@@ -158,7 +169,10 @@ export async function registerLeaderboardRoutes(app: FastifyInstance, integratio
 
     scope.get(`${PROXY_PREFIX}/ws/*`, { websocket: true }, (client, req) => proxyWebSocket(client, req, integration));
 
-    const handler = (req: FastifyRequest, reply: FastifyReply) => proxyHttp(req, reply, integration);
+    const handler = async (req: FastifyRequest, reply: FastifyReply) => {
+      if (await serveUi(req, reply, integration)) return reply;
+      return proxyHttp(req, reply, integration);
+    };
     scope.route({ method: [...PROXY_METHODS], url: PROXY_PREFIX, handler });
     scope.route({ method: [...PROXY_METHODS], url: `${PROXY_PREFIX}/*`, handler });
   });
@@ -168,6 +182,67 @@ function upstreamPath(req: FastifyRequest): string {
   const url = req.raw.url ?? "/";
   const rest = url.slice(PROXY_PREFIX.length);
   return rest.startsWith("/") ? rest : `/${rest}`;
+}
+
+const MIME: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".map": "application/json; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+};
+
+/**
+ * Managed mode: the frontend comes from this server, independent of the service process, so the
+ * Control Center is reachable while the service is stopped (it then offers "start"). The managed
+ * service is built from the same repository, so both serve the same files. Returns false if the
+ * request is not for the UI or the frontend is not built (then the proxy handles it).
+ */
+async function serveUi(req: FastifyRequest, reply: FastifyReply, integration: LeaderboardIntegration): Promise<boolean> {
+  if (integration.mode !== "managed" || !integration.uiDir) return false;
+  if (req.method !== "GET" && req.method !== "HEAD") return false;
+  const [pathname = "/", query] = (req.raw.url ?? "/").split("?", 2);
+  const rest = pathname.slice(PROXY_PREFIX.length);
+  const suffix = query ? `?${query}` : "";
+  // Same redirects as the service ("/" → "/ui/"); the trailing slash makes relative assets resolve.
+  if (rest === "" || rest === "/" || rest === "/ui") {
+    if (!(await isFile(path.join(integration.uiDir, "index.html")))) return false;
+    reply.redirect(`${PROXY_PREFIX}/ui/${suffix}`, 302);
+    return true;
+  }
+  if (!rest.startsWith("/ui/")) return false;
+
+  let relative: string;
+  try {
+    relative = decodeURIComponent(rest.slice("/ui/".length)) || "index.html";
+  } catch {
+    return false;
+  }
+  const root = path.resolve(integration.uiDir);
+  const file = path.resolve(root, relative);
+  if (file !== root && !file.startsWith(root + path.sep)) return false;
+  if (!(await isFile(file))) return false;
+
+  const ext = path.extname(file).toLowerCase();
+  reply.header("content-type", MIME[ext] ?? "application/octet-stream");
+  // Vite puts content hashes into asset names; index.html must always be fresh.
+  reply.header("cache-control", relative.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-cache");
+  reply.send(req.method === "HEAD" ? "" : await fs.readFile(file));
+  return true;
+}
+
+async function isFile(file: string): Promise<boolean> {
+  try {
+    return (await fs.stat(file)).isFile();
+  } catch {
+    return false;
+  }
 }
 
 function unavailable(reply: FastifyReply, integration: LeaderboardIntegration) {

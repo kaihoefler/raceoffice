@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import fastJsonPatch from "fast-json-patch";
 import type { LeaderboardWsMessage, RaceStatusRace } from "@raceoffice/domain";
-import { wsUrl } from "../api";
+import { onReconnectRequest, wsUrl } from "../api";
 
 export type LeaderboardStream = {
   race: RaceStatusRace | null;
@@ -73,7 +73,18 @@ export function useLeaderboardStream(raceId: "current" | number = "current"): Le
     };
 
     connect();
+    // Waiting for the backoff is pointless once the service has been started: reconnect now.
+    const unsubscribe = onReconnectRequest(() => {
+      if (disposed || (socket && socket.readyState === WebSocket.OPEN)) return;
+      if (retry) clearTimeout(retry);
+      retry = null;
+      backoff = 1000;
+      if (socket) socket.onclose = null;
+      socket?.close();
+      connect();
+    });
     return () => {
+      unsubscribe();
       disposed = true;
       if (retry) clearTimeout(retry);
       if (socket) {

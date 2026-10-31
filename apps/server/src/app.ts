@@ -86,6 +86,8 @@ export type BuildAppOptions = {
     dataDir: string;
     /** Start the managed service together with the server. */
     autoStart: boolean;
+    /** Built leaderboard frontend (default: apps/leaderboard-service/public in the repo). */
+    uiDir?: string | undefined;
   };
 };
 
@@ -187,6 +189,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     internalPort: 8790,
     dataDir: path.join(path.dirname(options.dbPath), "leaderboard"),
     autoStart: false,
+    uiDir: undefined,
   };
   const leaderboardManager = new LeaderboardServiceManager({
     repoRoot: options.repoRoot,
@@ -201,6 +204,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     mode: leaderboardOptions.mode,
     externalUrl: leaderboardOptions.externalUrl,
     manager: leaderboardManager,
+    uiDir: leaderboardOptions.uiDir ?? path.join(options.repoRoot, "apps", "leaderboard-service", "public"),
   });
   await registerLeaderboardRoutes(app, leaderboard);
   if (leaderboardOptions.mode === "managed" && leaderboardOptions.autoStart) {

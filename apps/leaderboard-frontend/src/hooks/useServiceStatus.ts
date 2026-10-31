@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { LeaderboardServiceStatus, LeaderboardWsMessage } from "@raceoffice/domain";
-import { wsUrl } from "../api";
+import { onReconnectRequest, wsUrl } from "../api";
 
 export type ServiceStatusStream = { status: LeaderboardServiceStatus | null; connected: boolean };
 
@@ -39,7 +39,18 @@ export function useServiceStatus(): ServiceStatusStream {
     };
 
     connect();
+    // Waiting for the backoff is pointless once the service has been started: reconnect now.
+    const unsubscribe = onReconnectRequest(() => {
+      if (disposed || (socket && socket.readyState === WebSocket.OPEN)) return;
+      if (retry) clearTimeout(retry);
+      retry = null;
+      backoff = 1000;
+      if (socket) socket.onclose = null;
+      socket?.close();
+      connect();
+    });
     return () => {
+      unsubscribe();
       disposed = true;
       if (retry) clearTimeout(retry);
       if (socket) {

@@ -12,6 +12,48 @@ export function serviceBase(pathname: string = globalThis.location?.pathname ?? 
   return pathname.endsWith("/ui") ? pathname.slice(0, -2) : "/";
 }
 
+/**
+ * Process control of the RaceOffice server ("/leaderboard-service/" next to the "/leaderboard/"
+ * proxy). Null when the frontend is served by a standalone service – there is nothing to start.
+ */
+export function integrationBase(pathname: string = globalThis.location?.pathname ?? "/"): string | null {
+  const base = serviceBase(pathname);
+  return base === "/" ? null : `${base.replace(/\/$/, "")}-service/`;
+}
+
+/** Status of the leaderboard integration in RaceOffice (GET /leaderboard-service/status, abridged). */
+export type IntegrationStatus = {
+  mode: "managed" | "external" | "off";
+  available: boolean;
+  process: { state: "stopped" | "starting" | "running" | "stopping" | "crashed"; lastError: string | null };
+};
+
+export const integrationApi = {
+  async status(base: string): Promise<IntegrationStatus | null> {
+    const res = await fetch(`${base}status`, { headers: { Accept: "application/json" } });
+    if (!res.ok) return null;
+    return (await res.json()) as IntegrationStatus;
+  },
+  async start(base: string): Promise<{ ok: boolean; message?: string }> {
+    const res = await fetch(`${base}start`, { method: "POST", headers: { Accept: "application/json" } });
+    const body = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+    return { ok: res.ok && body.ok !== false, ...(body.message ? { message: body.message } : {}) };
+  },
+};
+
+const RECONNECT_EVENT = "leaderboard:reconnect";
+
+/** Asks all service connections to reconnect now (e.g. right after the service was started). */
+export function requestReconnect(): void {
+  globalThis.dispatchEvent?.(new Event(RECONNECT_EVENT));
+}
+
+/** Subscribes to reconnect requests; returns the unsubscribe function. */
+export function onReconnectRequest(listener: () => void): () => void {
+  globalThis.addEventListener?.(RECONNECT_EVENT, listener);
+  return () => globalThis.removeEventListener?.(RECONNECT_EVENT, listener);
+}
+
 export function apiUrl(path: string): string {
   return `${serviceBase()}${path.replace(/^\//, "")}`;
 }

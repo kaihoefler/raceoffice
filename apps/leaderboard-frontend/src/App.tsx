@@ -8,6 +8,7 @@ import { useMemo } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Box, CssBaseline, ThemeProvider, createTheme } from "@mui/material";
 import { AppHeader } from "./components/AppHeader";
+import { ServiceOfflineBanner } from "./components/ServiceOfflineBanner";
 import { useStoredState } from "./hooks/useStoredState";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { ControlCenterPage } from "./pages/ControlCenterPage";
@@ -51,6 +52,7 @@ export function App() {
       <CssBaseline />
       <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column", cursor: kiosk ? "none" : undefined }}>
         {kiosk ? null : <AppHeader ui={ui} onUiChange={setUi} />}
+        {kiosk ? null : <ServiceOfflineBanner />}
         <Box component="main" sx={{ flex: 1, minWidth: 0 }}>
           <Routes>
             <Route path="/" element={<LeaderboardPage ui={effectiveUi} kiosk={kiosk} />} />

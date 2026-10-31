@@ -178,3 +178,45 @@ describe("managed leaderboard service", () => {
     expect((await json(`${baseUrl}/leaderboard/races`)).status).toBe(503);
   }, 60_000);
 });
+
+describe("leaderboard frontend while the managed service is stopped", () => {
+  it("serves the UI from the built frontend; data endpoints stay unavailable", async () => {
+    const uiDir = path.join(tmpDir, "lb-ui");
+    fs.mkdirSync(path.join(uiDir, "assets"), { recursive: true });
+    fs.writeFileSync(path.join(uiDir, "index.html"), "<!doctype html><title>Leaderboard</title>");
+    fs.writeFileSync(path.join(uiDir, "assets", "index-abc.js"), "console.log(1)");
+    fs.writeFileSync(path.join(tmpDir, "secret.txt"), "secret");
+    await startServer({
+      mode: "managed",
+      externalUrl: null,
+      internalPort: await freePort(),
+      dataDir: path.join(tmpDir, "lb"),
+      autoStart: false,
+      uiDir,
+    });
+
+    const redirect = await fetch(`${baseUrl}/leaderboard/?kiosk=1`, { redirect: "manual" });
+    expect(redirect.status).toBe(302);
+    expect(redirect.headers.get("location")).toBe("/leaderboard/ui/?kiosk=1");
+
+    const index = await fetch(`${baseUrl}/leaderboard/ui/`);
+    expect(index.status).toBe(200);
+    expect(index.headers.get("content-type")).toContain("text/html");
+    expect(index.headers.get("cache-control")).toBe("no-cache");
+    expect(await index.text()).toContain("<title>Leaderboard</title>");
+
+    const asset = await fetch(`${baseUrl}/leaderboard/ui/assets/index-abc.js`);
+    expect(asset.headers.get("content-type")).toContain("text/javascript");
+    expect(asset.headers.get("cache-control")).toContain("immutable");
+
+    // No way out of the UI directory.
+    expect((await fetch(`${baseUrl}/leaderboard/ui/..%2Fsecret.txt`)).status).toBe(503);
+    // The service itself is not running: data and control go nowhere, the UI shows "start".
+    expect((await json(`${baseUrl}/leaderboard/api/status`)).status).toBe(503);
+    expect((await json(`${baseUrl}/leaderboard-service/status`)).body).toMatchObject({
+      mode: "managed",
+      available: false,
+      process: { state: "stopped" },
+    });
+  });
+});

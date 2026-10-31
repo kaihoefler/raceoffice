@@ -96,7 +96,8 @@ const app = await buildApp({
     externalUrl: readArg("--leaderboard-url") ?? process.env.LEADERBOARD_URL ?? null,
     internalPort: Number(process.env.LEADERBOARD_INTERNAL_PORT ?? 8790),
     dataDir: process.env.LEADERBOARD_DATA_DIR ?? path.join(path.dirname(path.resolve(dbPath)), "leaderboard"),
-    autoStart: /^(1|true|yes|on)$/i.test(String(process.env.LEADERBOARD_AUTOSTART ?? "")),
+    // Default on: users open the leaderboard without starting anything; LEADERBOARD_AUTOSTART=false disables it.
+    autoStart: !/^(0|false|no|off)$/i.test(String(process.env.LEADERBOARD_AUTOSTART ?? "")),
   },
   publicDir: path.resolve(__dirname, "../public"),
   repoRoot: resolveLiveTrackingRepoRoot(),

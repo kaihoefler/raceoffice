@@ -5,7 +5,9 @@ import { vi } from "vitest";
 import type { LeaderboardServiceStatus, LeaderboardWsMessage, RaceStatusRace } from "@raceoffice/domain";
 
 export class FakeSocket {
+  static OPEN = 1;
   static all: FakeSocket[] = [];
+  readyState = 0;
   onopen: (() => void) | null = null;
   onmessage: ((e: { data: string }) => void) | null = null;
   onclose: (() => void) | null = null;
@@ -14,11 +16,16 @@ export class FakeSocket {
   constructor(url: string) {
     this.url = url;
     FakeSocket.all.push(this);
-    setTimeout(() => this.onopen?.(), 0);
+    setTimeout(() => {
+      if (this.closed) return;
+      this.readyState = 1;
+      this.onopen?.();
+    }, 0);
   }
   send() {}
   close() {
     this.closed = true;
+    this.readyState = 3;
   }
   static find(pathEnd: string): FakeSocket | undefined {
     return [...FakeSocket.all].reverse().find((s) => s.url.endsWith(pathEnd) && !s.closed);
@@ -29,6 +36,7 @@ export class FakeSocket {
   drop() {
     act(() => {
       this.closed = true;
+      this.readyState = 3;
       this.onclose?.();
     });
   }
