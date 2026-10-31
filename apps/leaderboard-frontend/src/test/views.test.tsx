@@ -44,7 +44,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("start signal", () => {
-  it("shows the start line-up during PURPLE, GO right after the start and FINISH at the end", async () => {
+  it("shows the start line-up during PURPLE, START right after the start and FINISH at the end", async () => {
     renderAt("/start-signal");
     const ws = await socket("/ws/race/current");
     ws.emit({ type: "snapshot", raceId: 12, rev: 1, data: race({ flagStatus: "PURPLE", elapsedTime: "0:00" }) });
@@ -54,14 +54,15 @@ describe("start signal", () => {
     expect(screen.getByRole("heading", { name: "Elimination U17m" })).toBeInTheDocument();
 
     ws.emit({ type: "snapshot", raceId: 12, rev: 2, data: race({ flagStatus: "GREEN", elapsedTime: "0:02" }) });
-    expect(await screen.findByText("GO")).toBeInTheDocument();
+    expect(await screen.findByText("START")).toBeInTheDocument();
     expect(screen.getByLabelText("Rennzeit")).toHaveTextContent("0:02");
 
     ws.emit({ type: "snapshot", raceId: 12, rev: 3, data: race({ flagStatus: "GREEN", elapsedTime: "0:30" }) });
-    await waitFor(() => expect(screen.queryByText("GO")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("START")).not.toBeInTheDocument());
 
     ws.emit({ type: "snapshot", raceId: 12, rev: 4, data: race({ flagStatus: "FINISH" }) });
     expect(await screen.findByRole("region", { name: "Startsignal FINISH" })).toBeInTheDocument();
+    expect(screen.getByText("FINISH")).toBeInTheDocument();
   });
 });
 

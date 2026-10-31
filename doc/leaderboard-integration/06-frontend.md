@@ -113,8 +113,8 @@ Eine Seite mit vier Karten statt vier Fenstern. Status kommt live über `/ws/sta
 
 - Vollbild, Hintergrund in Flaggenfarbe, Rennname oben, Elapsed-Uhr groß unten.
 - **PURPLE:** Startnummern der gemeldeten Fahrer:innen als Raster, also die Startaufstellung.
-- **GREEN:** großes „GO“ bzw. die laufende Uhr. **FINISH:** Schachbrett.
-- „GO“ erscheint in den ersten 5 s nach dem Start, danach nur die Uhr. YELLOW/RED zeigen den Flaggennamen groß.
+- **GREEN:** „START“ bzw. die laufende Uhr. **FINISH:** schwarzer Hintergrund mit „FINISH“ und einem kleinen Schachbrett-Balken darunter (ein vollflächiges Schachbrett ist zu unruhig).
+- „START“ erscheint in den ersten 5 s nach dem Start, danach nur die Uhr. YELLOW/RED zeigen den Flaggennamen groß.
 - URL-Parameter: `?kiosk=1&scale=…`
 
 ## 6. Lap Counter
