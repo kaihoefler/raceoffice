@@ -15,6 +15,7 @@ import {
   TIMING_DECODERS_DOC_ID,
   TIMING_STATUS_DOC_ID,
   getSetupDecoderIds,
+  migrateAmmcDecoderIds,
   legacySimulatorSettings,
   normalizeSimulatorDecoderId,
   normalizeSimulatorPassingDelay,
@@ -98,8 +99,8 @@ describe("migration of LiveTracking setups", () => {
     const doc = mergeLegacySetupDecoders(createTimingDecodersDocument(), [a, b], "now");
     expect(isTimingDecodersDocument(doc)).toBe(true);
     expect(doc.decoders.map((d) => [d.id, d.name, d.clockOffsetSecs])).toEqual([
-      ["ammc@192.168.1.50:9001", "Ziel", 0],
-      ["ammc@192.168.1.51:9001", "Split", -0.5],
+      ["ammc@192.168.1.50", "Ziel", 0],
+      ["ammc@192.168.1.51", "Split", -0.5],
     ]);
     // Idempotent: nothing new, same object.
     expect(mergeLegacySetupDecoders(doc, [a, b], "later")).toBe(doc);
@@ -110,7 +111,7 @@ describe("migration of LiveTracking setups", () => {
     const sim = setup([point({ decoderIp: "127.0.0.1", websocketPortAMM: 9100, decoderType: "sim", simTranCodes: ["1", "2"], simPassingDelay: "900" })]);
     const doc = mergeLegacySetupDecoders(createTimingDecodersDocument(), [p3, sim], "now");
     expect(doc.decoders[0]).toMatchObject({ id: "p3@10.0.0.7:5403", backend: "p3", port: 5403 });
-    expect(doc.decoders[1]).toMatchObject({ id: "ammc@127.0.0.1:9100", backend: "ammc", ip: "127.0.0.1", port: 9100 });
+    expect(doc.decoders[1]).toMatchObject({ id: "ammc@127.0.0.1", backend: "ammc", ip: "127.0.0.1", port: 5403 });
     expect(legacySimulatorSettings([p3, sim])).toEqual({ transponderIds: ["1", "2"], passingDelay: "900", startupDelaySecs: 0 });
     expect(legacySimulatorSettings([p3])).toBeNull();
   });
@@ -157,7 +158,7 @@ describe("migration of LiveTracking setups", () => {
   it("writes decoder ids into timing points without changing the old fields", () => {
     const s = setup([point({}), point({ id: "tp-2", timingDecoderId: "40-24-04-00" })]);
     const migrated = assignLegacyDecoderIds(s);
-    expect(migrated.track.timingPoints.map((p) => p.timingDecoderId)).toEqual(["ammc@192.168.1.50:9001", "40-24-04-00"]);
+    expect(migrated.track.timingPoints.map((p) => p.timingDecoderId)).toEqual(["ammc@192.168.1.50", "40-24-04-00"]);
     expect(migrated.track.timingPoints[0]).toMatchObject({ decoderIp: "192.168.1.50", websocketPortAMM: 9001 });
     expect(assignLegacyDecoderIds(migrated)).toBe(migrated);
   });
@@ -187,20 +188,20 @@ describe("setup mapping (consumer side)", () => {
   it("maps decoder passings to timing points with the register offset; two setups share the passings", () => {
     const decoders = mergeLegacySetupDecoders(createTimingDecodersDocument(), [setup([point({})])], "t");
     const withOffset = { ...decoders, decoders: decoders.decoders.map((d) => ({ ...d, clockOffsetSecs: 1 })) };
-    const a = setup([point({ id: "finish", timingDecoderId: "ammc@192.168.1.50:9001" })]);
-    const b = setup([point({ id: "ziel-b", timingDecoderId: "ammc@192.168.1.50:9001" }), point({ id: "off", enabled: false, timingDecoderId: "x" })]);
-    const passings = [stored(1, "ammc@192.168.1.50:9001"), stored(2, "other"), stored(3, "ammc@192.168.1.50:9001", { signalKind: "start_signal" })];
+    const a = setup([point({ id: "finish", timingDecoderId: "ammc@192.168.1.50" })]);
+    const b = setup([point({ id: "ziel-b", timingDecoderId: "ammc@192.168.1.50" }), point({ id: "off", enabled: false, timingDecoderId: "x" })]);
+    const passings = [stored(1, "ammc@192.168.1.50"), stored(2, "other"), stored(3, "ammc@192.168.1.50", { signalKind: "start_signal" })];
 
-    expect(getSetupDecoderIds(a)).toEqual(["ammc@192.168.1.50:9001"]);
+    expect(getSetupDecoderIds(a)).toEqual(["ammc@192.168.1.50"]);
     expect(toTimingPointPassings(passings, a, withOffset)).toEqual([
-      { id: "finish:p1", timestamp: "2026-10-31T10:00:01.000Z", transponderId: "1234", timingPointId: "finish", decoderId: "ammc@192.168.1.50:9001" },
+      { id: "finish:p1", timestamp: "2026-10-31T10:00:01.000Z", transponderId: "1234", timingPointId: "finish", decoderId: "ammc@192.168.1.50" },
     ]);
     expect(toTimingPointPassings(passings, b, withOffset).map((p) => p.timingPointId)).toEqual(["ziel-b"]);
   });
 
   it("uses the timing point offset for decoders missing in the register", () => {
     const s = setup([point({ decoderTimestampOffsetSecs: -2 })]);
-    expect(toTimingPointPassings([stored(1, "ammc@192.168.1.50:9001")], s, null)[0]?.timestamp).toBe("2026-10-31T09:59:58.000Z");
+    expect(toTimingPointPassings([stored(1, "ammc@192.168.1.50")], s, null)[0]?.timestamp).toBe("2026-10-31T09:59:58.000Z");
   });
 });
 
@@ -208,11 +209,38 @@ describe("old decoderId field (AMMC label)", () => {
   it("is ignored when resolving and misderived register entries are removed", () => {
     const old = { ...point({ decoderIp: "192.168.201.55", websocketPortAMM: 12000 }), decoderId: "SF" } as LiveTrackingTimingPoint;
     const s = setup([old]);
-    expect(resolveTimingPointDecoderId(old, "ammc")).toBe("ammc@192.168.201.55:12000");
+    expect(resolveTimingPointDecoderId(old, "ammc")).toBe("ammc@192.168.201.55");
 
     const wrong = { ...createTimingDecodersDocument(), decoders: [{ ...timingDecoderFromLegacyPoint(old, "ammc"), id: "SF" }, { ...timingDecoderFromLegacyPoint(old, "ammc"), id: "keep-me", name: "eigener" }] };
     const cleaned = removeMisderivedLegacyDecoders(wrong, [s], "t");
     expect(cleaned.decoders.map((d) => d.id)).toEqual(["keep-me"]);
     expect(removeMisderivedLegacyDecoders(cleaned, [s], "t")).toBe(cleaned);
+  });
+});
+
+describe("AMMC decoder ids without the local converter port", () => {
+  it("renames old ids, merges entries of the same device and drops entries without address", () => {
+    const entry = (id: string, ip: string, port: number, name = id) => ({ id, name, backend: "ammc" as const, ip, port, clockOffsetSecs: 0, hardwareId: null, updatedAt: null });
+    const old = {
+      ...createTimingDecodersDocument(),
+      decoders: [
+        entry("ammc@10.0.0.7:19001", "10.0.0.7", 19001, "Start"),
+        entry("ammc@10.0.0.7:12000", "10.0.0.7", 12000, "Start (anderes Setup)"),
+        entry("ammc@:0", "", 0),
+        entry("sim@10.0.0.7:9202", "10.0.0.7", 9202, "Simu 1"),
+        { ...entry("p3@10.0.0.8:5403", "10.0.0.8", 5403), backend: "p3" as const },
+      ],
+    };
+    const { doc, renames } = migrateAmmcDecoderIds(old, "t");
+    expect(doc.decoders.map((d) => [d.id, d.name, d.port])).toEqual([
+      ["ammc@10.0.0.7", "Start", 5403],
+      ["p3@10.0.0.8:5403", "p3@10.0.0.8:5403", 5403],
+    ]);
+    expect([...renames]).toEqual([
+      ["ammc@10.0.0.7:19001", "ammc@10.0.0.7"],
+      ["ammc@10.0.0.7:12000", "ammc@10.0.0.7"],
+      ["sim@10.0.0.7:9202", "ammc@10.0.0.7"],
+    ]);
+    expect(migrateAmmcDecoderIds(doc, "t2").doc).toBe(doc);
   });
 });

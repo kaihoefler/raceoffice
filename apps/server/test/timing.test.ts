@@ -198,6 +198,29 @@ describe("timing API and stream", () => {
     expect(session).toMatchObject({ rev: 4, data: { state: "idle", desiredState: "idle" } });
   });
 
+  it("migrates AMMC decoder ids without the local converter port, incl. setups, connection and passings", async () => {
+    await start((docs) => {
+      const ammc = (id: string, port: number) => ({ id, name: id, backend: "ammc", ip: "10.0.0.7", port, clockOffsetSecs: 0, hardwareId: null, updatedAt: null });
+      docs.saveDoc("timingDecoders", { rev: 1, data: { kind: "timingDecoders", version: 1, updatedAt: null, decoders: [ammc("ammc@10.0.0.7:19001", 19001), ammc("ammc@10.0.0.7:12000", 12000)] } });
+      docs.saveDoc("timingConnection", { rev: 1, data: { kind: "timingConnection", version: 1, updatedAt: null, connectedDecoderIds: ["ammc@10.0.0.7:19001", "ammc@10.0.0.7:12000"], activeSetupId: "s1" } });
+      const setup = createLiveTrackingSetupDocument({ setupId: "s1", eventId: null, name: "Arena" });
+      const point = { id: "tp-1", name: "Ziel", timingDecoderId: "ammc@10.0.0.7:12000", decoderIp: "10.0.0.7", websocketPortAMM: 12000, order: 1, distanceFromPreviousM: 0, absolutePositionM: 0, role: "start_finish" as const, enabled: true };
+      docs.saveDoc(makeLiveTrackingSetupDocId("s1"), { rev: 1, data: { ...setup, track: { ...setup.track, timingPoints: [point] } } });
+      docs.saveDoc(makeLiveTrackingListDocId(), { rev: 1, data: { ...createLiveTrackingListDocument(), setups: [{ setupId: "s1", name: "Arena", updatedAt: null }] } });
+      new TimingPassingStore(docs.database).insert([passing(1, { decoderId: "ammc@10.0.0.7:19001", backend: "ammc" })]);
+    });
+    const docs = new DocStore(path.join(tmpDir, "raceoffice.db"));
+    const register = docs.loadDoc("timingDecoders").data;
+    const connection = docs.loadDoc("timingConnection").data;
+    const setupDoc = docs.loadDoc(makeLiveTrackingSetupDocId("s1")).data;
+    const stored = new TimingPassingStore(docs.database).query().passings;
+    docs.close();
+    expect(register.decoders.map((d: { id: string; port: number }) => [d.id, d.port])).toEqual([["ammc@10.0.0.7", 5403]]);
+    expect(connection.connectedDecoderIds).toEqual(["ammc@10.0.0.7"]);
+    expect(setupDoc.track.timingPoints[0].timingDecoderId).toBe("ammc@10.0.0.7");
+    expect(stored.map((p) => p.decoderId)).toEqual(["ammc@10.0.0.7"]);
+  });
+
   it("takes the session setup as active setup of the timing layer at startup", async () => {
     await start((docs) => {
       docs.saveDoc(makeLiveTrackingSessionDocId(), { rev: 1, data: createLiveTrackingSessionDocument({ setupId: "s9", eventId: "" }) });

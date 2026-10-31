@@ -169,7 +169,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // --- Timing layer: passing store + API (doc/timing-architecture.md)
   const timingPassingStore = new TimingPassingStore(docStore.database);
   registerTimingRoutes(app, timingPassingStore);
-  const migratedDecoders = migrateLegacySetupDecoders(loadDoc, (id, updater) => hub.commitServerDocUpdate(id, updater));
+  const migratedDecoders = migrateLegacySetupDecoders(
+    loadDoc,
+    (id, updater) => hub.commitServerDocUpdate(id, updater),
+    (oldId, newId) => timingPassingStore.renameDecoder(oldId, newId),
+  );
   if (migratedDecoders > 0) app.log.info({ migratedDecoders }, "registered decoders of LiveTracking setups in the timing register");
 
   // LiveTracking session documents of older versions (prepare/ready/stopping) → current model.

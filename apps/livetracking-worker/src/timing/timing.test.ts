@@ -89,17 +89,30 @@ describe("TimingConnectionManager", () => {
 
     manager.sync([
       { decoder: decoder("p3@10.0.0.7:5403", "p3"), reasons: ["explicit"] },
-      { decoder: decoder("ammc@127.0.0.1:9100", "ammc", { ip: "127.0.0.1", port: 9100 }), reasons: ["livetracking"] },
+      { decoder: decoder("ammc@127.0.0.1", "ammc", { ip: "127.0.0.1", port: 5403 }), reasons: ["livetracking"] },
     ]);
     expect(adapters.map((a) => a.backend).sort()).toEqual(["ammc", "p3parser"]);
     const p3 = adapters.find((a) => a.backend === "p3parser")!;
     // Adapter config keyed by decoder id, raw time (offset 0 – applied when reading).
     expect(p3.points[0]).toMatchObject({ id: "p3@10.0.0.7:5403", decoderIp: "10.0.0.7", decoderTimestampOffsetSecs: 0 });
-    expect(adapters.find((a) => a.backend === "ammc")!.points[0]).toMatchObject({ decoderType: "amb", decoderIp: "127.0.0.1", websocketPortAMM: 9100 });
+    expect(adapters.find((a) => a.backend === "ammc")!.points[0]).toMatchObject({ decoderType: "amb", decoderIp: "127.0.0.1", websocketPortAMM: 19000 });
 
     manager.sync([{ decoder: decoder("p3@10.0.0.7:5403", "p3"), reasons: ["explicit"] }]);
     expect(adapters.find((a) => a.backend === "ammc")!.stopped).toBe(true);
     expect(p3.stopped).toBe(false);
+  });
+
+  it("assigns local converter ports to AMMC decoders and keeps them while connected", () => {
+    const { manager, adapters, statuses } = setup();
+    const a = decoder("ammc@10.0.0.1", "ammc", { ip: "10.0.0.1" });
+    const b = decoder("ammc@10.0.0.2", "ammc", { ip: "10.0.0.2" });
+    manager.sync([{ decoder: a, reasons: ["explicit"] }, { decoder: b, reasons: ["explicit"] }]);
+    expect(adapters[0]!.points.map((p) => [p.id, p.websocketPortAMM])).toEqual([["ammc@10.0.0.1", 19000], ["ammc@10.0.0.2", 19001]]);
+    expect(statuses().map((s) => s.localPort)).toEqual([19000, 19001]);
+    // a leaves: b keeps its port, a new decoder takes the free one
+    const c = decoder("ammc@10.0.0.3", "ammc", { ip: "10.0.0.3" });
+    manager.sync([{ decoder: b, reasons: ["explicit"] }, { decoder: c, reasons: ["explicit"] }]);
+    expect(adapters[0]!.points.map((p) => [p.id, p.websocketPortAMM])).toEqual([["ammc@10.0.0.2", 19001], ["ammc@10.0.0.3", 19000]]);
   });
 
   it("turns adapter passings into timing passings with decoder id, raw time and session id", () => {

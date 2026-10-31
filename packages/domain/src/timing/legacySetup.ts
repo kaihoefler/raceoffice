@@ -49,9 +49,9 @@ export function legacySimulatorSettings(setups: readonly LiveTrackingSetupDocume
   return null;
 }
 
-function legacyAddress(point: LiveTrackingTimingPoint, backend: TimingDecoderBackend): { ip: string; port: number } {
-  if (backend === "p3") return { ip: String(point.decoderIp ?? "").trim(), port: P3_DEFAULT_PORT };
-  return { ip: String(point.decoderIp ?? "").trim(), port: Number(point.websocketPortAMM) || 0 };
+/** Device address of a timing point: the decoder itself always listens on the MyLaps port. */
+function legacyAddress(point: LiveTrackingTimingPoint, _backend: TimingDecoderBackend): { ip: string; port: number } {
+  return { ip: String(point.decoderIp ?? "").trim(), port: P3_DEFAULT_PORT };
 }
 
 /**
@@ -141,7 +141,8 @@ export function removeMisderivedLegacyDecoders(
       const backend = legacyBackend(point, setup.decoderBackend);
       const { ip, port } = legacyAddress(point, backend);
       const entry = doc.decoders.find((d) => d.id === label);
-      if (entry && entry.backend === backend && entry.ip === ip && entry.port === port && entry.hardwareId === null) misderived.add(label);
+      const samePort = backend === "ammc" || entry?.port === port;
+      if (entry && entry.backend === backend && entry.ip === ip && samePort && entry.hardwareId === null) misderived.add(label);
     }
   }
   if (misderived.size === 0) return doc;

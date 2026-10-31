@@ -12,6 +12,7 @@ import {
   normalizeLiveTrackingSessionDocument,
   isLiveTrackingSessionDocument,
   mergeLegacySetupDecoders,
+  migrateAmmcDecoderIds,
   createTimingSimulatorDocument,
   isTimingSimulatorDocument,
   legacySimulatorSettings,
@@ -156,6 +157,7 @@ export function registerTimingRoutes(app: FastifyInstance, store: TimingPassingS
 export function migrateLegacySetupDecoders(
   loadDoc: (id: string) => Doc,
   commit: (docId: string, updater: (current: unknown) => unknown) => Doc,
+  renamePassings: (oldId: string, newId: string) => void = () => {},
 ): number {
   const list = loadDoc(makeLiveTrackingListDocId()).data;
   if (!isLiveTrackingListDocument(list)) return 0;
@@ -167,14 +169,42 @@ export function migrateLegacySetupDecoders(
   const current = loadDoc(TIMING_DECODERS_DOC_ID).data;
   // Entries of the former decoder type "sim" become AMMC decoders (simulator settings extracted).
   const normalized = normalizeTimingDecodersDocument(current);
-  const base = normalized?.doc ?? createTimingDecodersDocument();
   const at = new Date().toISOString();
+  // AMMC ids without the local converter port; references follow the renames.
+  const ammc = migrateAmmcDecoderIds(normalized?.doc ?? createTimingDecodersDocument(), at);
+  const base = ammc.doc;
+  if (ammc.renames.size > 0) applyDecoderRenames(ammc.renames, setups, loadDoc, commit, renamePassings);
   migrateSimulatorSettings(loadDoc, commit, normalized?.legacySimulator ?? legacySimulatorSettings(setups), at);
   const cleaned = removeMisderivedLegacyDecoders(base, setups, at);
   const merged = mergeLegacySetupDecoders(cleaned, setups, at);
   if (merged === current) return 0;
   commit(TIMING_DECODERS_DOC_ID, () => merged);
   return Math.max(1, Math.abs(merged.decoders.length - base.decoders.length));
+}
+
+/** Rewrites decoder ids in setups, the connection wish and the stored passings. */
+function applyDecoderRenames(
+  renames: Map<string, string>,
+  setups: LiveTrackingSetupDocument[],
+  loadDoc: (id: string) => Doc,
+  commit: (docId: string, updater: (current: unknown) => unknown) => Doc,
+  renamePassings: (oldId: string, newId: string) => void,
+): void {
+  const rename = (id: unknown) => (typeof id === "string" ? (renames.get(id) ?? id) : id);
+  for (let i = 0; i < setups.length; i++) {
+    const setup = setups[i]!;
+    const points = setup.track.timingPoints;
+    if (!points.some((p) => renames.has(String(p.timingDecoderId ?? "")))) continue;
+    const next = { ...setup, track: { ...setup.track, timingPoints: points.map((p) => (p.timingDecoderId ? { ...p, timingDecoderId: rename(p.timingDecoderId) as string } : p)) } };
+    commit(makeLiveTrackingSetupDocId(setup.setupId), () => next);
+    setups[i] = next;
+  }
+  const connection = loadDoc(TIMING_CONNECTION_DOC_ID).data as { connectedDecoderIds?: unknown } | null;
+  const ids = Array.isArray(connection?.connectedDecoderIds) ? (connection.connectedDecoderIds as string[]) : [];
+  if (ids.some((id) => renames.has(id))) {
+    commit(TIMING_CONNECTION_DOC_ID, (current) => ({ ...(current as object), connectedDecoderIds: [...new Set(ids.map((id) => rename(id) as string))] }));
+  }
+  for (const [oldId, newId] of renames) renamePassings(oldId, newId);
 }
 
 /**

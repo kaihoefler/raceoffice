@@ -5,6 +5,9 @@
  * - Input: the decoders that should be connected (register entries) and why.
  * - Runs one adapter per transport (P3 → p3parser adapter, AMMC/simulator → AMMC adapter) and
  *   keeps their decoder sets in sync; an adapter without decoders is stopped.
+ * - AMMC: the converter process talks to the worker over a local WebSocket. Its port is no
+ *   decoder property; the manager assigns a free one per connected decoder from a range
+ *   (LIVETRACKING_AMMC_WS_PORT_BASE, default 19000) and keeps it while the decoder stays connected.
  * - Adapters still work with timing-point shaped configs. Each decoder is handed over as such a
  *   config with `id = decoder id` and clock offset 0, so passings come back keyed by decoder id
  *   with the raw decoder time (offsets are applied when reading, not when storing).
@@ -47,13 +50,19 @@ function transportOf(decoder: TimingDecoder): DecoderBackendKind {
   return decoder.backend === "p3" ? "p3parser" : "ammc";
 }
 
-/** Adapter config for one physical decoder (timing-point shape, offset 0 = raw decoder time). */
-export function decoderToAdapterPoint(decoder: TimingDecoder, order: number): LiveTrackingTimingPoint {
+/** First local WebSocket port for AMMC converter processes. */
+const AMMC_WS_PORT_BASE = Number(process.env.LIVETRACKING_AMMC_WS_PORT_BASE) || 19000;
+
+/**
+ * Adapter config for one physical decoder (timing-point shape, offset 0 = raw decoder time).
+ * `localPort`: AMMC converter WebSocket port (assigned by the manager); unused for P3.
+ */
+export function decoderToAdapterPoint(decoder: TimingDecoder, order: number, localPort = 0): LiveTrackingTimingPoint {
   return {
     id: decoder.id,
     name: decoder.name || decoder.id,
     decoderIp: decoder.ip,
-    websocketPortAMM: decoder.port,
+    websocketPortAMM: decoder.backend === "ammc" ? localPort : decoder.port,
     // Always a real (or simulated, see SimulatorProcess) decoder: the AMMC manager must never
     // start a simulator for a decoder connection.
     decoderType: "amb",
@@ -79,6 +88,8 @@ export class TimingConnectionManager {
   private readonly adapters = new Map<DecoderBackendKind, DecoderSourceAdapter>();
   private desired = new Map<string, DesiredDecoder>();
   private readonly statuses = new Map<string, TimingDecoderStatus>();
+  /** AMMC converter WebSocket port per connected decoder. */
+  private readonly localPorts = new Map<string, number>();
   private readonly adapterFactory: AdapterFactory;
 
   private readonly fetchResumePoint: ((decoderId: string) => Promise<number | null>) | null;
@@ -141,12 +152,25 @@ export class TimingConnectionManager {
     }
     this.desired = next;
 
+    // Local converter ports: keep them for decoders that stay, free them for removed ones.
+    for (const id of [...this.localPorts.keys()]) if (!next.has(id) || next.get(id)!.decoder.backend !== "ammc") this.localPorts.delete(id);
+    for (const [id, entry] of next) {
+      if (entry.decoder.backend !== "ammc" || this.localPorts.has(id)) continue;
+      const used = new Set(this.localPorts.values());
+      let port = AMMC_WS_PORT_BASE;
+      while (used.has(port)) port++;
+      this.localPorts.set(id, port);
+      const status = this.statuses.get(id);
+      if (status) this.statuses.set(id, { ...status, localPort: port });
+      statusChanged = true;
+    }
+
     // One adapter per transport with exactly its decoders.
     const byTransport = new Map<DecoderBackendKind, LiveTrackingTimingPoint[]>();
     for (const { decoder } of next.values()) {
       const transport = transportOf(decoder);
       const points = byTransport.get(transport) ?? [];
-      points.push(decoderToAdapterPoint(decoder, points.length + 1));
+      points.push(decoderToAdapterPoint(decoder, points.length + 1, this.localPorts.get(decoder.id) ?? 0));
       byTransport.set(transport, points);
     }
     for (const transport of ["p3parser", "ammc"] as const) {

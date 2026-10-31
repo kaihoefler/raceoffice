@@ -185,6 +185,11 @@ export class TimingPassingStore {
     return deleted;
   }
 
+  /** Assigns the passings of one decoder id to another (decoder id migrations). */
+  renameDecoder(oldId: string, newId: string): number {
+    return this.db.prepare("UPDATE timing_passings SET decoder_id = ? WHERE decoder_id = ?").run(newId, oldId).changes;
+  }
+
   lastSeq(): number {
     const row = this.lastSeqStmt.get() as { seq: number } | undefined;
     return row?.seq ?? 0;

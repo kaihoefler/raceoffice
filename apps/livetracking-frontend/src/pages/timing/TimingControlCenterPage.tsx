@@ -227,7 +227,8 @@ function DecoderRow(props: { decoder: TimingDecoder; status: TimingDecoderStatus
           {d.name}
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          {BACKEND_LABEL[d.backend]} · {d.ip}:{d.port}
+          {BACKEND_LABEL[d.backend]} · {d.backend === "ammc" ? d.ip : `${d.ip}:${d.port}`}
+          {d.backend === "ammc" && props.connected && st?.localPort ? ` · Konverter-Port ${st.localPort}` : ""}
           {st?.hardware ? ` · ID ${st.hardware.hardwareId}${st.hardware.firmwareVersion ? ` · FW ${st.hardware.firmwareVersion}` : ""}` : ""}
         </Typography>
       </TableCell>

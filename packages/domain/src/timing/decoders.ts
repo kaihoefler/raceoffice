@@ -31,7 +31,11 @@ export type TimingDecoder = {
   backend: TimingDecoderBackend;
   /** Device address (127.0.0.1 for the decoder simulator on this machine). */
   ip: string;
-  /** P3: TCP port (5403). AMMC: local WebSocket port of the converter process. */
+  /**
+   * TCP port of the decoder (MyLaps: 5403). For AMMC the converter always reaches the decoder on
+   * 5403; the local WebSocket port between converter and worker is assigned by the worker and is
+   * no configuration (it used to be, and was part of the AMMC decoder id).
+   */
   port: number;
   /** Correction of the decoder clock in seconds; applied when reading passings. */
   clockOffsetSecs: number;
@@ -55,12 +59,53 @@ export function createTimingDecodersDocument(): TimingDecodersDocument {
 }
 
 /**
- * Stable id for a decoder without an own hardware id, derived from how it is reached,
- * e.g. "p3@192.168.1.50:5403". Deterministic, so migrating the same setup twice (or two setups
- * pointing to the same device) yields the same decoder.
+ * Stable id for a decoder without an own hardware id, derived from how it is reached:
+ * "p3@192.168.1.50:5403", "ammc@192.168.1.50" (AMMC: the device address only – the local
+ * converter port is no property of the decoder). Deterministic, so migrating the same setup twice
+ * (or two setups pointing to the same device) yields the same decoder.
  */
 export function makeTimingDecoderAddressId(backend: TimingDecoderBackend, ip: string, port: number): string {
-  return `${backend}@${String(ip ?? "").trim()}:${Number(port) || 0}`;
+  const host = String(ip ?? "").trim();
+  return backend === "ammc" ? `ammc@${host}` : `${backend}@${host}:${Number(port) || 0}`;
+}
+
+/**
+ * Former AMMC address ids contained the local WebSocket port ("ammc@10.0.0.7:19001"); decoders of
+ * the former type "sim" were "sim@127.0.0.1:9202" and are AMMC decoders now.
+ */
+const OLD_AMMC_ID = /^(?:ammc|sim)@(.+):(\d+)$/;
+
+/**
+ * Migrates AMMC decoders of earlier versions: id "ammc@<ip>:<wsPort>" → "ammc@<ip>", port 5403.
+ * Several entries of the same device merge into one (the first one's name/offset win); entries
+ * without address are dropped. Returns the renames (old id → new id) for setups, connection and
+ * stored passings; the same document when nothing changed.
+ */
+export function migrateAmmcDecoderIds(doc: TimingDecodersDocument, updatedAt: string): { doc: TimingDecodersDocument; renames: Map<string, string> } {
+  const renames = new Map<string, string>();
+  const decoders: TimingDecoder[] = [];
+  let changed = false;
+  for (const d of doc.decoders) {
+    if (d.backend !== "ammc") {
+      decoders.push(d);
+      continue;
+    }
+    const old = d.id.match(OLD_AMMC_ID);
+    const ip = d.ip.trim();
+    if (!ip) {
+      changed = true; // unusable entry of an earlier migration
+      continue;
+    }
+    const id = old ? makeTimingDecoderAddressId("ammc", ip, 0) : d.id;
+    if (id !== d.id) renames.set(d.id, id);
+    if (decoders.some((x) => x.id === id)) {
+      changed = true; // same device, already taken over
+      continue;
+    }
+    if (id !== d.id || d.port !== P3_DEFAULT_PORT) changed = true;
+    decoders.push(id !== d.id || d.port !== P3_DEFAULT_PORT ? { ...d, id, port: P3_DEFAULT_PORT, updatedAt } : d);
+  }
+  return changed ? { doc: { ...doc, decoders, updatedAt }, renames } : { doc, renames };
 }
 
 export function findTimingDecoder(doc: TimingDecodersDocument | null | undefined, id: string): TimingDecoder | null {

@@ -34,7 +34,7 @@ const P3: TimingDecoder = {
   hardwareId: null,
   updatedAt: null,
 };
-const SIM: TimingDecoder = { ...P3, id: "ammc@127.0.0.1:9100", name: "Sim Gegengerade", backend: "ammc", ip: "127.0.0.1", port: 9100 };
+const SIM: TimingDecoder = { ...P3, id: "ammc@127.0.0.1", name: "Sim Gegengerade", backend: "ammc", ip: "127.0.0.1", port: 5403 };
 
 const register = (...decoders: TimingDecoder[]) => ({ ...createTimingDecodersDocument(), decoders });
 

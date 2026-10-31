@@ -47,6 +47,8 @@ export type TimingDecoderStatus = {
    * requested, recovered, and still open (open > 0 after retries = passings are missing).
    */
   sequence: { requested: number; recovered: number; open: number } | null;
+  /** AMMC: local WebSocket port of the converter process, assigned by the worker (diagnostics). */
+  localPort?: number | null;
 };
 
 export type TimingStatusDocument = {

@@ -36,9 +36,6 @@ type Draft = { decoderId: string; transponders: string; passingDelay: string; st
 const STATE_LABEL = { stopped: "gestoppt", starting: "startet …", running: "läuft", error: "Fehler" } as const;
 const STATE_COLOR = { stopped: "default", starting: "info", running: "success", error: "error" } as const;
 
-/** Local WebSocket port for an AMMC converter connected to the simulator. */
-const SIMULATOR_AMMC_WS_PORT = 9000;
-
 export function SimulatorPanel() {
   const now = useNow(5000);
   const { online } = useWorkerState(now);
@@ -77,7 +74,7 @@ export function SimulatorPanel() {
   const simulatorDecoders = decoders.filter((d) => d.ip === "127.0.0.1");
 
   const addDecoder = (backend: TimingDecoder["backend"]) => {
-    const port = backend === "p3" ? P3_DEFAULT_PORT : SIMULATOR_AMMC_WS_PORT;
+    const port = P3_DEFAULT_PORT;
     const decoder: TimingDecoder = {
       id: makeTimingDecoderAddressId(backend, "127.0.0.1", port),
       name: `Simulator (${BACKEND_LABEL[backend]})`,
@@ -190,7 +187,7 @@ export function SimulatorPanel() {
             ) : (
               simulatorDecoders.map((d) => (
                 <Typography key={d.id} variant="body2">
-                  {d.name} · {BACKEND_LABEL[d.backend]} · 127.0.0.1:{d.port}
+                  {d.name} · {BACKEND_LABEL[d.backend]} · 127.0.0.1{d.backend === "p3" ? `:${d.port}` : ""}
                 </Typography>
               ))
             )}

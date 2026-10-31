@@ -58,6 +58,11 @@ flowchart TB
   - Status: Verbindung, Hardware-Info, bei P3 Rauschen, GPS-Lock, Temperatur und Spannung
 - **Neue Hardware** = neuer Adapter, der dieses Interface erfüllt. Darüberliegende Schichten bleiben unverändert.
 
+### 2.1b AMMC-Anbindung
+- Für jeden verbundenen AMMC-Decoder startet der Worker den Konverter `ammc-amb --websocket <lokaler Port> <Decoder-IP>`. Der Konverter erreicht den Decoder auf dem MyLaps-Port 5403. Der Worker liest die Passings über `ws://127.0.0.1:<lokaler Port>`.
+- Der **lokale WebSocket-Port** ist keine Eigenschaft des Decoders. Der Worker vergibt ihn automatisch aus einem Bereich (`LIVETRACKING_AMMC_WS_PORT_BASE`, Standard 19000) und zeigt ihn im Hardware-Status als „Konverter-Port“. Früher musste er von Hand eingetragen werden und war Teil der Decoder-ID.
+- Ein AMMC-Decoder heißt deshalb `ammc@<IP>`. Alte IDs `ammc@<IP>:<Port>` und `sim@<IP>:<Port>` werden beim Serverstart auf `ammc@<IP>` umgestellt, mehrere Einträge desselben Geräts zusammengeführt. Setups, Verbindungswunsch und gespeicherte Passings folgen der Umbenennung.
+
 ### 2.1a Decoder-Simulator
 - `ammc-sim` simuliert einen MyLaps-Decoder auf dem Rechner des Timing-Workers. Er lauscht auf dem festen MyLaps-Port 5403, deshalb läuft höchstens ein Simulator pro Rechner.
 - Der Simulator **ersetzt die Hardware** und ist kein Decoder-Typ. Ein normaler P3- oder AMMC-Decoder im Register mit Adresse `127.0.0.1` verbindet sich mit ihm wie mit einem echten Gerät, und seine Passings landen ganz normal im Passing-Store.

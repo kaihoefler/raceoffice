@@ -86,13 +86,14 @@ function draftProblems(draft: Draft): string[] {
   if (!draft.name.trim()) problems.push("Name fehlt");
   if (!draft.ip.trim()) problems.push("IP-Adresse fehlt");
   const port = parseNumber(draft.port);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) problems.push("Port muss zwischen 1 und 65535 liegen");
+  // AMMC: the converter reaches the decoder on 5403; its local port is assigned by the worker.
+  if (draft.backend === "p3" && (!Number.isInteger(port) || port < 1 || port > 65535)) problems.push("Port muss zwischen 1 und 65535 liegen");
   if (!Number.isFinite(parseNumber(draft.clockOffsetSecs))) problems.push("Uhr-Offset ist keine Zahl");
   return problems;
 }
 
 function fromDraft(draft: Draft): TimingDecoder {
-  const port = parseNumber(draft.port);
+  const port = draft.backend === "ammc" ? P3_DEFAULT_PORT : parseNumber(draft.port);
   return {
     id: draft.id ?? draft.hardwareId ?? makeTimingDecoderAddressId(draft.backend, draft.ip.trim(), port),
     name: draft.name.trim(),
@@ -187,7 +188,7 @@ function DecoderRegister() {
                     <TableCell>{d.name}</TableCell>
                     <TableCell>{BACKEND_LABEL[d.backend]}</TableCell>
                     <TableCell>
-                      {d.ip}:{d.port}
+                      {d.backend === "ammc" ? d.ip : `${d.ip}:${d.port}`}
                     </TableCell>
                     <TableCell>{d.clockOffsetSecs ? `${d.clockOffsetSecs} s` : "—"}</TableCell>
                     <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>{d.id}</TableCell>
@@ -292,7 +293,7 @@ function DecoderDialog(props: { draft: Draft; onCancel: () => void; onSave: (d: 
             disabled={d.id !== null}
             onChange={(e) => {
               const backend = e.target.value as TimingDecoderBackend;
-              set({ backend, port: backend === "p3" ? String(P3_DEFAULT_PORT) : d.port });
+              set({ backend, port: String(P3_DEFAULT_PORT) });
             }}
             helperText={d.id ? "Der Typ gehört zur Decoder-ID und lässt sich nicht ändern." : undefined}
           >
@@ -301,15 +302,22 @@ function DecoderDialog(props: { draft: Draft; onCancel: () => void; onSave: (d: 
           </TextField>
           <Stack direction="row" spacing={2}>
             <TextField size="small" label="IP-Adresse" value={d.ip} onChange={(e) => set({ ip: e.target.value })} sx={{ flex: 1 }} />
-            <TextField
-              size="small"
-              label={d.backend === "p3" ? "Port" : "WebSocket-Port (lokal)"}
-              value={d.port}
-              onChange={(e) => set({ port: e.target.value })}
-              slotProps={{ htmlInput: { inputMode: "numeric" } }}
-              sx={{ width: 180 }}
-            />
+            {d.backend === "p3" ? (
+              <TextField
+                size="small"
+                label="Port"
+                value={d.port}
+                onChange={(e) => set({ port: e.target.value })}
+                slotProps={{ htmlInput: { inputMode: "numeric" } }}
+                sx={{ width: 140 }}
+              />
+            ) : null}
           </Stack>
+          {d.backend === "ammc" ? (
+            <Typography variant="caption" color="text.secondary">
+              Der AMMC-Konverter verbindet sich mit dem Decoder auf Port 5403. Seinen lokalen WebSocket-Port vergibt der Worker automatisch.
+            </Typography>
+          ) : null}
           <TextField
             size="small"
             label="Uhr-Offset (s)"
