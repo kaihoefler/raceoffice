@@ -17,7 +17,7 @@
   "license": "ISC",
   "dependencies": {
     "@fastify/cors": "^11.2.0",
-    "@fastify/static": "^10.1.5",
+    "@fastify/static": "^10.1.8",
     "@fastify/websocket": "^11.3.4",
     "@raceoffice/domain": "file:../../packages/domain",
     "@raceoffice/p3parser": "file:../../packages/p3parser",
