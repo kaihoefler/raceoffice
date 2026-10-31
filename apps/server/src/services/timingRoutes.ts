@@ -35,7 +35,8 @@ import { TIMING_PASSING_QUERY_MAX, type TimingPassingStore, type TimingPassingSt
  * Timing layer API (doc/timing-architecture.md, section 6).
  *
  * - POST /timing/passings            batch from the timing worker, idempotent by passing id
- * - GET  /timing/passings            query: sinceSeq, limit, decoderIds (comma separated), from, to
+ * - GET  /timing/passings            query: sinceSeq, limit, decoderIds (comma separated), from, to;
+ *                                     or latest=N: the newest N passings, newest first
  * - GET  /timing/passings/stats      totals per decoder, last seq
  * - POST /timing/passings/delete     { confirm: true, filter } – deleting must be explicit
  * - WS   /timing/passings/stream     catch-up from sinceSeq, then live; also deletions
@@ -79,6 +80,9 @@ export function registerTimingRoutes(app: FastifyInstance, store: TimingPassingS
   app.get("/timing/passings", async (req) => {
     const q = req.query as Record<string, unknown>;
     const decoderIds = splitIds(q.decoderIds);
+    if (Number(q.latest) > 0) {
+      return { passings: store.latest(Number(q.latest), decoderIds), hasMore: false, lastSeq: store.lastSeq(), maxLimit: TIMING_PASSING_QUERY_MAX };
+    }
     const from = optionalIso(q.from);
     const to = optionalIso(q.to);
     const { passings, hasMore } = store.query({

@@ -4,7 +4,8 @@
 // - Aktives Setup: choose the setup (used by the measurement too) and connect its decoders
 // - Hardware: one row per physical decoder of the register; connecting is explicit (decoders
 //   accept only few connections), status incl. P3 device values and re-requested passings
-// - Passings: newest passings of the store, counts per decoder, deleting with confirmation
+// - Passings: newest passings of the store, filter by decoder, counts per decoder, deleting
+//   (for the filtered decoder or all) with confirmation
 // - Diagnose: worker warnings and the timing documents
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -274,7 +275,8 @@ function PassingsCard({ decoders }: { decoders: TimingDecoder[] }) {
   const [passings, setPassings] = useState<TimingPassing[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteDecoder, setDeleteDecoder] = useState<string>("__all__");
+  /** Decoder filter of the list – also what "Passings löschen" deletes. */
+  const [filter, setFilter] = useState<string>("__all__");
   const [message, setMessage] = useState<string | null>(null);
   const nameOf = useMemo(() => new Map(decoders.map((d) => [d.id, d.name])), [decoders]);
 
@@ -282,14 +284,14 @@ function PassingsCard({ decoders }: { decoders: TimingDecoder[] }) {
     try {
       const s = (await (await fetch("/timing/passings/stats")).json()) as Stats;
       setStats(s);
-      const since = Math.max(0, s.lastSeq - PASSING_LOG_SIZE);
-      const page = (await (await fetch(`/timing/passings?sinceSeq=${since}&limit=${PASSING_LOG_SIZE}`)).json()) as { passings: TimingPassing[] };
-      setPassings([...page.passings].reverse());
+      const decoderParam = filter === "__all__" ? "" : `&decoderIds=${encodeURIComponent(filter)}`;
+      const page = (await (await fetch(`/timing/passings?latest=${PASSING_LOG_SIZE}${decoderParam}`)).json()) as { passings: TimingPassing[] };
+      setPassings(page.passings);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, []);
+  }, [filter]);
 
   useEffect(() => {
     void load();
@@ -298,9 +300,9 @@ function PassingsCard({ decoders }: { decoders: TimingDecoder[] }) {
   }, [load]);
 
   const remove = async () => {
-    const filter = deleteDecoder === "__all__" ? { all: true } : { decoderIds: [deleteDecoder] };
+    const deleteFilter = filter === "__all__" ? { all: true } : { decoderIds: [filter] };
     try {
-      const res = await postJson<{ deleted: number }>("/timing/passings/delete", { confirm: true, filter });
+      const res = await postJson<{ deleted: number }>("/timing/passings/delete", { confirm: true, filter: deleteFilter });
       setMessage(`${res.deleted} Passings gelöscht.`);
       await load();
     } catch (err) {
@@ -308,22 +310,29 @@ function PassingsCard({ decoders }: { decoders: TimingDecoder[] }) {
     }
   };
 
+  // Decoders of the register plus ids that only occur in stored passings (e.g. deleted decoders).
+  const filterOptions = [
+    ...decoders.map((d) => ({ id: d.id, name: d.name })),
+    ...(stats?.decoders ?? []).filter((d) => !nameOf.has(d.decoderId)).map((d) => ({ id: d.decoderId, name: d.decoderId })),
+  ];
+  const filteredCount = filter === "__all__" ? (stats?.total ?? 0) : (stats?.decoders.find((d) => d.decoderId === filter)?.count ?? 0);
+
   return (
     <Card variant="outlined">
       <CardHeader
         title="Passings"
-        subheader={stats ? `${stats.total} gespeichert` : "—"}
+        subheader={stats ? (filter === "__all__" ? `${stats.total} gespeichert` : `${filteredCount} von ${stats.total} gespeichert`) : "—"}
         action={
           <Stack direction="row" spacing={1} sx={{ mt: 1, mr: 1, alignItems: "center" }}>
-            <TextField select size="small" label="Löschen für" value={deleteDecoder} onChange={(e) => setDeleteDecoder(e.target.value)} sx={{ minWidth: 180 }}>
+            <TextField select size="small" label="Decoder" value={filter} onChange={(e) => setFilter(e.target.value)} sx={{ minWidth: 200 }}>
               <MenuItem value="__all__">alle Decoder</MenuItem>
-              {decoders.map((d) => (
+              {filterOptions.map((d) => (
                 <MenuItem key={d.id} value={d.id}>
                   {d.name}
                 </MenuItem>
               ))}
             </TextField>
-            <Button color="error" variant="outlined" disabled={!stats?.total} onClick={() => setDeleteOpen(true)}>
+            <Button color="error" variant="outlined" disabled={filteredCount === 0} onClick={() => setDeleteOpen(true)}>
               Passings löschen …
             </Button>
           </Stack>
@@ -340,12 +349,20 @@ function PassingsCard({ decoders }: { decoders: TimingDecoder[] }) {
         {stats && stats.decoders.length > 0 ? (
           <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
             {stats.decoders.map((d) => (
-              <Chip key={d.decoderId} size="small" variant="outlined" label={`${nameOf.get(d.decoderId) ?? d.decoderId}: ${d.count}`} />
+              <Chip
+                key={d.decoderId}
+                size="small"
+                clickable
+                variant={filter === d.decoderId ? "filled" : "outlined"}
+                color={filter === d.decoderId ? "primary" : "default"}
+                label={`${nameOf.get(d.decoderId) ?? d.decoderId}: ${d.count}`}
+                onClick={() => setFilter(filter === d.decoderId ? "__all__" : d.decoderId)}
+              />
             ))}
           </Stack>
         ) : null}
         {passings.length === 0 ? (
-          <Typography color="text.secondary">Noch keine Passings.</Typography>
+          <Typography color="text.secondary">{filter === "__all__" ? "Noch keine Passings." : "Keine Passings dieses Decoders."}</Typography>
         ) : (
           <Box sx={{ maxHeight: 360, overflow: "auto" }}>
             <Table size="small" stickyHeader aria-label="Neueste Passings">
@@ -380,7 +397,7 @@ function PassingsCard({ decoders }: { decoders: TimingDecoder[] }) {
         confirmLabel="Endgültig löschen"
         text={
           <>
-            {deleteDecoder === "__all__" ? "Alle gespeicherten Passings" : `Alle Passings von „${nameOf.get(deleteDecoder) ?? deleteDecoder}“`} werden gelöscht. Messungen
+            {filter === "__all__" ? "Alle gespeicherten Passings" : `Alle Passings von „${nameOf.get(filter) ?? filter}“`} werden gelöscht. Messungen
             aller Abnehmer (z. B. Livetracking), die diese Passings nutzen, verlieren damit ihre Ergebnisse. Das lässt sich nicht rückgängig machen.
           </>
         }

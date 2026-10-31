@@ -59,17 +59,26 @@ function fetchStub(calls: Array<{ url: string; body: unknown }>) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
-    if (url.startsWith("/timing/passings/stats")) return Response.json({ total: 2, lastSeq: 2, decoders: [{ decoderId: P3.id, count: 2, lastReceivedAt: null }] });
+    if (url.startsWith("/timing/passings/stats")) {
+      return Response.json({
+        total: 3,
+        lastSeq: 3,
+        decoders: [
+          { decoderId: P3.id, count: 2, lastReceivedAt: null },
+          { decoderId: SIM.id, count: 1, lastReceivedAt: null },
+        ],
+      });
+    }
     if (url.startsWith("/timing/passings/delete")) return Response.json({ ok: true, deleted: 2 });
     if (url.startsWith("/timing/passings")) {
-      return Response.json({
-        passings: [
-          { seq: 1, id: "a", decoderId: P3.id, decoderTime: "2026-10-31T10:00:00.000Z", transponderId: "1234", passingNumber: 7, signalStrength: 120, signalKind: null },
-          { seq: 2, id: "b", decoderId: P3.id, decoderTime: "2026-10-31T10:00:01.000Z", transponderId: "5678", passingNumber: 8, signalStrength: 99, signalKind: null },
-        ],
-        hasMore: false,
-        lastSeq: 2,
-      });
+      // ?latest=N[&decoderIds=…]: newest first.
+      const all = [
+        { seq: 3, id: "c", decoderId: SIM.id, decoderTime: "2026-10-31T10:00:02.000Z", transponderId: "9999", passingNumber: 1, signalStrength: 300, signalKind: null },
+        { seq: 2, id: "b", decoderId: P3.id, decoderTime: "2026-10-31T10:00:01.000Z", transponderId: "5678", passingNumber: 8, signalStrength: 99, signalKind: null },
+        { seq: 1, id: "a", decoderId: P3.id, decoderTime: "2026-10-31T10:00:00.000Z", transponderId: "1234", passingNumber: 7, signalStrength: 120, signalKind: null },
+      ];
+      const ids = new URL(url, "http://x").searchParams.get("decoderIds");
+      return Response.json({ passings: ids ? all.filter((p) => p.decoderId === ids) : all, hasMore: false, lastSeq: 3 });
     }
     return Response.json({ ok: true, message: "ok" });
   }) as unknown as typeof fetch;
@@ -121,13 +130,29 @@ describe("timing control center", () => {
     const calls: Array<{ url: string; body: unknown }> = [];
     const { user } = renderApp({ route: "/timing/control", fetch: fetchStub(calls), docs: { [TIMING_DECODERS_DOC_ID]: register(P3) } });
     const log = await screen.findByRole("table", { name: "Neueste Passings" });
-    expect(within(log).getAllByRole("row")[1]).toHaveTextContent("5678");
+    expect(within(log).getAllByRole("row")[1]).toHaveTextContent("9999");
 
     await user.click(screen.getByRole("button", { name: "Passings löschen …" }));
     expect(calls.some((c) => c.url.startsWith("/timing/passings/delete"))).toBe(false);
     await user.click(await screen.findByRole("button", { name: "Endgültig löschen" }));
     await waitFor(() => expect(calls.find((c) => c.url.startsWith("/timing/passings/delete"))?.body).toEqual({ confirm: true, filter: { all: true } }));
     expect(await screen.findByText("2 Passings gelöscht.")).toBeInTheDocument();
+  });
+
+  it("filters the passings by decoder and deletes only the filtered decoder", async () => {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const { user } = renderApp({ route: "/timing/control", fetch: fetchStub(calls), docs: { [TIMING_DECODERS_DOC_ID]: register(P3, SIM) } });
+    await screen.findByRole("table", { name: "Neueste Passings" });
+    // Clicking the count chip of a decoder filters the list.
+    await user.click(screen.getByRole("button", { name: "Ziel: 2" }));
+    await waitFor(() => expect(within(screen.getByRole("table", { name: "Neueste Passings" })).getAllByRole("row")).toHaveLength(3));
+    expect(screen.getByRole("table", { name: "Neueste Passings" })).not.toHaveTextContent("9999");
+    expect(screen.getByText("2 von 3 gespeichert")).toBeInTheDocument();
+    expect(calls.some((c) => c.url.includes("decoderIds=" + encodeURIComponent(P3.id)))).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: "Passings löschen …" }));
+    await user.click(await screen.findByRole("button", { name: "Endgültig löschen" }));
+    await waitFor(() => expect(calls.find((c) => c.url.startsWith("/timing/passings/delete"))?.body).toEqual({ confirm: true, filter: { decoderIds: [P3.id] } }));
   });
 });
 

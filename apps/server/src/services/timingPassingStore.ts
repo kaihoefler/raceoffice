@@ -159,6 +159,14 @@ export class TimingPassingStore {
     return { inserted, duplicates: inputs.length - inserted.length };
   }
 
+  /** The newest `count` passings (optionally of some decoders), newest first – for passing logs. */
+  latest(count: number, decoderIds?: string[]): TimingPassing[] {
+    const params: Record<string, unknown> = { count: Math.max(1, Math.min(TIMING_PASSING_QUERY_MAX, Math.floor(count))) };
+    const where = filterSql(decoderIds ? { decoderIds } : {}, params);
+    const sql = `SELECT * FROM timing_passings${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY seq DESC LIMIT @count`;
+    return (this.db.prepare(sql).all(params) as Row[]).map(toPassing);
+  }
+
   /** Passings with `seq > sinceSeq` in seq order. */
   query(q: TimingPassingQuery = {}): { passings: TimingPassing[]; hasMore: boolean } {
     const limit = Math.max(1, Math.min(TIMING_PASSING_QUERY_MAX, Math.floor(q.limit ?? 1000)));

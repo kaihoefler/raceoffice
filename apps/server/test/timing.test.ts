@@ -77,6 +77,8 @@ describe("TimingPassingStore", () => {
     expect(store.query({ decoderIds: ["ammc@10.0.0.8:9001"] }).passings.map((p) => p.seq)).toEqual([2]);
     expect(store.query({ from: passing(3).receivedAt }).passings.map((p) => p.seq)).toEqual([3, 4]);
     expect(store.query({ limit: 2 })).toMatchObject({ hasMore: true });
+    expect(store.latest(2).map((p) => p.seq)).toEqual([4, 3]);
+    expect(store.latest(5, ["ammc@10.0.0.8:9001"]).map((p) => p.seq)).toEqual([2]);
   });
 
   it("deletes only with a filter or all:true; seq is never reused", () => {
