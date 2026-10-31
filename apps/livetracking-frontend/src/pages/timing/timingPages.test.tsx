@@ -98,6 +98,7 @@ describe("timing control center", () => {
         [TIMING_CONNECTION_DOC_ID]: { ...createTimingConnectionDocument(), connectedDecoderIds: [P3.id] },
         [TIMING_STATUS_DOC_ID]: {
           ...createTimingStatusDocument(),
+          workerHeartbeatAt: now,
           decoders: [
             {
               ...createTimingDecoderStatus(P3.id),
@@ -126,6 +127,26 @@ describe("timing control center", () => {
     await waitFor(() => expect(server.doc(TIMING_CONNECTION_DOC_ID).data.connectedDecoderIds).toEqual([P3.id, SIM.id]));
     await user.click(screen.getByRole("button", { name: "Alle trennen" }));
     await waitFor(() => expect(server.doc(TIMING_CONNECTION_DOC_ID).data.connectedDecoderIds).toEqual([]));
+  });
+
+  it("never shows a decoder as connected when the worker no longer reports", async () => {
+    const stale = new Date(Date.now() - 60_000).toISOString();
+    renderApp({
+      route: "/timing/control",
+      fetch: fetchStub([]),
+      docs: {
+        [TIMING_DECODERS_DOC_ID]: register(P3),
+        [TIMING_CONNECTION_DOC_ID]: { ...createTimingConnectionDocument(), connectedDecoderIds: [P3.id] },
+        [TIMING_STATUS_DOC_ID]: {
+          ...createTimingStatusDocument(),
+          workerHeartbeatAt: stale,
+          decoders: [{ ...createTimingDecoderStatus(P3.id), connection: "connected", connectedSince: stale, lastMessageAt: stale }],
+        },
+      },
+    });
+    const table = await screen.findByRole("table", { name: "Hardware-Status" });
+    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("getrennt");
+    expect(within(table).getAllByRole("row")[1]).not.toHaveTextContent("verbunden");
   });
 
   it("lists the newest passings and deletes only after confirmation", async () => {
@@ -203,9 +224,13 @@ describe("stopping the worker", () => {
     expect(server.doc(TIMING_SIMULATOR_DOC_ID).data.running).toBe(true);
 
     server.update(TIMING_SIMULATOR_DOC_ID, (d) => ({ ...d, running: false }));
+    // Wait until the page knows the simulator is off (the app bar label disappears).
+    await waitFor(() => expect(screen.queryByRole("link", { name: /Decoder Simulation/ })).not.toBeInTheDocument());
+    // The first dialog must be gone (closing transition), so the click hits the card button.
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Worker stoppen" })).not.toBeInTheDocument());
     calls.length = 0;
     await user.click(screen.getByRole("button", { name: "Worker stoppen" }));
-    await waitFor(() => expect(calls.some((c) => c.url === "/live-tracking/worker/stop")).toBe(true));
+    await waitFor(() => expect(calls.some((c) => c.url === "/live-tracking/worker/stop")).toBe(true), { timeout: 3000 });
     expect(screen.queryByRole("dialog", { name: "Worker stoppen" })).not.toBeInTheDocument();
   });
 });

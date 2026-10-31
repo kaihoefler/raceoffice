@@ -5,6 +5,9 @@ import cors from "@fastify/cors";
 import os from "node:os";
 
 import {
+  isTimingStatusDocument,
+  markTimingStatusOffline,
+  TIMING_STATUS_DOC_ID,
   createLiveTrackingRuntimeDocument,
   isLiveTrackingRuntimeDocument,
   makeLiveTrackingRuntimeDocId,
@@ -151,6 +154,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
           updatedAt: t,
           warnings: [...runtime.warnings.slice(-99), `[server] worker offline: ${reason}`],
         }));
+        // Without worker no decoder is connected and no simulator runs.
+        hub.commitServerDocUpdate(TIMING_STATUS_DOC_ID, (current) =>
+          isTimingStatusDocument(current) ? markTimingStatusOffline(current, t) : current,
+        );
       },
     },
   });

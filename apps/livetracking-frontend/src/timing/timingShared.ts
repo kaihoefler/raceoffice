@@ -30,6 +30,11 @@ export function useNow(intervalMs = 1000): number {
   return now;
 }
 
+function statusFresh(doc: TimingStatusDocument | null): boolean {
+  const heartbeat = Date.parse(String(doc?.workerHeartbeatAt ?? ""));
+  return Number.isFinite(heartbeat) && Date.now() - heartbeat <= WORKER_HEARTBEAT_STALE_MS;
+}
+
 export function useTimingDocs() {
   const decoders = useRealtimeDoc<TimingDecodersDocument>(TIMING_DECODERS_DOC_ID);
   const connection = useRealtimeDoc<TimingConnectionDocument>(TIMING_CONNECTION_DOC_ID);
@@ -39,7 +44,9 @@ export function useTimingDocs() {
     updateDecoders: decoders.update,
     connectedIds: connection.data?.connectedDecoderIds ?? [],
     updateConnection: connection.update,
-    statusById: new Map((status.data?.decoders ?? []).map((s) => [s.decoderId, s])),
+    // The decoder status counts only while the worker reports (heartbeat): a stale document must
+    // never show a decoder as connected after the worker stopped or crashed.
+    statusById: new Map((statusFresh(status.data) ? (status.data?.decoders ?? []) : []).map((s) => [s.decoderId, s])),
     statusDoc: status.data,
     decodersDoc: decoders.data,
     connectionDoc: connection.data,

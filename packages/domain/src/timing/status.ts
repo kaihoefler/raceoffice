@@ -89,3 +89,18 @@ export function isTimingStatusDocument(value: unknown): value is TimingStatusDoc
 
 /** A connected decoder that has been silent this long is shown with a warning. */
 export const TIMING_DECODER_SILENCE_WARNING_MS = 30_000;
+
+/**
+ * Status after the worker went offline (stopped or crashed): without worker no decoder can be
+ * connected and no simulator runs. Written by the server, because a stopped worker may not get to
+ * send its last update.
+ */
+export function markTimingStatusOffline(doc: TimingStatusDocument, at: string): TimingStatusDocument {
+  return {
+    ...doc,
+    workerHeartbeatAt: null,
+    decoders: doc.decoders.map((d) => ({ ...d, connection: "disconnected", reasons: [], connectionSessionId: null, connectedSince: null, localPort: null })),
+    simulator: doc.simulator ? { ...doc.simulator, state: "stopped", startedAt: null } : (doc.simulator ?? null),
+    updatedAt: at,
+  };
+}

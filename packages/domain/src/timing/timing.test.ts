@@ -15,6 +15,9 @@ import {
   TIMING_DECODERS_DOC_ID,
   TIMING_STATUS_DOC_ID,
   getSetupDecoderIds,
+  createTimingDecoderStatus,
+  createTimingStatusDocument,
+  markTimingStatusOffline,
   migrateAmmcDecoderIds,
   legacySimulatorSettings,
   normalizeSimulatorDecoderId,
@@ -242,5 +245,20 @@ describe("AMMC decoder ids without the local converter port", () => {
       ["sim@10.0.0.7:9202", "ammc@10.0.0.7"],
     ]);
     expect(migrateAmmcDecoderIds(doc, "t2").doc).toBe(doc);
+  });
+});
+
+describe("worker offline", () => {
+  it("marks all decoders disconnected and the simulator stopped", () => {
+    const doc = {
+      ...createTimingStatusDocument(),
+      workerHeartbeatAt: "t0",
+      decoders: [{ ...createTimingDecoderStatus("p3@1.2.3.4:5403"), connection: "connected" as const, reasons: ["explicit" as const], connectionSessionId: "c1", connectedSince: "t0", passingCount: 5 }],
+      simulator: { state: "running" as const, startedAt: "t0", lastError: null, lastLine: "Listening on: 5403" },
+    };
+    const offline = markTimingStatusOffline(doc, "t1");
+    expect(offline.workerHeartbeatAt).toBeNull();
+    expect(offline.decoders[0]).toMatchObject({ connection: "disconnected", reasons: [], connectionSessionId: null, connectedSince: null, passingCount: 5 });
+    expect(offline.simulator).toMatchObject({ state: "stopped", startedAt: null, lastLine: "Listening on: 5403" });
   });
 });
