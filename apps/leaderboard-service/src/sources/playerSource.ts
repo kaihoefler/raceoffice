@@ -8,17 +8,28 @@
  * - Gaps: recorders often keep running while Orbits is silent (lunch break, overnight). With
  *   `skipGaps` every pause longer than GAP_THRESHOLD_MS plays as GAP_REPLACEMENT_MS, so a replay
  *   does not sit idle for hours. Position, duration and seek then refer to this shortened timeline.
+ * - Idle: between races (and in breaks) Orbits keeps sending a heartbeat every second while the
+ *   race clock stands still – no silence, so the gap rule does not see it. With `skipGaps` such a
+ *   stretch (only heartbeats with an unchanged race time, longer than IDLE_MIN_MS) plays its first
+ *   IDLE_KEEP_MS in real time (the finish stays visible) and the rest within IDLE_COMPRESSED_MS.
+ *   All lines are still sent, only closer together, so clients keep receiving updates.
  * - Encoding: recording files are windows-1252 or UTF-8 depending on the recorder that wrote
  *   them; `auto` detects it per file.
  */
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
-import { detectRecordingEncoding, parseRecordingBytes } from "@raceoffice/rmonitor";
+import { detectRecordingEncoding, parseLine, parseRecordingBytes } from "@raceoffice/rmonitor";
 
 /** Orbits sends `$F` every second while it is running; a longer silence is a pause. */
 export const GAP_THRESHOLD_MS = 10_000;
 /** A skipped pause still takes one heartbeat interval, so the replay keeps its rhythm. */
 export const GAP_REPLACEMENT_MS = 1_000;
+/** Idle stretches (race clock stopped, only heartbeats) shorter than this play unchanged. */
+export const IDLE_MIN_MS = 30_000;
+/** Start of an idle stretch played in real time (finish state, last results stay visible). */
+export const IDLE_KEEP_MS = 5_000;
+/** The rest of an idle stretch is played within this time. */
+export const IDLE_COMPRESSED_MS = 2_000;
 
 export type PlayerState = "idle" | "playing" | "paused";
 
@@ -46,7 +57,11 @@ export type PlayerEvents = {
 };
 
 /** `recordedMs`: offset in the file; `offsetMs`: offset on the playback timeline. */
-type Entry = { recordedMs: number; offsetMs: number; raw: Uint8Array };
+/**
+ * `recordedMs`: offset in the file; `offsetMs`: offset on the playback timeline;
+ * `idle`: heartbeat with the same race time as the previous heartbeat (race clock stopped).
+ */
+type Entry = { recordedMs: number; offsetMs: number; raw: Uint8Array; idle: boolean };
 
 export class RecordingPlayer {
   private entries: Entry[] = [];
@@ -72,7 +87,16 @@ export class RecordingPlayer {
     const encoding = fileEncoding === "auto" ? detectRecordingEncoding(data) : fileEncoding;
     this.decoder = new TextDecoder(encoding);
     if (options.skipGaps !== undefined) this.skipGaps = options.skipGaps;
-    this.entries = parseRecordingBytes(data).map((e) => ({ recordedMs: e.offsetMs, offsetMs: e.offsetMs, raw: e.raw }));
+    let lastRaceTimeMs: number | null = null;
+    this.entries = parseRecordingBytes(data).map((e) => {
+      const msg = parseLine(this.decoder.decode(e.raw));
+      let idle = false;
+      if (msg.kind === "heartbeat") {
+        idle = lastRaceTimeMs !== null && msg.raceTimeMs === lastRaceTimeMs;
+        lastRaceTimeMs = msg.raceTimeMs;
+      }
+      return { recordedMs: e.offsetMs, offsetMs: e.offsetMs, raw: e.raw, idle };
+    });
     this.buildTimeline();
     this.file = basename(path);
     this.encoding = encoding;
@@ -189,6 +213,7 @@ export class RecordingPlayer {
 
   /** Recomputes the playback offsets from the recorded ones. */
   private buildTimeline(): void {
+    // Pass 1: silence longer than GAP_THRESHOLD_MS plays as GAP_REPLACEMENT_MS.
     let shift = 0;
     for (let i = 0; i < this.entries.length; i++) {
       const entry = this.entries[i] as Entry;
@@ -197,6 +222,33 @@ export class RecordingPlayer {
         if (gap > GAP_THRESHOLD_MS) shift += gap - GAP_REPLACEMENT_MS;
       }
       entry.offsetMs = entry.recordedMs - shift;
+    }
+    if (!this.skipGaps) return;
+
+    // Pass 2: idle stretches on that timeline – keep the start, compress the rest linearly.
+    let removed = 0;
+    let i = 0;
+    while (i < this.entries.length) {
+      const first = this.entries[i] as Entry;
+      if (!first.idle) {
+        first.offsetMs -= removed;
+        i++;
+        continue;
+      }
+      let end = i;
+      while (end + 1 < this.entries.length && (this.entries[end + 1] as Entry).idle) end++;
+      const start = first.offsetMs;
+      const duration = (this.entries[end] as Entry).offsetMs - start;
+      const compress = duration > IDLE_MIN_MS;
+      const factor = compress ? IDLE_COMPRESSED_MS / (duration - IDLE_KEEP_MS) : 1;
+      for (let k = i; k <= end; k++) {
+        const entry = this.entries[k] as Entry;
+        const pos = entry.offsetMs - start;
+        const played = !compress || pos <= IDLE_KEEP_MS ? pos : IDLE_KEEP_MS + (pos - IDLE_KEEP_MS) * factor;
+        entry.offsetMs = start - removed + played;
+      }
+      if (compress) removed += duration - (IDLE_KEEP_MS + IDLE_COMPRESSED_MS);
+      i = end + 1;
     }
   }
 

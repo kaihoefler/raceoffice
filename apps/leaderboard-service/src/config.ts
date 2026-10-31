@@ -38,7 +38,10 @@ export type LeaderboardConfig = {
     speedup: number;
     /** Encoding of recording files: `auto` detects UTF-8 vs windows-1252 per file. */
     fileEncoding: string;
-    /** Play pauses in a recording longer than 10 s as 1 s (recorder kept running while Orbits was silent). */
+    /**
+     * Shorten pauses when replaying: silence > 10 s plays as 1 s; idle stretches between races
+     * (heartbeats only, race clock stopped > 30 s) keep 5 s and play the rest within 2 s.
+     */
     skipGaps: boolean;
   };
   publish: { coalesceMs: number };
@@ -227,7 +230,7 @@ Player / recorder:
       --player-file <file>         replay a recording at startup
       --player-speedup <n>         replay speed (default 1)
       --player-file-encoding <e>   auto | windows-1252 | utf-8 (default auto)
-      --player-skip-gaps <bool>    play pauses > 10 s as 1 s (default true)
+      --player-skip-gaps <bool>    shorten pauses and idle time between races (default true)
   -r, --start-recorder             record the live stream at startup
       --recorder-file <name>       recording name (implies -r)
 Service:

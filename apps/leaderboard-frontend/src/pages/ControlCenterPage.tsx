@@ -522,7 +522,7 @@ function PlayerCard(props: { status: LeaderboardServiceStatus | null; recordings
           </Box>
           {skipGapsShown ? (
             <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
-              Pausen über 10 s in der Aufnahme (z. B. Mittagspause, Recorder lief über Nacht) dauern nur 1 s.
+              Pausen über 10 s in der Aufnahme (Recorder lief über Nacht) dauern nur 1 s. Leerlauf zwischen Rennen (Rennuhr steht länger als 30 s) läuft nach 5 s im Schnelldurchlauf.
             </Typography>
           ) : null}
 

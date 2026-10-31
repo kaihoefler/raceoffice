@@ -93,3 +93,64 @@ describe("gap skipping", () => {
     expect(played.at(-1)).toBe("$F,0,e");
   });
 });
+
+/** Heartbeat `$F` at recording second `sec` with the given race time in seconds. */
+const hb = (sec: number, raceSec: number, flag = "Green ") => {
+  const t = (x: number) => new Date(x * 1000).toISOString().slice(11, 19);
+  return [sec * 1000, `$F,0,"00:00:00","${t(36_000 + sec)}","${t(raceSec)}","${flag}"`] as [number, string];
+};
+
+async function writeLines(lines: Array<[number, string]>) {
+  await writeFile(file, lines.map(([ms, line]) => `${ms} ${line}
+`).join(""));
+}
+
+describe("idle stretches (race clock stopped, only heartbeats)", () => {
+  it("keeps the first seconds, plays the rest quickly and sends every line", async () => {
+    const lines: Array<[number, string]> = [];
+    for (let s = 0; s <= 60; s++) lines.push(hb(s, s)); // running race: 60 s, untouched
+    for (let s = 61; s <= 180; s++) lines.push(hb(s, 60, "Finish")); // clock stopped for 120 s
+    lines.push([181_000, `$B,8,"Next race"`]);
+    await writeLines(lines);
+    const { p, load } = player(true);
+    await load();
+    // Idle stretch from second 61 to 180 (119 s): 5 s kept + 2 s for the rest.
+    expect(p.status().durationMs).toBe(181_000 - (119_000 - 7_000));
+
+    p.start();
+    await vi.advanceTimersByTimeAsync(61_000 + 5_000);
+    expect(played).toHaveLength(67); // running race + first 5 s of the stretch in real time
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(played).toHaveLength(lines.length);
+    expect(played.at(-1)).toBe(`$B,8,"Next race"`);
+  });
+
+  it("leaves short stops and running races alone", async () => {
+    const lines: Array<[number, string]> = [];
+    for (let s = 0; s <= 20; s++) lines.push(hb(s, 0, "      ")); // 20 s stopped: below the minimum
+    for (let s = 21; s <= 120; s++) lines.push(hb(s, s - 21));
+    await writeLines(lines);
+    const { p, load } = player(true);
+    await load();
+    expect(p.status().durationMs).toBe(120_000);
+  });
+
+  it("plays idle stretches in recorded time when switched off, and switching does not jump", async () => {
+    const lines: Array<[number, string]> = [];
+    for (let s = 0; s <= 100; s++) lines.push(hb(s, 10, "Finish"));
+    await writeLines(lines);
+    const { p, load } = player(false);
+    await load();
+    expect(p.status().durationMs).toBe(100_000);
+    p.start();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(played).toHaveLength(4);
+
+    p.setSkipGaps(true);
+    // 3 s into the stretch: still inside the kept part, so the position stays the same.
+    expect(p.status().positionMs).toBe(3_000);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(played).toHaveLength(lines.length);
+  });
+});
+
