@@ -27,6 +27,7 @@ export type LeaderboardWsMessage =
  * One line crossing (`$J`) for the finish line log. Orbits sends `$G` (position, laps) right
  * after `$J`, so `position`/`lap` are filled in by an update with the same `seq`.
  * Times use the format of the REST feed ("m:ss.SSS"); a lap time "0:00" is the first crossing.
+ * Order by `crossingMs`: Orbits sends the passings of a group in batches, not in crossing order.
  */
 export type LeaderboardPassing = {
   /** Increasing per service run; identifies the passing for updates. */
@@ -40,6 +41,8 @@ export type LeaderboardPassing = {
   timeOfDay: string;
   /** Race time (last heartbeat) when the passing arrived. */
   elapsedTime: string;
+  /** Race time at the line in ms (total time, corrected by `$COR`): the crossing order. */
+  crossingMs: number;
   lapTime: string;
   totalTime: string;
   lap: number | null;

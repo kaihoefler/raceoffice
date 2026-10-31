@@ -128,6 +128,7 @@ Eine Seite mit vier Karten statt vier Fenstern. Status kommt live über `/ws/sta
 ## 7. Finish Line Log
 
 - Chronologische Liste der Durchfahrten aus `$J`-Passings: Zeit, #, Name, Runde, Rundenzeit, Position.
+- **Reihenfolge nach Rennzeit an der Linie** (`crossingMs` = Gesamtzeit), nicht nach Eintreffen: Orbits schickt die Durchfahrten einer Gruppe in Schüben von etwa 0,2 s und nicht in Linienreihenfolge. Ein späteres `$G` mit gleicher Runde und Zeit korrigiert den Platz (Orbits ordnet die Gruppe nach).
 - Zeilenhöhe konfigurierbar (Default 24 px, wie `finishLineLog.rowHeight`). Neueste oben oder unten, mit Auto-Scroll und Pause beim Hovern.
 - Zeilenhöhe frei eingebbar (16–200 px). Kompaktansicht nur mit Startnummer, Name, Runde und Platz. Für Kiosk-Bildschirme per URL: `?compact=1&rowHeight=40`.
 - **Datenquelle:** Das Log braucht Ereignisse, keine Zustände. Der Service führt deshalb einen Ringpuffer der letzten 500 Passings je Rennen und bietet ihn an:

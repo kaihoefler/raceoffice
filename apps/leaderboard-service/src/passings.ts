@@ -5,8 +5,15 @@
  * The race state only keeps the latest values per rider; the log needs the events. It follows
  * the messages after the store has applied them:
  * - `$J` (passingInfo) creates an entry with lap and total time
- * - the `$G` (raceInfo) Orbits sends right after it fills in position and lap count
+ * - the `$G` (raceInfo) Orbits sends right after it fills in position and lap count; a later `$G`
+ *   with the same lap and total time corrects the position (see below)
  * - `$COR` marks the entry of the corrected lap and updates its total time
+ *
+ * Order: Orbits does not send the passings of a group in crossing order – the decoder hands them
+ * over in batches (~0.2 s). Example AGI 2024, Senior Men Points-Final B, lap 4: arrival order
+ * 761, 865, 788, 894, 868, crossing order 865 (1:13.335), 868 (1:13.461), 761 (1:13.490), …
+ * The total time is the race time at the line, so the log is ordered by it (`crossingMs`), not by
+ * arrival. Orbits then also corrects positions: 761 first got 30, then 31 once 868 was in.
  *
  * Per race at most `perRace` entries (oldest dropped), at most `maxRaces` races.
  */
@@ -15,7 +22,13 @@ import { formatDuration, NO_RACE_ID, type RaceStateStore, type RMonitorMessage }
 
 export type PassingEvent = { type: "passing"; raceId: number; passing: LeaderboardPassing } | { type: "reset" };
 
+/** Crossing order: race time at the line, arrival as tie-breaker. */
+export function comparePassings(a: LeaderboardPassing, b: LeaderboardPassing): number {
+  return a.crossingMs - b.crossingMs || a.seq - b.seq;
+}
+
 export class PassingLog {
+  /** Per race in arrival order (the ring buffer drops the oldest arrivals). */
   private races = new Map<number, LeaderboardPassing[]>();
   private seq = 0;
   private readonly listeners = new Set<(event: PassingEvent) => void>();
@@ -25,9 +38,9 @@ export class PassingLog {
     private readonly maxRaces = 20,
   ) {}
 
-  /** Buffered passings of a race, oldest first. */
+  /** Buffered passings of a race in crossing order. */
   list(raceId: number): LeaderboardPassing[] {
-    return [...(this.races.get(raceId) ?? [])];
+    return [...(this.races.get(raceId) ?? [])].sort(comparePassings);
   }
 
   subscribe(listener: (event: PassingEvent) => void): () => void {
@@ -51,11 +64,12 @@ export class PassingLog {
           seq: ++this.seq,
           raceId: race.id,
           regNumber: msg.regNumber,
-          number: rider?.number ?? msg.regNumber,
-          firstName: rider?.firstName ?? "",
-          lastName: rider?.lastName ?? "",
+          number: rider?.number || msg.regNumber,
+          firstName: rider?.firstName || "",
+          lastName: rider?.lastName || "",
           timeOfDay: formatDuration(race.timeOfDayMs),
           elapsedTime: formatDuration(race.elapsedMs),
+          crossingMs: msg.totalTimeMs,
           lapTime: formatDuration(msg.lapTimeMs),
           totalTime: formatDuration(msg.totalTimeMs),
           lap: null,
@@ -66,10 +80,18 @@ export class PassingLog {
       }
       case "raceInfo": {
         const passing = this.latest(race.id, msg.regNumber);
-        // Only the $G belonging to the passing; later $G (position changes of others) do not touch it.
-        if (!passing || passing.position !== null) return;
-        passing.position = msg.position;
-        passing.lap = msg.laps;
+        if (!passing) return;
+        if (passing.position === null) {
+          // The $G belonging to the passing.
+          passing.position = msg.position;
+          passing.lap = msg.laps;
+        } else if (msg.laps === passing.lap && msg.totalTimeMs === passing.crossingMs && msg.position !== passing.position) {
+          // Same lap and time: Orbits re-ranks the group after a later-arriving passing.
+          passing.position = msg.position;
+        } else {
+          // A later position change of the rider (others passing) – not part of this crossing.
+          return;
+        }
         this.emit({ type: "passing", raceId: race.id, passing: { ...passing } });
         break;
       }
@@ -80,6 +102,9 @@ export class PassingLog {
           if (passing.regNumber !== msg.regNumber || passing.lap !== msg.lap) continue;
           passing.correctionMs = msg.deltaMs;
           passing.totalTime = formatDuration(msg.correctedTotalTimeMs);
+          // The corrected time is the photo-finish result: it decides the order, and the $G that
+          // follows carries it, so position updates keep matching.
+          passing.crossingMs = msg.correctedTotalTimeMs;
           this.emit({ type: "passing", raceId: race.id, passing: { ...passing } });
           break;
         }

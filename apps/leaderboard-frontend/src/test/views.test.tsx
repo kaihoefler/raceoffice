@@ -30,6 +30,7 @@ const passing = (overrides: Partial<LeaderboardPassing> = {}): LeaderboardPassin
   lastName: "Muster (GER)",
   timeOfDay: "14:03:10",
   elapsedTime: "4:00",
+  crossingMs: 251_532,
   lapTime: "0:21.310",
   totalTime: "4:11.532",
   lap: 7,
@@ -121,6 +122,31 @@ describe("finish line log", () => {
     // Another race: new snapshot replaces the list.
     ws.emit({ type: "passings", raceId: null, passings: [] });
     expect(await screen.findByText("Kein aktives Rennen")).toBeInTheDocument();
+  });
+});
+
+describe("finish line log order", () => {
+  it("sorts by crossing time, not by arrival (Orbits sends groups in batches)", async () => {
+    renderAt("/finish-line-log");
+    const ws = await socket("/ws/race/current/passings");
+    ws.emit({ type: "passings", raceId: 12, passings: [] });
+    const arrivals: Array<[number, string, number]> = [
+      [1, "761", 73_490],
+      [2, "865", 73_335],
+      [3, "788", 73_548],
+      [4, "868", 73_461],
+    ];
+    for (const [seq, number, crossingMs] of arrivals) {
+      ws.emit({ type: "passing", raceId: 12, passing: passing({ seq, number, regNumber: number, crossingMs }) });
+    }
+    const table = await screen.findByRole("table", { name: "Zieldurchfahrten" });
+    await waitFor(() => expect(within(table).getAllByRole("row")).toHaveLength(5));
+    // Newest (latest crossing) on top.
+    const numbers = within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => within(r).getAllByRole("cell")[1]!.textContent);
+    expect(numbers).toEqual(["788", "761", "868", "865"]);
   });
 });
 

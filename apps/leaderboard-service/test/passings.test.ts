@@ -31,7 +31,7 @@ describe("PassingLog", () => {
       `$J,"193","00:00:00.000","00:00:13.776"`,
       `$G,1,"193",1,"00:00:13.776"`,
       `$H,1,"193",0,"00:00:00"`,
-      `$G,2,"193",1,"00:00:13.776"`, // later position change: does not rewrite the passing
+      `$G,2,"193",1,"00:00:15.000"`, // later position change with another time: not this crossing
     ]);
     expect(log.list(3)).toEqual([
       {
@@ -43,11 +43,37 @@ describe("PassingLog", () => {
         lastName: "Muster (GER)",
         timeOfDay: "10:00:39",
         elapsedTime: "0:14",
+        crossingMs: 13_776,
         lapTime: "0:00",
         totalTime: "0:13.776",
         lap: 1,
         position: 1,
       },
+    ]);
+  });
+
+  it("orders a group by crossing time and takes Orbits' re-ranking (AGI 2024, Points-Final B, lap 4)", () => {
+    const { log } = feed([
+      `$B,71,"Senior Men 8000 Points-Final B"`,
+      `$J,"761","00:00:17.383","00:01:13.490"`,
+      `$G,30,"761",4,"00:01:13.490"`,
+      `$J,"865","00:00:17.151","00:01:13.335"`,
+      `$G,27,"865",4,"00:01:13.335"`,
+      `$J,"788","00:00:17.403","00:01:13.548"`,
+      `$G,32,"788",4,"00:01:13.548"`,
+      `$J,"894","00:00:17.363","00:01:13.705"`,
+      `$G,33,"894",4,"00:01:13.705"`,
+      `$J,"868","00:00:17.389","00:01:13.461"`,
+      `$G,30,"868",4,"00:01:13.461"`,
+      `$G,31,"761",4,"00:01:13.490"`, // re-ranked after 868 arrived
+      `$G,29,"761",4,"00:01:20.000"`, // other time: not this crossing
+    ]);
+    expect(log.list(71).map((p) => [p.number, p.position])).toEqual([
+      ["865", 27],
+      ["868", 30],
+      ["761", 31],
+      ["788", 32],
+      ["894", 33],
     ]);
   });
 

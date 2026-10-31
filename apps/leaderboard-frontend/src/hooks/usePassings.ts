@@ -3,6 +3,9 @@
 // The service sends all buffered passings of the current race (snapshot: on connect, race change,
 // reset, bursts) and then each new or updated passing; updates carry the same `seq` (position and
 // lap from the following $G, photo-finish correction). Reconnects with backoff like the race stream.
+//
+// Order: by race time at the line (`crossingMs`), not by arrival – Orbits sends the passings of a
+// group in batches, so a later message can belong to an earlier crossing.
 
 import { useEffect, useState } from "react";
 import type { LeaderboardPassing, LeaderboardWsMessage } from "@raceoffice/domain";
@@ -10,7 +13,7 @@ import { onReconnectRequest, wsUrl } from "../api";
 
 export type PassingsStream = {
   raceId: number | null;
-  /** Oldest first. */
+  /** In crossing order, earliest first. */
   passings: LeaderboardPassing[];
   /** Arrival time per seq for passings received live (not from a snapshot): highlights new rows. */
   arrivedAt: ReadonlyMap<number, number>;
@@ -18,6 +21,8 @@ export type PassingsStream = {
 };
 
 const MAX_PASSINGS = 500;
+
+const byCrossing = (a: LeaderboardPassing, b: LeaderboardPassing) => a.crossingMs - b.crossingMs || a.seq - b.seq;
 
 export function usePassings(): PassingsStream {
   const [stream, setStream] = useState<PassingsStream>({ raceId: null, passings: [], arrivedAt: new Map(), connected: false });
@@ -44,7 +49,7 @@ export function usePassings(): PassingsStream {
           return;
         }
         if (msg.type === "passings") {
-          setStream({ raceId: msg.raceId, passings: msg.passings, arrivedAt: new Map(), connected: true });
+          setStream({ raceId: msg.raceId, passings: [...msg.passings].sort(byCrossing), arrivedAt: new Map(), connected: true });
         } else if (msg.type === "passing") {
           const passing = msg.passing;
           setStream((s) => {
@@ -53,10 +58,12 @@ export function usePassings(): PassingsStream {
             if (i >= 0) {
               const passings = [...s.passings];
               passings[i] = passing;
-              return { ...s, passings };
+              // A photo-finish correction can change the crossing time.
+              return { ...s, passings: passings.sort(byCrossing) };
             }
             const arrivedAt = new Map(s.arrivedAt).set(passing.seq, Date.now());
-            return { ...s, passings: [...s.passings, passing].slice(-MAX_PASSINGS), arrivedAt };
+            const passings = [...s.passings, passing].sort(byCrossing).slice(-MAX_PASSINGS);
+            return { ...s, passings, arrivedAt };
           });
         }
       };
