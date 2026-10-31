@@ -40,6 +40,7 @@ import {
   type TimingDecoderBackend,
 } from "@raceoffice/domain";
 
+import { useSearchParams } from "react-router-dom";
 import { ConfirmDialog } from "../../components/common/Dialogs";
 import { SimulatorPanel } from "./SimulatorPanel";
 import { BACKEND_LABEL, nowIso, useTimingDocs } from "../../timing/timingShared";
@@ -107,7 +108,10 @@ function fromDraft(draft: Draft): TimingDecoder {
 }
 
 export default function TimingDecodersPage() {
-  const [tab, setTab] = useState<"decoders" | "simulation">("decoders");
+  // The tab is part of the URL (?tab=simulation), e.g. for the simulator label in the app bar.
+  const [params, setParams] = useSearchParams();
+  const tab: "decoders" | "simulation" = params.get("tab") === "simulation" ? "simulation" : "decoders";
+  const setTab = (v: "decoders" | "simulation") => setParams(v === "simulation" ? { tab: v } : {}, { replace: true });
   return (
     <Box sx={{ display: "grid", gap: 2 }}>
       <Tabs value={tab} onChange={(_, v: "decoders" | "simulation") => setTab(v)} aria-label="Decoder-Bereiche">

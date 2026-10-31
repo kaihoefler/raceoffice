@@ -1,13 +1,17 @@
-// App bar with the two areas (Zeitmessung, Livetracking) and three plain status chips:
-// worker, hardware (connected decoders) and measurement.
+// App bar with the two areas (Zeitmessung, Livetracking) and plain status chips: worker,
+// hardware (connected decoders), measurement – and a simulator label while the decoder simulator
+// is switched on (passings may be simulated); it links to the simulation tab.
 
 import { useEffect, useMemo, useRef } from "react";
 
 import FlagIcon from "@mui/icons-material/Flag";
+import ScienceIcon from "@mui/icons-material/Science";
 import { AppBar, Box, Button, Chip, Container, Divider, IconButton, Toolbar, Tooltip, Typography } from "@mui/material";
 import {
   makeLiveTrackingRuntimeDocId,
   makeLiveTrackingSessionDocId,
+  TIMING_SIMULATOR_DOC_ID,
+  type TimingSimulatorDocument,
   type LiveTrackingRuntimeDocument,
   type LiveTrackingSessionDocument,
 } from "@raceoffice/domain";
@@ -45,6 +49,8 @@ export default function LiveTrackingLayout() {
   const { update: updateRuntime, data: runtimeData } = useRealtimeDoc<LiveTrackingRuntimeDocument>(useMemo(() => makeLiveTrackingRuntimeDocId(), []));
   const { online } = useWorkerState(now);
   const timing = useTimingDocs();
+  const { data: simulatorDoc } = useRealtimeDoc<TimingSimulatorDocument>(TIMING_SIMULATOR_DOC_ID);
+  const simulatorState = simulatorDoc?.running ? (timing.statusDoc?.simulator?.state ?? "starting") : null;
 
   const wanted = timing.connectedIds.length;
   const connected = timing.connectedIds.filter((id) => decoderHealth(timing.statusById.get(id), now) === "connected").length;
@@ -112,6 +118,19 @@ export default function LiveTrackingLayout() {
           <Box sx={{ flexGrow: 1 }} />
 
           <Box sx={{ display: "flex", gap: 1, mr: 1 }}>
+            {simulatorState ? (
+              <Tooltip describeChild title="Ein simulierter Decoder ist aktiv – zur Simulation" arrow>
+                <Chip
+                  size="small"
+                  clickable
+                  component={Link}
+                  to="/timing/decoders?tab=simulation"
+                  icon={<ScienceIcon />}
+                  label={simulatorState === "error" ? "Simulation: Fehler" : simulatorState === "running" ? "Simulation aktiv" : "Simulation startet"}
+                  color={simulatorState === "error" ? "error" : "warning"}
+                />
+              </Tooltip>
+            ) : null}
             <Chip size="small" label={`Worker: ${online ? "läuft" : "aus"}`} color={online ? "success" : "default"} />
             <Chip
               size="small"

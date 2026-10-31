@@ -172,6 +172,29 @@ describe("decoder register", () => {
   });
 });
 
+describe("simulator label in the app bar", () => {
+  it("shows while the simulator runs and leads to the simulation tab", async () => {
+    const { user, router } = renderApp({
+      route: "/live-tracking/measurement",
+      docs: {
+        [TIMING_SIMULATOR_DOC_ID]: { kind: "timingSimulator", version: 1, running: true, config: { decoderId: "0A87E5", transponderIds: ["1"], passingDelay: "1000-2000", startupDelaySecs: 0, announceIp: null }, updatedAt: null },
+        [TIMING_STATUS_DOC_ID]: { ...createTimingStatusDocument(), simulator: { state: "running", startedAt: null, lastError: null, lastLine: null } },
+      },
+    });
+    await user.click(await screen.findByRole("link", { name: /Simulation aktiv/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/livetracking/timing/decoders"));
+    expect(router.state.location.search).toBe("?tab=simulation");
+    expect(await screen.findByRole("tab", { name: "Simulation", selected: true })).toBeInTheDocument();
+    expect(await screen.findByText("Decoder-Simulation")).toBeInTheDocument();
+  });
+
+  it("is hidden while the simulator is off", async () => {
+    renderApp({ route: "/live-tracking/measurement" });
+    await screen.findByText("noch nicht gestartet");
+    expect(screen.queryByText(/Simulation aktiv/)).not.toBeInTheDocument();
+  });
+});
+
 describe("decoder simulation tab", () => {
   it("starts the simulator with the entered settings and creates a decoder for it", async () => {
     const { server, user } = renderApp({ route: "/timing/decoders" });
