@@ -119,7 +119,7 @@ function fromDraft(draft: Draft): TimingDecoder {
 }
 
 export default function TimingDecodersPage() {
-  const { decoders, updateDecoders, connectedIds } = useTimingDocs();
+  const { decoders, updateDecoders, connectedIds, writeError } = useTimingDocs();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [deleting, setDeleting] = useState<TimingDecoder | null>(null);
   const [scan, setScan] = useState<{ loading: boolean; error: string | null; found: DiscoveredDecoder[] | null }>({ loading: false, error: null, found: null });
@@ -162,6 +162,11 @@ export default function TimingDecodersPage() {
         />
         <Divider />
         <CardContent>
+          {writeError ? (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              Änderung wurde vom Server nicht übernommen: {writeError}
+            </Alert>
+          ) : null}
           {decoders.length === 0 ? (
             <Typography color="text.secondary">Noch keine Decoder angelegt.</Typography>
           ) : (

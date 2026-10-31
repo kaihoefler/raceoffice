@@ -43,6 +43,8 @@ export function useTimingDocs() {
     statusDoc: status.data,
     decodersDoc: decoders.data,
     connectionDoc: connection.data,
+    /** Last error of the register / connection documents (e.g. a rejected write). */
+    writeError: decoders.error ?? connection.error ?? null,
   };
 }
 

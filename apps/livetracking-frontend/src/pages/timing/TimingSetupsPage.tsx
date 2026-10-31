@@ -45,6 +45,7 @@ import {
 } from "@raceoffice/domain";
 
 import { ManageListDialog, NewEntryDialog } from "../../components/common/Dialogs";
+import { ParticipantPoolsSummary } from "../../components/livetracking/ParticipantPoolsSummary";
 import { useRealtimeDoc } from "../../realtime/useRealtimeDoc";
 import { BACKEND_LABEL, nowIso, useTimingDocs } from "../../timing/timingShared";
 
@@ -61,7 +62,7 @@ function toDraft(doc: LiveTrackingSetupDocument): Draft {
     lengthM: doc.track.lengthM,
     minLapTimeSecs: doc.minLapTimeSecs ?? 8,
     // Assigned decoder ids made explicit (old setups only had addresses).
-    points: normalizeTimingPoints(doc.track.timingPoints).map((p) => ({ ...p, decoderId: resolveTimingPointDecoderId(p, doc.decoderBackend) })),
+    points: normalizeTimingPoints(doc.track.timingPoints).map((p) => ({ ...p, timingDecoderId: resolveTimingPointDecoderId(p, doc.decoderBackend) })),
   };
 }
 
@@ -87,7 +88,7 @@ export default function TimingSetupsPage() {
     const trackIssues = validateLiveTrackingTrack({ id: draft.trackId, name: draft.trackName, lengthM: draft.lengthM, timingPoints: normalizeTimingPoints(draft.points) }).map((i) => i.message);
     const known = new Set(decoders.map((d) => d.id));
     const decoderIssues = draft.points
-      .filter((p) => p.enabled && !known.has(String(p.decoderId ?? "")))
+      .filter((p) => p.enabled && !known.has(String(p.timingDecoderId ?? "")))
       .map((p) => `Timing-Point „${p.name}“: kein Decoder aus dem Register zugeordnet`);
     return [...trackIssues, ...decoderIssues];
   }, [draft, decoders]);
@@ -105,7 +106,7 @@ export default function TimingSetupsPage() {
       const point: LiveTrackingTimingPoint = {
         id: `tp-${crypto.randomUUID().slice(0, 8)}`,
         name: `TP ${order}`,
-        decoderId: "",
+        timingDecoderId: "",
         // Address fields of the old model; the decoder register is the source now.
         decoderIp: "",
         websocketPortAMM: 0,
@@ -243,8 +244,8 @@ export default function TimingSetupsPage() {
                         <TextField
                           size="small"
                           select
-                          value={decoders.some((d) => d.id === p.decoderId) ? p.decoderId : ""}
-                          onChange={(e) => patchPoint(index, { decoderId: e.target.value })}
+                          value={decoders.some((d) => d.id === p.timingDecoderId) ? p.timingDecoderId : ""}
+                          onChange={(e) => patchPoint(index, { timingDecoderId: e.target.value })}
                           sx={{ minWidth: 200 }}
                           slotProps={{ htmlInput: { "aria-label": `Decoder Timing-Point ${index + 1}` } }}
                         >
@@ -270,6 +271,8 @@ export default function TimingSetupsPage() {
                   ))}
                 </TableBody>
               </Table>
+
+              {setupDoc ? <ParticipantPoolsSummary setup={setupDoc} manageable={session?.setupId === setupId} /> : null}
 
               {issues.length > 0 ? (
                 <Alert severity="warning">

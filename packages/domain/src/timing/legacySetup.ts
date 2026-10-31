@@ -8,7 +8,10 @@
  * - Every timing point yields one register entry; same backend + address = same decoder
  *   (deterministic address id, so the migration is idempotent).
  * - Non-destructive: the old fields stay in the setup, the timing point additionally gets
- *   `decoderId`. Existing register entries are never overwritten (operator edits win).
+ *   `timingDecoderId`. Existing register entries are never overwritten (operator edits win).
+ * - Old setups carry a field `decoderId` with another meaning (AMMC decoder label, e.g. "SF");
+ *   it is ignored. An early migration took it for the register id – such entries are removed
+ *   again (removeMisderivedLegacyDecoders).
  */
 import type { LiveTrackingSetupDocument, LiveTrackingTimingPoint } from "../livetracking/setup.js";
 import {
@@ -36,7 +39,7 @@ function legacyAddress(point: LiveTrackingTimingPoint, backend: TimingDecoderBac
  * decoder address stored in the point (setups written before the register existed).
  */
 export function resolveTimingPointDecoderId(point: LiveTrackingTimingPoint, setupBackend: SetupBackend): string {
-  const assigned = String(point.decoderId ?? "").trim();
+  const assigned = String(point.timingDecoderId ?? "").trim();
   if (assigned) return assigned;
   const backend = legacyBackend(point, setupBackend);
   const { ip, port } = legacyAddress(point, backend);
@@ -95,15 +98,40 @@ export function mergeLegacySetupDecoders(
 }
 
 /**
- * Writes the resolved `decoderId` into every timing point that has none yet.
+ * Writes the resolved `timingDecoderId` into every timing point that has none yet.
  * Returns the same setup object when nothing changed.
  */
 export function assignLegacyDecoderIds(setup: LiveTrackingSetupDocument): LiveTrackingSetupDocument {
   let changed = false;
   const timingPoints = (setup.track?.timingPoints ?? []).map((point) => {
-    if (String(point.decoderId ?? "").trim()) return point;
+    if (String(point.timingDecoderId ?? "").trim()) return point;
     changed = true;
-    return { ...point, decoderId: resolveTimingPointDecoderId(point, setup.decoderBackend) };
+    return { ...point, timingDecoderId: resolveTimingPointDecoderId(point, setup.decoderBackend) };
   });
   return changed ? { ...setup, track: { ...setup.track, timingPoints } } : setup;
+}
+
+/**
+ * Removes register entries an early migration derived from the old AMMC label field
+ * `decoderId` of timing points: entry id equals that label and backend/address equal the
+ * point's address. Returns the same document when there are none.
+ */
+export function removeMisderivedLegacyDecoders(
+  doc: TimingDecodersDocument,
+  setups: readonly LiveTrackingSetupDocument[],
+  updatedAt: string,
+): TimingDecodersDocument {
+  const misderived = new Set<string>();
+  for (const setup of setups) {
+    for (const point of setup.track?.timingPoints ?? []) {
+      const label = String((point as { decoderId?: unknown }).decoderId ?? "").trim();
+      if (!label) continue;
+      const backend = legacyBackend(point, setup.decoderBackend);
+      const { ip, port } = legacyAddress(point, backend);
+      const entry = doc.decoders.find((d) => d.id === label);
+      if (entry && entry.backend === backend && entry.ip === ip && entry.port === port && entry.hardwareId === null) misderived.add(label);
+    }
+  }
+  if (misderived.size === 0) return doc;
+  return { ...doc, decoders: doc.decoders.filter((d) => !misderived.has(d.id)), updatedAt };
 }

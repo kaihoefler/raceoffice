@@ -162,7 +162,7 @@ describe("setups", () => {
     await user.click(select);
     await user.click(await screen.findByRole("option", { name: "Sim Gegengerade (Simulation)" }));
     await user.click(screen.getByRole("button", { name: "Setup speichern" }));
-    await waitFor(() => expect(server.doc(makeLiveTrackingSetupDocId("s1")).data.track.timingPoints[0].decoderId).toBe(SIM.id));
+    await waitFor(() => expect(server.doc(makeLiveTrackingSetupDocId("s1")).data.track.timingPoints[0].timingDecoderId).toBe(SIM.id));
   });
 });
 

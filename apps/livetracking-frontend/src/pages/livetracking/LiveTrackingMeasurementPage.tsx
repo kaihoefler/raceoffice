@@ -44,6 +44,7 @@ import { Link as RouterLink } from "react-router-dom";
 
 import { ConfirmDialog } from "../../components/common/Dialogs";
 import LiveTrackingLiveBoard from "../../components/livetracking/LiveTrackingLiveBoard";
+import { ParticipantPoolsSummary } from "../../components/livetracking/ParticipantPoolsSummary";
 import { liveStateDisplayName } from "../../components/livetracking/liveTrackingDisplayName";
 import { useRealtimeDoc } from "../../realtime/useRealtimeDoc";
 import { decoderHealth, formatAgo, HEALTH_COLOR, HEALTH_LABEL, nowIso, useNow, useTimingDocs, useWorkerState } from "../../timing/timingShared";
@@ -175,6 +176,8 @@ export default function LiveTrackingMeasurementPage() {
                 ) : null}
               </Box>
             ) : null}
+
+            {setup ? <ParticipantPoolsSummary setup={setup} manageable /> : null}
 
             <Stack direction="row" spacing={3}>
               <Typography variant="body2">Fahrer:innen mit Durchfahrt: {(results?.athleteLiveStates ?? []).length}</Typography>
