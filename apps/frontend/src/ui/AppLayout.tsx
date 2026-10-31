@@ -1,4 +1,5 @@
 // src/ui/AppLayout.tsx
+import LeaderboardIcon from "@mui/icons-material/Leaderboard";
 import TimerIcon from "@mui/icons-material/Timer";
 import { AppBar, Box, Button, Chip, Container, IconButton, Toolbar, Tooltip, Typography } from "@mui/material";
 import { Link, Outlet, useLocation } from "react-router-dom";
@@ -76,6 +77,19 @@ export default function AppLayout() {
           <Button color="inherit" component={Link} to="/about" variant={isAbout ? "outlined" : "text"}>
             About
           </Button>
+          <Tooltip title="Open Leaderboard" arrow>
+            <IconButton
+              color="inherit"
+              component="a"
+              href={import.meta.env.VITE_LEADERBOARD_URL ?? "/leaderboard/ui/"}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open Leaderboard"
+              sx={{ ml: 0.5 }}
+            >
+              <LeaderboardIcon />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Open Live Tracking" arrow>
             <IconButton
               color="inherit"
