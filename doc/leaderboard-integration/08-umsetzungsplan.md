@@ -7,11 +7,12 @@
 | Konzept (`doc/leaderboard-integration/`) | **fertig** |
 | `packages/rmonitor` | **fertig**: Parser, Store, `toRaceTO`, Recording-Format, `LineDecoder`, `FakeOrbitsFeeder`, `$COR`-Korrekturen. Golden-Tests ohne Abweichung: 10 Aufnahmen im Repo (davon 4 anonymisierte Ausschnitte) und lokal 15 komplette Wettkampftage (8 719 Haltepunkte). |
 | Domain: optionale `RaceTO`-Felder, `leaderboardProtocol.ts` | **fertig** (nur Typen) |
-| `apps/leaderboard-service` (headless, Docker) | **fertig bis auf Docker/Bundle** (verschoben nach P6): REST kompatibel, WS mit Snapshot/Patch und Heartbeat-Ticks, Control-API, Recorder, Player, Config, Token. Integrationstests inkl. Golden-Vergleich über TCP. Upload per `PUT` statt Multipart. |
+| `apps/leaderboard-service` (headless, Docker) | **fertig**: REST kompatibel, WS mit Snapshot/Patch und Heartbeat-Ticks, Control-API, Recorder, Player (Lücken überspringen, Leerlauf zwischen Rennen verkürzen), Config, Token. Integrationstests inkl. Golden-Vergleich über TCP. Upload per `PUT` statt Multipart. Bundle und Docker in P6. |
 | RaceOffice-Integration (Manager, Proxy, WS im Scoring) | **fertig**: `LeaderboardServiceManager` (Token, Restart-Policy), eigener Proxy HTTP+WS unter `/leaderboard/*`, Modi managed/external/off zur Laufzeit umschaltbar (`POST /leaderboard-service/mode`), Scoring-Quelle „Automatisch / Leaderboard-Service / Java (Notfall) / eigene URL“ mit WS und Polling-Fallback, REPLAY-Hinweis. Proxy ohne neue Abhängigkeit statt `@fastify/http-proxy`. Refactor `ManagedProcess` nicht gemacht (optional). |
 | `apps/leaderboard-frontend`: Leaderboard + Control Center | **fertig**: Rangliste (Flaggen-Banner, Kacheln, Spaltenauswahl mit Presets, Abstand/Intervall, Positionswechsel, Bestrunden, Zielfoto-Markierung, PURPLE-Regel, Stale-Anzeige, Kiosk/Vollbild/Skalierung/Dunkelmodus/Zeilenhöhe, mobil reduzierte Spalten) und Control Center (Orbits mit Verlauf, Service mit kopierbaren Endpunkten, Recorder, Player mit Upload/Tempo/Seek, Token-Dialog). Darstellungshelfer nach `packages/domain/src/liveTime.ts` verschoben. Nicht umgesetzt: Spalten PIC/Class/Avg (nicht im `RaceTO`). |
-| Start Signal, Lap Counter, Finish Line Log | **fertig**: Start Signal (Flaggenfarbe, Startaufstellung bei PURPLE, „GO“ in den ersten 5 s, Schachbrett bei FINISH), Lap Counter (Noch/Gefahren, Verzögerung per Einstellung oder `?delay=`, LAST LAP mit Glocke), Finish Line Log (Ringpuffer 500 Durchfahrten je Rennen im Service, `GET /api/race/:id/passings`, WS `/ws/race/current/passings`; Position und Runde aus dem folgenden `$G`, `$COR` markiert die Durchfahrt). |
-| Deployment, Release, Ablösung der Java-App | offen |
+| Start Signal, Lap Counter, Finish Line Log | **fertig**: Start Signal (Flaggenfarbe, Startaufstellung bei PURPLE, „START“ in den ersten 5 s, ruhige FINISH-Anzeige auf Schwarz mit schmalem Zielflaggen-Band), Lap Counter (Noch/Gefahren, Verzögerung per Einstellung oder `?delay=`, LAST LAP mit Glocke, FINISH wie beim Start Signal), Finish Line Log (Ringpuffer 500 Durchfahrten je Rennen im Service, `GET /api/race/:id/passings`, WS `/ws/race/current/passings`; Reihenfolge nach Überfahrzeit, Position und Runde aus dem folgenden `$G` inkl. Umsortierung durch Orbits, `$COR` markiert die Durchfahrt; Zeilenhöhe frei, Kompaktansicht, Namen nutzen die freie Breite). Tageszeit immer aus dem letzten Heartbeat. |
+| Deployment und Release (P6) | **fertig**: Single-File-Bundle (`npm run bundle:leaderboard-service`), Windows-Release-ZIP enthält den Service (`deploy/apps/leaderboard-service`), Docker-Image `ghcr.io/kaihoefler/raceoffice-leaderboard` (amd64/arm64) im Release-Workflow, Bundle-Smoke-Test in CI, Doku in [07](07-docker-und-deployment.md) und `doc/build-and-deploy.md`. Lizenz: die drei Leaderboard-Pakete GPL-3.0-or-later. Link aufs Leaderboard in der App-Leiste von RaceOffice. |
+| Ablösung der Java-App | offen: Probelauf bei einer Veranstaltung (Parallelbetrieb), danach Abschaltung. Das Vergleichsskript ist bewusst nicht gebaut. |
 
 ---
 
@@ -122,9 +123,12 @@ gantt
 | Persistenz | Anfangs **keine** Speicherung von Rennen in RaceOffice |
 | Recordings | Aufnahmen aus dem Java-Repo dürfen verwendet werden; weitere lokale Aufnahmen kommen hinzu |
 | Stale-Erkennung | Der `$F`-Heartbeat von Orbits kommt jede Sekunde und erzeugt mindestens einen Patch pro Sekunde. Die bestehende 3-s-Regel in `LiveRaceStatus` bleibt, kein künstlicher Keepalive. |
+| Bündelung | Single-File-Bundle mit esbuild, keine `node_modules` zur Laufzeit |
+| Image | `ghcr.io/kaihoefler/raceoffice-leaderboard`, `linux/amd64` + `linux/arm64` |
+| Lizenz | `packages/rmonitor`, `apps/leaderboard-service`, `apps/leaderboard-frontend` unter GPL-3.0-or-later (wie das Original); der Rest von RaceOffice ist nicht betroffen, der Service läuft als eigener Prozess |
+| Vergleichsskript | Vorerst nicht gebaut; die Golden-Tests über 15 Wettkampftage decken den Vergleich offline ab |
 
 ## Offene Punkte
 
-1. **Bündelung:** Service als Single-File-Bundle (Empfehlung) oder klassisch mit `node_modules`?
-2. **Name des Images:** z. B. `raceoffice-leaderboard`, Registry `ghcr.io`.
-3. **Später:** Speicherung abgeschlossener Rennen (`RaceTO` bei FINISH) für Nachkontrolle und Export.
+1. **Ablösung:** Probelauf mit Java-App parallel bei einer Veranstaltung, danach Java-App abschalten und Hinweise auf `localhost:8080` aufräumen ([07, Abschnitt 4](07-docker-und-deployment.md#4-ablösung-der-java-app)).
+2. **Später:** Speicherung abgeschlossener Rennen (`RaceTO` bei FINISH) für Nachkontrolle und Export.

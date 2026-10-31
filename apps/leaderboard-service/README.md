@@ -16,8 +16,9 @@ node apps/leaderboard-service/dist/index.js --help
 | Bereich | Pfade |
 |---|---|
 | REST (Java-kompatibel, jede Methode) | `/race`, `/race/:id`, `/races`, `/races?filter=current`, unbekannte Pfade → aktuelles Rennen |
+| Durchfahrten (Finish Line Log) | `GET /api/race/:id/passings`, WS `/ws/race/current/passings` |
 | WebSocket | `/ws/race/current`, `/ws/race/:id` (Snapshot + Patch), `/ws/status` |
-| Control-API | `GET /api/status`, `GET/PUT /api/config`, `POST /api/client/connect\|disconnect`, `POST /api/recorder/start\|stop`, `GET /api/recordings`, `GET\|PUT\|DELETE /api/recordings/:datei`, `POST /api/player/start\|pause\|resume\|stop\|seek\|speed`, `POST /api/state/reset` |
+| Control-API | `GET /api/status`, `GET/PUT /api/config`, `POST /api/client/connect\|disconnect`, `POST /api/recorder/start\|stop`, `GET /api/recordings`, `GET\|PUT\|DELETE /api/recordings/:datei`, `POST /api/player/start\|pause\|resume\|stop\|seek\|speed\|skip-gaps`, `POST /api/state/reset` |
 | Sonstiges | `/health`, `/ui/` (Leaderboard-Frontend, sobald unter `public/` gebaut) |
 
 Protokoll und Typen: `LeaderboardWsMessage` und `LeaderboardServiceStatus` in `@raceoffice/domain`.
@@ -45,4 +46,28 @@ npm run test:run --workspace=@raceoffice/leaderboard-service
 
 Die Integrationstests nutzen echte TCP-Verbindungen über den `FakeOrbitsFeeder` von `@raceoffice/rmonitor/testing`. Unter anderem prüfen sie die REST-Ausgabe an jedem Haltepunkt gegen die Java-Referenz, den Weg über WebSocket (Snapshot plus Patches ergibt den REST-Stand), Reconnect, Idle-Timeout, Recorder, Player und Token.
 
-Docker-Image und Single-File-Bundle kommen mit dem Deployment (P6).
+## Auslieferung
+
+Ausgeliefert wird ein **Single-File-Bundle** (esbuild): Service, `@raceoffice/domain`, `@raceoffice/rmonitor` und fastify in einer Datei, ohne `node_modules` und ohne native Abhängigkeiten.
+
+```sh
+npm run bundle:leaderboard-service        # baut Frontend + Service, dann apps/leaderboard-service/bundle/
+node apps/leaderboard-service/bundle/dist/index.js --version
+```
+
+`bundle/` hat dasselbe Layout wie der tsc-Build (`dist/index.js`, `public/`, dazu `package.json` und `LICENSE`):
+
+- **Windows-Release:** `npm run deploy` kopiert den Ordner nach `deploy/apps/leaderboard-service/`. Der RaceOffice-Server startet ihn dort wie im Repo.
+- **Docker:** `docker/leaderboard/Dockerfile` (Kontext = Repo-Root) kopiert den Ordner ins Image. Beispiel-Compose: `docker/leaderboard/docker-compose.yml`. Der Release-Workflow veröffentlicht `ghcr.io/kaihoefler/raceoffice-leaderboard` für `linux/amd64` und `linux/arm64`.
+
+```sh
+docker build -f docker/leaderboard/Dockerfile -t raceoffice-leaderboard .
+docker run -d -p 8080:8080 -v leaderboard-data:/data \
+  -e RMONITOR_HOST=192.168.1.20 -e AUTOCONNECT=true raceoffice-leaderboard
+```
+
+Details: [07-docker-und-deployment.md](../../doc/leaderboard-integration/07-docker-und-deployment.md).
+
+## Lizenz
+
+GPL-3.0-or-later, siehe [LICENSE](LICENSE). Der Service baut auf der Portierung von RMonitorLeaderboard (`@raceoffice/rmonitor`) auf. Das Bundle enthält auch `@raceoffice/domain`; wer Bundle oder Image weitergibt, gibt diesen Code damit ebenfalls unter der GPL weiter.

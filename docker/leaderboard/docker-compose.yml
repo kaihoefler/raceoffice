@@ -1,0 +1,27 @@
+# Example: leaderboard service next to Orbits.
+#
+#   docker compose -f docker/leaderboard/docker-compose.yml up -d
+#
+# Then: leaderboard http://<host>:8080/ui/, scoring source http://<host>:8080/races?filter=current
+services:
+  leaderboard:
+    image: ghcr.io/kaihoefler/raceoffice-leaderboard:latest
+    # Build locally instead of pulling:
+    build:
+      context: ../..
+      dockerfile: docker/leaderboard/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      RMONITOR_HOST: 192.168.1.20 # Orbits PC; Orbits on the Docker host itself: host.docker.internal
+      RMONITOR_PORT: "50000"
+      RMONITOR_ENCODING: windows-1252
+      AUTOCONNECT: "true"
+      RECORDER_AUTOSTART: "true"
+      # LEADERBOARD_CONTROL_TOKEN: change-me   # protects the control API (recorder, player, config)
+    volumes:
+      - leaderboard-data:/data
+    restart: unless-stopped
+
+volumes:
+  leaderboard-data:

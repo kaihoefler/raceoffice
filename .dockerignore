@@ -1,0 +1,26 @@
+# Build context for docker/leaderboard/Dockerfile (context = repo root).
+# Allowlist: the repo with tools/ and deploy/ is several GB, the image needs four workspaces.
+*
+
+# npm workspace install: root manifest, lockfile, npm settings and every workspace manifest
+# (npm ci checks the lockfile against all of them, even with --workspace filters).
+!package.json
+!package-lock.json
+!.npmrc
+!apps/*/package.json
+!packages/*/package.json
+
+# Sources of the leaderboard service and what it is built from.
+!packages/domain
+!packages/rmonitor
+!apps/leaderboard-service
+!apps/leaderboard-frontend
+
+# Never send local build output, dependencies, runtime data or tests.
+**/node_modules
+**/dist
+**/data
+apps/leaderboard-service/bundle
+apps/leaderboard-service/public
+apps/leaderboard-service/test
+packages/rmonitor/test

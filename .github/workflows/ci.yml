@@ -40,3 +40,10 @@ jobs:
 
       - name: Build
         run: npm run build:all
+
+      # The release ships the leaderboard service as one esbuild bundle (Windows ZIP and Docker
+      # image). Starting it catches dependencies that break when bundled.
+      - name: Bundle leaderboard service (smoke test)
+        run: |
+          npm --workspace @raceoffice/leaderboard-service run bundle
+          node apps/leaderboard-service/bundle/dist/index.js --version

@@ -46,3 +46,6 @@ packages/rmonitor/test/fixtures/golden-local/
 # Leaderboard service runtime data: uploaded/recorded RMonitor files and runtime config.
 apps/server/data/leaderboard/
 apps/leaderboard-service/data/
+
+# Leaderboard service release folder (npm run bundle:leaderboard-service).
+apps/leaderboard-service/bundle/
