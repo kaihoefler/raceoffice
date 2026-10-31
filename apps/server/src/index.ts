@@ -81,8 +81,24 @@ const dbPath =
   process.env.RACEOFFICE_DB ??
   path.resolve(process.cwd(), "data", "raceoffice.db");
 
+// Leaderboard integration: managed (default) | external (proxy to LEADERBOARD_URL, e.g. the Java
+// RMonitorLeaderboard as emergency fallback) | off.
+const leaderboardModeRaw = String(readArg("--leaderboard-mode") ?? process.env.LEADERBOARD_MODE ?? "managed").trim();
+if (!["managed", "external", "off"].includes(leaderboardModeRaw)) {
+  throw new Error(`Invalid leaderboard mode "${leaderboardModeRaw}" (managed | external | off)`);
+}
+const leaderboardMode = leaderboardModeRaw as "managed" | "external" | "off";
+
 const app = await buildApp({
   dbPath,
+  leaderboard: {
+    mode: leaderboardMode,
+    externalUrl: readArg("--leaderboard-url") ?? process.env.LEADERBOARD_URL ?? null,
+    internalPort: Number(process.env.LEADERBOARD_INTERNAL_PORT ?? 8790),
+    dataDir: process.env.LEADERBOARD_DATA_DIR ?? path.join(path.dirname(path.resolve(dbPath)), "leaderboard"),
+    // Default on: users open the leaderboard without starting anything; LEADERBOARD_AUTOSTART=false disables it.
+    autoStart: !/^(0|false|no|off)$/i.test(String(process.env.LEADERBOARD_AUTOSTART ?? "")),
+  },
   publicDir: path.resolve(__dirname, "../public"),
   repoRoot: resolveLiveTrackingRepoRoot(),
   liveTrackingServerUrl,

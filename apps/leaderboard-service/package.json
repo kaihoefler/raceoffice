@@ -1,0 +1,38 @@
+{
+  "name": "@raceoffice/leaderboard-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Headless leaderboard service: receives the RMonitor stream from Orbits, serves it as REST (compatible with RMonitorLeaderboard) and as WebSocket diffs; recorder, player, control API.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "bundle": "node scripts/bundle.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.5",
+    "@fastify/websocket": "^11.3.4",
+    "@raceoffice/domain": "*",
+    "@raceoffice/rmonitor": "*",
+    "fast-json-patch": "^3.1.1",
+    "fastify": "^5.12.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.3",
+    "ws": "^8.18.3"
+  }
+}

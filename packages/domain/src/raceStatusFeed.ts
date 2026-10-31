@@ -4,8 +4,7 @@
  * Contract of the external live race status feed (timing system REST endpoint,
  * default `http://localhost:8080/races?filter=current`), polled by the frontend.
  *
- * The feed returns a JSON array of races. Only the fields RaceOffice reads are typed;
- * the real payload carries more (e.g. `trackName`, `bestLap`, `qualiPosition`).
+ * The feed returns a JSON array of races. Fields RaceOffice does not need are optional.
  * A real sample is in `examples/race_status.json`.
  *
  * Lives in the shared domain package because it is a contract used by several parties:
@@ -31,9 +30,25 @@ export type RaceStatusCompetitor = {
   lastName: string;
   /** e.g. "0:15" or "0:15.032" */
   totalTime: string;
+  /** Same time format as `totalTime`; "0:00" if unknown. */
+  bestLap?: string;
+  /** Same time format as `totalTime`; "0:00" if unknown. */
+  lastLap?: string;
+  /** Position from practice/qualifying (`$H`), 0 if unknown. */
+  qualiPosition?: number;
+  /**
+   * Latest time correction by the timing system (Orbits `$COR`, typically photo finish).
+   * Only present if there was one; not sent by the Java RMonitorLeaderboard.
+   * `totalTime`/`lastLap` are already corrected – mark them when `lap === lapsComplete`.
+   */
+  timeCorrection?: { lap: number; deltaMs: number };
 };
 
-/** Live status of one race. */
+/**
+ * Live status of one race.
+ * Field order matches the JSON of RMonitorLeaderboard (`RaceTO`), which @raceoffice/rmonitor
+ * reproduces; the optional fields are always present there but not required by consumers.
+ */
 export type RaceStatusRace = {
   raceName: string;
   raceID: number;
@@ -42,6 +57,9 @@ export type RaceStatusRace = {
   timeOfDay?: string;
   lapsComplete?: number;
   lapsToGo?: number;
+  trackName?: string;
+  /** Track length as configured in Orbits (`$E TRACKLENGTH`), e.g. 0.2; 0 if unknown. */
+  trackLength?: number;
   competitors: RaceStatusCompetitor[];
 };
 

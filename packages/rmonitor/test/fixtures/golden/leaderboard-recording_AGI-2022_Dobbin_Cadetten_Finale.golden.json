@@ -1,0 +1,1592 @@
+{
+ "recording": "leaderboard-recording_AGI-2022_Dobbin_Cadetten_Finale.txt",
+ "reference": "ghcr.io/bastianpaetzold/rmonitorleaderboard:1.3.0",
+ "encoding": "windows-1252",
+ "generatedAt": "2026-10-30T21:59:43.716Z",
+ "lineCount": 791,
+ "checkpoints": [
+  {
+   "afterLines": 13,
+   "lastLine": "$I,\"19:01:30\",\"30 Apr 22\"",
+   "current": {
+    "raceName": "",
+    "raceID": -1,
+    "flagStatus": "NONE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": []
+  },
+  {
+   "afterLines": 14,
+   "lastLine": "$I,\"19:01:30\",\"30 Apr 22\"",
+   "current": {
+    "raceName": "",
+    "raceID": -1,
+    "flagStatus": "NONE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": []
+  },
+  {
+   "afterLines": 15,
+   "lastLine": "$I,\"19:01:30\",\"30 Apr 22\"",
+   "current": {
+    "raceName": "",
+    "raceID": -1,
+    "flagStatus": "NONE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": []
+  },
+  {
+   "afterLines": 17,
+   "lastLine": "$B,36,\"Cadet Women Dobbin Sprint-Final\"",
+   "current": {
+    "raceName": "Cadet Women Dobbin Sprint-Final",
+    "raceID": 36,
+    "flagStatus": "PURPLE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": [
+    {
+     "raceName": "Cadet Women Dobbin Sprint-Final",
+     "raceID": 36,
+     "flagStatus": "PURPLE",
+     "elapsedTime": "0:00",
+     "timeOfDay": "0:00",
+     "lapsComplete": 0,
+     "lapsToGo": 0,
+     "trackName": "",
+     "trackLength": 0,
+     "competitors": []
+    }
+   ]
+  },
+  {
+   "afterLines": 20,
+   "lastLine": "$B,36,\"Cadet Women Dobbin Sprint-Final\"",
+   "current": {
+    "raceName": "Cadet Women Dobbin Sprint-Final",
+    "raceID": 36,
+    "flagStatus": "PURPLE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": []
+   },
+   "races": [
+    {
+     "raceName": "Cadet Women Dobbin Sprint-Final",
+     "raceID": 36,
+     "flagStatus": "PURPLE",
+     "elapsedTime": "0:00",
+     "timeOfDay": "0:00",
+     "lapsComplete": 0,
+     "lapsToGo": 0,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": []
+    }
+   ]
+  },
+  {
+   "afterLines": 54,
+   "lastLine": "$F,9999,\"00:00:00\",\"19:01:30\",\"00:00:00\",\"Green \"",
+   "current": {
+    "raceName": "Cadet Women Dobbin Sprint-Final",
+    "raceID": 36,
+    "flagStatus": "GREEN",
+    "elapsedTime": "0:00",
+    "timeOfDay": "19:01:30",
+    "lapsComplete": 0,
+    "lapsToGo": 9999,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "14",
+      "position": 5,
+      "lapsComplete": 0,
+      "firstName": "Veronika",
+      "lastName": "Dykastová (CZE)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 3
+     },
+     {
+      "number": "59",
+      "position": 3,
+      "lapsComplete": 0,
+      "firstName": "Andrea",
+      "lastName": "Rihova (CZE)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 5
+     },
+     {
+      "number": "7",
+      "position": 2,
+      "lapsComplete": 0,
+      "firstName": "Noéline",
+      "lastName": "Brel (FRA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 1
+     },
+     {
+      "number": "40",
+      "position": 1,
+      "lapsComplete": 0,
+      "firstName": "Luna-Marie",
+      "lastName": "Lau (DEN)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 4
+     },
+     {
+      "number": "10",
+      "position": 4,
+      "lapsComplete": 0,
+      "firstName": "Sofia Paola",
+      "lastName": "Chiumiento (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 2
+     }
+    ]
+   }
+  },
+  {
+   "afterLines": 374,
+   "lastLine": "$I,\"19:05:09\",\"30 Apr 22\"",
+   "current": {
+    "raceName": "Cadet Women Dobbin Sprint-Final",
+    "raceID": 36,
+    "flagStatus": "FINISH",
+    "elapsedTime": "3:38",
+    "timeOfDay": "19:05:09",
+    "lapsComplete": 2,
+    "lapsToGo": 9999,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "14",
+      "position": 3,
+      "lapsComplete": 2,
+      "firstName": "Veronika",
+      "lastName": "Dykastová (CZE)",
+      "totalTime": "2:34.865",
+      "bestLap": "0:16.825",
+      "lastLap": "0:16.825",
+      "qualiPosition": 5
+     },
+     {
+      "number": "59",
+      "position": 4,
+      "lapsComplete": 2,
+      "firstName": "Andrea",
+      "lastName": "Rihova (CZE)",
+      "totalTime": "3:01.834",
+      "bestLap": "0:16.389",
+      "lastLap": "0:16.389",
+      "qualiPosition": 3
+     },
+     {
+      "number": "7",
+      "position": 2,
+      "lapsComplete": 2,
+      "firstName": "Noéline",
+      "lastName": "Brel (FRA)",
+      "totalTime": "2:09.219",
+      "bestLap": "0:16.310",
+      "lastLap": "0:16.310",
+      "qualiPosition": 2
+     },
+     {
+      "number": "40",
+      "position": 1,
+      "lapsComplete": 2,
+      "firstName": "Luna-Marie",
+      "lastName": "Lau (DEN)",
+      "totalTime": "1:47.033",
+      "bestLap": "0:16.769",
+      "lastLap": "0:16.769",
+      "qualiPosition": 4
+     },
+     {
+      "number": "10",
+      "position": 5,
+      "lapsComplete": 2,
+      "firstName": "Sofia Paola",
+      "lastName": "Chiumiento (ITA)",
+      "totalTime": "3:29.612",
+      "bestLap": "0:16.118",
+      "lastLap": "0:16.118",
+      "qualiPosition": 1
+     }
+    ]
+   },
+   "races": [
+    {
+     "raceName": "Cadet Women Dobbin Sprint-Final",
+     "raceID": 36,
+     "flagStatus": "FINISH",
+     "elapsedTime": "3:38",
+     "timeOfDay": "19:05:09",
+     "lapsComplete": 2,
+     "lapsToGo": 9999,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "14",
+       "position": 3,
+       "lapsComplete": 2,
+       "firstName": "Veronika",
+       "lastName": "Dykastová (CZE)",
+       "totalTime": "2:34.865",
+       "bestLap": "0:16.825",
+       "lastLap": "0:16.825",
+       "qualiPosition": 5
+      },
+      {
+       "number": "59",
+       "position": 4,
+       "lapsComplete": 2,
+       "firstName": "Andrea",
+       "lastName": "Rihova (CZE)",
+       "totalTime": "3:01.834",
+       "bestLap": "0:16.389",
+       "lastLap": "0:16.389",
+       "qualiPosition": 3
+      },
+      {
+       "number": "7",
+       "position": 2,
+       "lapsComplete": 2,
+       "firstName": "Noéline",
+       "lastName": "Brel (FRA)",
+       "totalTime": "2:09.219",
+       "bestLap": "0:16.310",
+       "lastLap": "0:16.310",
+       "qualiPosition": 2
+      },
+      {
+       "number": "40",
+       "position": 1,
+       "lapsComplete": 2,
+       "firstName": "Luna-Marie",
+       "lastName": "Lau (DEN)",
+       "totalTime": "1:47.033",
+       "bestLap": "0:16.769",
+       "lastLap": "0:16.769",
+       "qualiPosition": 4
+      },
+      {
+       "number": "10",
+       "position": 5,
+       "lapsComplete": 2,
+       "firstName": "Sofia Paola",
+       "lastName": "Chiumiento (ITA)",
+       "totalTime": "3:29.612",
+       "bestLap": "0:16.118",
+       "lastLap": "0:16.118",
+       "qualiPosition": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "afterLines": 375,
+   "lastLine": "$F,0,\"00:00:00\",\"19:05:09\",\"00:00:00\",\"      \"",
+   "current": {
+    "raceName": "Cadet Women Dobbin Sprint-Final",
+    "raceID": 36,
+    "flagStatus": "FINISH",
+    "elapsedTime": "3:38",
+    "timeOfDay": "19:05:09",
+    "lapsComplete": 2,
+    "lapsToGo": 9999,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "14",
+      "position": 3,
+      "lapsComplete": 2,
+      "firstName": "Veronika",
+      "lastName": "Dykastová (CZE)",
+      "totalTime": "2:34.865",
+      "bestLap": "0:16.825",
+      "lastLap": "0:16.825",
+      "qualiPosition": 5
+     },
+     {
+      "number": "59",
+      "position": 4,
+      "lapsComplete": 2,
+      "firstName": "Andrea",
+      "lastName": "Rihova (CZE)",
+      "totalTime": "3:01.834",
+      "bestLap": "0:16.389",
+      "lastLap": "0:16.389",
+      "qualiPosition": 3
+     },
+     {
+      "number": "7",
+      "position": 2,
+      "lapsComplete": 2,
+      "firstName": "Noéline",
+      "lastName": "Brel (FRA)",
+      "totalTime": "2:09.219",
+      "bestLap": "0:16.310",
+      "lastLap": "0:16.310",
+      "qualiPosition": 2
+     },
+     {
+      "number": "40",
+      "position": 1,
+      "lapsComplete": 2,
+      "firstName": "Luna-Marie",
+      "lastName": "Lau (DEN)",
+      "totalTime": "1:47.033",
+      "bestLap": "0:16.769",
+      "lastLap": "0:16.769",
+      "qualiPosition": 4
+     },
+     {
+      "number": "10",
+      "position": 5,
+      "lapsComplete": 2,
+      "firstName": "Sofia Paola",
+      "lastName": "Chiumiento (ITA)",
+      "totalTime": "3:29.612",
+      "bestLap": "0:16.118",
+      "lastLap": "0:16.118",
+      "qualiPosition": 1
+     }
+    ]
+   }
+  },
+  {
+   "afterLines": 464,
+   "lastLine": "$I,\"19:06:37\",\"30 Apr 22\"",
+   "current": {
+    "raceName": "Cadet Women Dobbin Sprint-Final",
+    "raceID": 36,
+    "flagStatus": "FINISH",
+    "elapsedTime": "3:38",
+    "timeOfDay": "19:05:09",
+    "lapsComplete": 2,
+    "lapsToGo": 9999,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "14",
+      "position": 3,
+      "lapsComplete": 2,
+      "firstName": "Veronika",
+      "lastName": "Dykastová (CZE)",
+      "totalTime": "2:34.865",
+      "bestLap": "0:16.825",
+      "lastLap": "0:16.825",
+      "qualiPosition": 5
+     },
+     {
+      "number": "59",
+      "position": 4,
+      "lapsComplete": 2,
+      "firstName": "Andrea",
+      "lastName": "Rihova (CZE)",
+      "totalTime": "3:01.834",
+      "bestLap": "0:16.389",
+      "lastLap": "0:16.389",
+      "qualiPosition": 3
+     },
+     {
+      "number": "7",
+      "position": 2,
+      "lapsComplete": 2,
+      "firstName": "Noéline",
+      "lastName": "Brel (FRA)",
+      "totalTime": "2:09.219",
+      "bestLap": "0:16.310",
+      "lastLap": "0:16.310",
+      "qualiPosition": 2
+     },
+     {
+      "number": "40",
+      "position": 1,
+      "lapsComplete": 2,
+      "firstName": "Luna-Marie",
+      "lastName": "Lau (DEN)",
+      "totalTime": "1:47.033",
+      "bestLap": "0:16.769",
+      "lastLap": "0:16.769",
+      "qualiPosition": 4
+     },
+     {
+      "number": "10",
+      "position": 5,
+      "lapsComplete": 2,
+      "firstName": "Sofia Paola",
+      "lastName": "Chiumiento (ITA)",
+      "totalTime": "3:29.612",
+      "bestLap": "0:16.118",
+      "lastLap": "0:16.118",
+      "qualiPosition": 1
+     }
+    ]
+   },
+   "races": [
+    {
+     "raceName": "Cadet Women Dobbin Sprint-Final",
+     "raceID": 36,
+     "flagStatus": "FINISH",
+     "elapsedTime": "3:38",
+     "timeOfDay": "19:05:09",
+     "lapsComplete": 2,
+     "lapsToGo": 9999,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "14",
+       "position": 3,
+       "lapsComplete": 2,
+       "firstName": "Veronika",
+       "lastName": "Dykastová (CZE)",
+       "totalTime": "2:34.865",
+       "bestLap": "0:16.825",
+       "lastLap": "0:16.825",
+       "qualiPosition": 5
+      },
+      {
+       "number": "59",
+       "position": 4,
+       "lapsComplete": 2,
+       "firstName": "Andrea",
+       "lastName": "Rihova (CZE)",
+       "totalTime": "3:01.834",
+       "bestLap": "0:16.389",
+       "lastLap": "0:16.389",
+       "qualiPosition": 3
+      },
+      {
+       "number": "7",
+       "position": 2,
+       "lapsComplete": 2,
+       "firstName": "Noéline",
+       "lastName": "Brel (FRA)",
+       "totalTime": "2:09.219",
+       "bestLap": "0:16.310",
+       "lastLap": "0:16.310",
+       "qualiPosition": 2
+      },
+      {
+       "number": "40",
+       "position": 1,
+       "lapsComplete": 2,
+       "firstName": "Luna-Marie",
+       "lastName": "Lau (DEN)",
+       "totalTime": "1:47.033",
+       "bestLap": "0:16.769",
+       "lastLap": "0:16.769",
+       "qualiPosition": 4
+      },
+      {
+       "number": "10",
+       "position": 5,
+       "lapsComplete": 2,
+       "firstName": "Sofia Paola",
+       "lastName": "Chiumiento (ITA)",
+       "totalTime": "3:29.612",
+       "bestLap": "0:16.118",
+       "lastLap": "0:16.118",
+       "qualiPosition": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "afterLines": 465,
+   "lastLine": "$I,\"19:06:37\",\"30 Apr 22\"",
+   "current": {
+    "raceName": "Cadet Women Dobbin Sprint-Final",
+    "raceID": 36,
+    "flagStatus": "FINISH",
+    "elapsedTime": "3:38",
+    "timeOfDay": "19:05:09",
+    "lapsComplete": 2,
+    "lapsToGo": 9999,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "14",
+      "position": 3,
+      "lapsComplete": 2,
+      "firstName": "Veronika",
+      "lastName": "Dykastová (CZE)",
+      "totalTime": "2:34.865",
+      "bestLap": "0:16.825",
+      "lastLap": "0:16.825",
+      "qualiPosition": 5
+     },
+     {
+      "number": "59",
+      "position": 4,
+      "lapsComplete": 2,
+      "firstName": "Andrea",
+      "lastName": "Rihova (CZE)",
+      "totalTime": "3:01.834",
+      "bestLap": "0:16.389",
+      "lastLap": "0:16.389",
+      "qualiPosition": 3
+     },
+     {
+      "number": "7",
+      "position": 2,
+      "lapsComplete": 2,
+      "firstName": "Noéline",
+      "lastName": "Brel (FRA)",
+      "totalTime": "2:09.219",
+      "bestLap": "0:16.310",
+      "lastLap": "0:16.310",
+      "qualiPosition": 2
+     },
+     {
+      "number": "40",
+      "position": 1,
+      "lapsComplete": 2,
+      "firstName": "Luna-Marie",
+      "lastName": "Lau (DEN)",
+      "totalTime": "1:47.033",
+      "bestLap": "0:16.769",
+      "lastLap": "0:16.769",
+      "qualiPosition": 4
+     },
+     {
+      "number": "10",
+      "position": 5,
+      "lapsComplete": 2,
+      "firstName": "Sofia Paola",
+      "lastName": "Chiumiento (ITA)",
+      "totalTime": "3:29.612",
+      "bestLap": "0:16.118",
+      "lastLap": "0:16.118",
+      "qualiPosition": 1
+     }
+    ]
+   },
+   "races": [
+    {
+     "raceName": "Cadet Women Dobbin Sprint-Final",
+     "raceID": 36,
+     "flagStatus": "FINISH",
+     "elapsedTime": "3:38",
+     "timeOfDay": "19:05:09",
+     "lapsComplete": 2,
+     "lapsToGo": 9999,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "14",
+       "position": 3,
+       "lapsComplete": 2,
+       "firstName": "Veronika",
+       "lastName": "Dykastová (CZE)",
+       "totalTime": "2:34.865",
+       "bestLap": "0:16.825",
+       "lastLap": "0:16.825",
+       "qualiPosition": 5
+      },
+      {
+       "number": "59",
+       "position": 4,
+       "lapsComplete": 2,
+       "firstName": "Andrea",
+       "lastName": "Rihova (CZE)",
+       "totalTime": "3:01.834",
+       "bestLap": "0:16.389",
+       "lastLap": "0:16.389",
+       "qualiPosition": 3
+      },
+      {
+       "number": "7",
+       "position": 2,
+       "lapsComplete": 2,
+       "firstName": "Noéline",
+       "lastName": "Brel (FRA)",
+       "totalTime": "2:09.219",
+       "bestLap": "0:16.310",
+       "lastLap": "0:16.310",
+       "qualiPosition": 2
+      },
+      {
+       "number": "40",
+       "position": 1,
+       "lapsComplete": 2,
+       "firstName": "Luna-Marie",
+       "lastName": "Lau (DEN)",
+       "totalTime": "1:47.033",
+       "bestLap": "0:16.769",
+       "lastLap": "0:16.769",
+       "qualiPosition": 4
+      },
+      {
+       "number": "10",
+       "position": 5,
+       "lapsComplete": 2,
+       "firstName": "Sofia Paola",
+       "lastName": "Chiumiento (ITA)",
+       "totalTime": "3:29.612",
+       "bestLap": "0:16.118",
+       "lastLap": "0:16.118",
+       "qualiPosition": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "afterLines": 466,
+   "lastLine": "$I,\"19:06:37\",\"30 Apr 22\"",
+   "current": {
+    "raceName": "Cadet Women Dobbin Sprint-Final",
+    "raceID": 36,
+    "flagStatus": "FINISH",
+    "elapsedTime": "3:38",
+    "timeOfDay": "19:05:09",
+    "lapsComplete": 2,
+    "lapsToGo": 9999,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "14",
+      "position": 3,
+      "lapsComplete": 2,
+      "firstName": "Veronika",
+      "lastName": "Dykastová (CZE)",
+      "totalTime": "2:34.865",
+      "bestLap": "0:16.825",
+      "lastLap": "0:16.825",
+      "qualiPosition": 5
+     },
+     {
+      "number": "59",
+      "position": 4,
+      "lapsComplete": 2,
+      "firstName": "Andrea",
+      "lastName": "Rihova (CZE)",
+      "totalTime": "3:01.834",
+      "bestLap": "0:16.389",
+      "lastLap": "0:16.389",
+      "qualiPosition": 3
+     },
+     {
+      "number": "7",
+      "position": 2,
+      "lapsComplete": 2,
+      "firstName": "Noéline",
+      "lastName": "Brel (FRA)",
+      "totalTime": "2:09.219",
+      "bestLap": "0:16.310",
+      "lastLap": "0:16.310",
+      "qualiPosition": 2
+     },
+     {
+      "number": "40",
+      "position": 1,
+      "lapsComplete": 2,
+      "firstName": "Luna-Marie",
+      "lastName": "Lau (DEN)",
+      "totalTime": "1:47.033",
+      "bestLap": "0:16.769",
+      "lastLap": "0:16.769",
+      "qualiPosition": 4
+     },
+     {
+      "number": "10",
+      "position": 5,
+      "lapsComplete": 2,
+      "firstName": "Sofia Paola",
+      "lastName": "Chiumiento (ITA)",
+      "totalTime": "3:29.612",
+      "bestLap": "0:16.118",
+      "lastLap": "0:16.118",
+      "qualiPosition": 1
+     }
+    ]
+   },
+   "races": [
+    {
+     "raceName": "Cadet Women Dobbin Sprint-Final",
+     "raceID": 36,
+     "flagStatus": "FINISH",
+     "elapsedTime": "3:38",
+     "timeOfDay": "19:05:09",
+     "lapsComplete": 2,
+     "lapsToGo": 9999,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "14",
+       "position": 3,
+       "lapsComplete": 2,
+       "firstName": "Veronika",
+       "lastName": "Dykastová (CZE)",
+       "totalTime": "2:34.865",
+       "bestLap": "0:16.825",
+       "lastLap": "0:16.825",
+       "qualiPosition": 5
+      },
+      {
+       "number": "59",
+       "position": 4,
+       "lapsComplete": 2,
+       "firstName": "Andrea",
+       "lastName": "Rihova (CZE)",
+       "totalTime": "3:01.834",
+       "bestLap": "0:16.389",
+       "lastLap": "0:16.389",
+       "qualiPosition": 3
+      },
+      {
+       "number": "7",
+       "position": 2,
+       "lapsComplete": 2,
+       "firstName": "Noéline",
+       "lastName": "Brel (FRA)",
+       "totalTime": "2:09.219",
+       "bestLap": "0:16.310",
+       "lastLap": "0:16.310",
+       "qualiPosition": 2
+      },
+      {
+       "number": "40",
+       "position": 1,
+       "lapsComplete": 2,
+       "firstName": "Luna-Marie",
+       "lastName": "Lau (DEN)",
+       "totalTime": "1:47.033",
+       "bestLap": "0:16.769",
+       "lastLap": "0:16.769",
+       "qualiPosition": 4
+      },
+      {
+       "number": "10",
+       "position": 5,
+       "lapsComplete": 2,
+       "firstName": "Sofia Paola",
+       "lastName": "Chiumiento (ITA)",
+       "totalTime": "3:29.612",
+       "bestLap": "0:16.118",
+       "lastLap": "0:16.118",
+       "qualiPosition": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "afterLines": 468,
+   "lastLine": "$B,66,\"Cadet Men Dobbin Sprint-Final\"",
+   "current": {
+    "raceName": "Cadet Men Dobbin Sprint-Final",
+    "raceID": 66,
+    "flagStatus": "PURPLE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "",
+    "trackLength": 0,
+    "competitors": []
+   },
+   "races": [
+    {
+     "raceName": "Cadet Men Dobbin Sprint-Final",
+     "raceID": 66,
+     "flagStatus": "PURPLE",
+     "elapsedTime": "0:00",
+     "timeOfDay": "0:00",
+     "lapsComplete": 0,
+     "lapsToGo": 0,
+     "trackName": "",
+     "trackLength": 0,
+     "competitors": []
+    },
+    {
+     "raceName": "Cadet Women Dobbin Sprint-Final",
+     "raceID": 36,
+     "flagStatus": "FINISH",
+     "elapsedTime": "3:38",
+     "timeOfDay": "19:05:09",
+     "lapsComplete": 2,
+     "lapsToGo": 9999,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "14",
+       "position": 3,
+       "lapsComplete": 2,
+       "firstName": "Veronika",
+       "lastName": "Dykastová (CZE)",
+       "totalTime": "2:34.865",
+       "bestLap": "0:16.825",
+       "lastLap": "0:16.825",
+       "qualiPosition": 5
+      },
+      {
+       "number": "59",
+       "position": 4,
+       "lapsComplete": 2,
+       "firstName": "Andrea",
+       "lastName": "Rihova (CZE)",
+       "totalTime": "3:01.834",
+       "bestLap": "0:16.389",
+       "lastLap": "0:16.389",
+       "qualiPosition": 3
+      },
+      {
+       "number": "7",
+       "position": 2,
+       "lapsComplete": 2,
+       "firstName": "Noéline",
+       "lastName": "Brel (FRA)",
+       "totalTime": "2:09.219",
+       "bestLap": "0:16.310",
+       "lastLap": "0:16.310",
+       "qualiPosition": 2
+      },
+      {
+       "number": "40",
+       "position": 1,
+       "lapsComplete": 2,
+       "firstName": "Luna-Marie",
+       "lastName": "Lau (DEN)",
+       "totalTime": "1:47.033",
+       "bestLap": "0:16.769",
+       "lastLap": "0:16.769",
+       "qualiPosition": 4
+      },
+      {
+       "number": "10",
+       "position": 5,
+       "lapsComplete": 2,
+       "firstName": "Sofia Paola",
+       "lastName": "Chiumiento (ITA)",
+       "totalTime": "3:29.612",
+       "bestLap": "0:16.118",
+       "lastLap": "0:16.118",
+       "qualiPosition": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "afterLines": 471,
+   "lastLine": "$B,66,\"Cadet Men Dobbin Sprint-Final\"",
+   "current": {
+    "raceName": "Cadet Men Dobbin Sprint-Final",
+    "raceID": 66,
+    "flagStatus": "PURPLE",
+    "elapsedTime": "0:00",
+    "timeOfDay": "0:00",
+    "lapsComplete": 0,
+    "lapsToGo": 0,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": []
+   },
+   "races": [
+    {
+     "raceName": "Cadet Men Dobbin Sprint-Final",
+     "raceID": 66,
+     "flagStatus": "PURPLE",
+     "elapsedTime": "0:00",
+     "timeOfDay": "0:00",
+     "lapsComplete": 0,
+     "lapsToGo": 0,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": []
+    },
+    {
+     "raceName": "Cadet Women Dobbin Sprint-Final",
+     "raceID": 36,
+     "flagStatus": "FINISH",
+     "elapsedTime": "3:38",
+     "timeOfDay": "19:05:09",
+     "lapsComplete": 2,
+     "lapsToGo": 9999,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "14",
+       "position": 3,
+       "lapsComplete": 2,
+       "firstName": "Veronika",
+       "lastName": "Dykastová (CZE)",
+       "totalTime": "2:34.865",
+       "bestLap": "0:16.825",
+       "lastLap": "0:16.825",
+       "qualiPosition": 5
+      },
+      {
+       "number": "59",
+       "position": 4,
+       "lapsComplete": 2,
+       "firstName": "Andrea",
+       "lastName": "Rihova (CZE)",
+       "totalTime": "3:01.834",
+       "bestLap": "0:16.389",
+       "lastLap": "0:16.389",
+       "qualiPosition": 3
+      },
+      {
+       "number": "7",
+       "position": 2,
+       "lapsComplete": 2,
+       "firstName": "Noéline",
+       "lastName": "Brel (FRA)",
+       "totalTime": "2:09.219",
+       "bestLap": "0:16.310",
+       "lastLap": "0:16.310",
+       "qualiPosition": 2
+      },
+      {
+       "number": "40",
+       "position": 1,
+       "lapsComplete": 2,
+       "firstName": "Luna-Marie",
+       "lastName": "Lau (DEN)",
+       "totalTime": "1:47.033",
+       "bestLap": "0:16.769",
+       "lastLap": "0:16.769",
+       "qualiPosition": 4
+      },
+      {
+       "number": "10",
+       "position": 5,
+       "lapsComplete": 2,
+       "firstName": "Sofia Paola",
+       "lastName": "Chiumiento (ITA)",
+       "totalTime": "3:29.612",
+       "bestLap": "0:16.118",
+       "lastLap": "0:16.118",
+       "qualiPosition": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "afterLines": 505,
+   "lastLine": "$F,9999,\"00:00:00\",\"19:06:37\",\"00:00:00\",\"Green \"",
+   "current": {
+    "raceName": "Cadet Men Dobbin Sprint-Final",
+    "raceID": 66,
+    "flagStatus": "GREEN",
+    "elapsedTime": "0:00",
+    "timeOfDay": "19:06:37",
+    "lapsComplete": 0,
+    "lapsToGo": 9999,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "111",
+      "position": 5,
+      "lapsComplete": 0,
+      "firstName": "Damien",
+      "lastName": "Silvestre-Striegel (FRA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 4
+     },
+     {
+      "number": "114",
+      "position": 2,
+      "lapsComplete": 0,
+      "firstName": "Samuel",
+      "lastName": "Stirnat (GER)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 5
+     },
+     {
+      "number": "90",
+      "position": 1,
+      "lapsComplete": 0,
+      "firstName": "Tobias",
+      "lastName": "Krupka (CZE)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 2
+     },
+     {
+      "number": "95",
+      "position": 4,
+      "lapsComplete": 0,
+      "firstName": "Filipe",
+      "lastName": "Loureiro (POR)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 3
+     },
+     {
+      "number": "86",
+      "position": 3,
+      "lapsComplete": 0,
+      "firstName": "Giorgio",
+      "lastName": "Ghisio Erba (ITA)",
+      "totalTime": "0:00",
+      "bestLap": "0:00",
+      "lastLap": "0:00",
+      "qualiPosition": 1
+     }
+    ]
+   }
+  },
+  {
+   "afterLines": 773,
+   "lastLine": "$I,\"19:09:39\",\"30 Apr 22\"",
+   "current": {
+    "raceName": "Cadet Men Dobbin Sprint-Final",
+    "raceID": 66,
+    "flagStatus": "FINISH",
+    "elapsedTime": "3:01",
+    "timeOfDay": "19:09:39",
+    "lapsComplete": 2,
+    "lapsToGo": 9999,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "111",
+      "position": 5,
+      "lapsComplete": 2,
+      "firstName": "Damien",
+      "lastName": "Silvestre-Striegel (FRA)",
+      "totalTime": "2:52.758",
+      "bestLap": "0:15.403",
+      "lastLap": "0:15.403",
+      "qualiPosition": 1
+     },
+     {
+      "number": "114",
+      "position": 2,
+      "lapsComplete": 2,
+      "firstName": "Samuel",
+      "lastName": "Stirnat (GER)",
+      "totalTime": "1:12.799",
+      "bestLap": "0:15.787",
+      "lastLap": "0:15.787",
+      "qualiPosition": 3
+     },
+     {
+      "number": "90",
+      "position": 1,
+      "lapsComplete": 2,
+      "firstName": "Tobias",
+      "lastName": "Krupka (CZE)",
+      "totalTime": "0:42.906",
+      "bestLap": "0:16.008",
+      "lastLap": "0:16.008",
+      "qualiPosition": 4
+     },
+     {
+      "number": "95",
+      "position": 4,
+      "lapsComplete": 2,
+      "firstName": "Filipe",
+      "lastName": "Loureiro (POR)",
+      "totalTime": "2:19.118",
+      "bestLap": "0:16.150",
+      "lastLap": "0:16.150",
+      "qualiPosition": 5
+     },
+     {
+      "number": "86",
+      "position": 3,
+      "lapsComplete": 2,
+      "firstName": "Giorgio",
+      "lastName": "Ghisio Erba (ITA)",
+      "totalTime": "1:43.295",
+      "bestLap": "0:15.497",
+      "lastLap": "0:15.497",
+      "qualiPosition": 2
+     }
+    ]
+   },
+   "races": [
+    {
+     "raceName": "Cadet Men Dobbin Sprint-Final",
+     "raceID": 66,
+     "flagStatus": "FINISH",
+     "elapsedTime": "3:01",
+     "timeOfDay": "19:09:39",
+     "lapsComplete": 2,
+     "lapsToGo": 9999,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "111",
+       "position": 5,
+       "lapsComplete": 2,
+       "firstName": "Damien",
+       "lastName": "Silvestre-Striegel (FRA)",
+       "totalTime": "2:52.758",
+       "bestLap": "0:15.403",
+       "lastLap": "0:15.403",
+       "qualiPosition": 1
+      },
+      {
+       "number": "114",
+       "position": 2,
+       "lapsComplete": 2,
+       "firstName": "Samuel",
+       "lastName": "Stirnat (GER)",
+       "totalTime": "1:12.799",
+       "bestLap": "0:15.787",
+       "lastLap": "0:15.787",
+       "qualiPosition": 3
+      },
+      {
+       "number": "90",
+       "position": 1,
+       "lapsComplete": 2,
+       "firstName": "Tobias",
+       "lastName": "Krupka (CZE)",
+       "totalTime": "0:42.906",
+       "bestLap": "0:16.008",
+       "lastLap": "0:16.008",
+       "qualiPosition": 4
+      },
+      {
+       "number": "95",
+       "position": 4,
+       "lapsComplete": 2,
+       "firstName": "Filipe",
+       "lastName": "Loureiro (POR)",
+       "totalTime": "2:19.118",
+       "bestLap": "0:16.150",
+       "lastLap": "0:16.150",
+       "qualiPosition": 5
+      },
+      {
+       "number": "86",
+       "position": 3,
+       "lapsComplete": 2,
+       "firstName": "Giorgio",
+       "lastName": "Ghisio Erba (ITA)",
+       "totalTime": "1:43.295",
+       "bestLap": "0:15.497",
+       "lastLap": "0:15.497",
+       "qualiPosition": 2
+      }
+     ]
+    },
+    {
+     "raceName": "Cadet Women Dobbin Sprint-Final",
+     "raceID": 36,
+     "flagStatus": "FINISH",
+     "elapsedTime": "3:38",
+     "timeOfDay": "19:05:09",
+     "lapsComplete": 2,
+     "lapsToGo": 9999,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "14",
+       "position": 3,
+       "lapsComplete": 2,
+       "firstName": "Veronika",
+       "lastName": "Dykastová (CZE)",
+       "totalTime": "2:34.865",
+       "bestLap": "0:16.825",
+       "lastLap": "0:16.825",
+       "qualiPosition": 5
+      },
+      {
+       "number": "59",
+       "position": 4,
+       "lapsComplete": 2,
+       "firstName": "Andrea",
+       "lastName": "Rihova (CZE)",
+       "totalTime": "3:01.834",
+       "bestLap": "0:16.389",
+       "lastLap": "0:16.389",
+       "qualiPosition": 3
+      },
+      {
+       "number": "7",
+       "position": 2,
+       "lapsComplete": 2,
+       "firstName": "Noéline",
+       "lastName": "Brel (FRA)",
+       "totalTime": "2:09.219",
+       "bestLap": "0:16.310",
+       "lastLap": "0:16.310",
+       "qualiPosition": 2
+      },
+      {
+       "number": "40",
+       "position": 1,
+       "lapsComplete": 2,
+       "firstName": "Luna-Marie",
+       "lastName": "Lau (DEN)",
+       "totalTime": "1:47.033",
+       "bestLap": "0:16.769",
+       "lastLap": "0:16.769",
+       "qualiPosition": 4
+      },
+      {
+       "number": "10",
+       "position": 5,
+       "lapsComplete": 2,
+       "firstName": "Sofia Paola",
+       "lastName": "Chiumiento (ITA)",
+       "totalTime": "3:29.612",
+       "bestLap": "0:16.118",
+       "lastLap": "0:16.118",
+       "qualiPosition": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "afterLines": 774,
+   "lastLine": "$F,0,\"00:00:00\",\"19:09:39\",\"00:00:00\",\"      \"",
+   "current": {
+    "raceName": "Cadet Men Dobbin Sprint-Final",
+    "raceID": 66,
+    "flagStatus": "FINISH",
+    "elapsedTime": "3:01",
+    "timeOfDay": "19:09:39",
+    "lapsComplete": 2,
+    "lapsToGo": 9999,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "111",
+      "position": 5,
+      "lapsComplete": 2,
+      "firstName": "Damien",
+      "lastName": "Silvestre-Striegel (FRA)",
+      "totalTime": "2:52.758",
+      "bestLap": "0:15.403",
+      "lastLap": "0:15.403",
+      "qualiPosition": 1
+     },
+     {
+      "number": "114",
+      "position": 2,
+      "lapsComplete": 2,
+      "firstName": "Samuel",
+      "lastName": "Stirnat (GER)",
+      "totalTime": "1:12.799",
+      "bestLap": "0:15.787",
+      "lastLap": "0:15.787",
+      "qualiPosition": 3
+     },
+     {
+      "number": "90",
+      "position": 1,
+      "lapsComplete": 2,
+      "firstName": "Tobias",
+      "lastName": "Krupka (CZE)",
+      "totalTime": "0:42.906",
+      "bestLap": "0:16.008",
+      "lastLap": "0:16.008",
+      "qualiPosition": 4
+     },
+     {
+      "number": "95",
+      "position": 4,
+      "lapsComplete": 2,
+      "firstName": "Filipe",
+      "lastName": "Loureiro (POR)",
+      "totalTime": "2:19.118",
+      "bestLap": "0:16.150",
+      "lastLap": "0:16.150",
+      "qualiPosition": 5
+     },
+     {
+      "number": "86",
+      "position": 3,
+      "lapsComplete": 2,
+      "firstName": "Giorgio",
+      "lastName": "Ghisio Erba (ITA)",
+      "totalTime": "1:43.295",
+      "bestLap": "0:15.497",
+      "lastLap": "0:15.497",
+      "qualiPosition": 2
+     }
+    ]
+   }
+  },
+  {
+   "afterLines": 791,
+   "lastLine": "$F,0,\"00:00:00\",\"19:09:56\",\"00:00:00\",\"      \"",
+   "current": {
+    "raceName": "Cadet Men Dobbin Sprint-Final",
+    "raceID": 66,
+    "flagStatus": "FINISH",
+    "elapsedTime": "3:01",
+    "timeOfDay": "19:09:39",
+    "lapsComplete": 2,
+    "lapsToGo": 9999,
+    "trackName": "Arena Geisingen",
+    "trackLength": 0.2,
+    "competitors": [
+     {
+      "number": "111",
+      "position": 5,
+      "lapsComplete": 2,
+      "firstName": "Damien",
+      "lastName": "Silvestre-Striegel (FRA)",
+      "totalTime": "2:52.758",
+      "bestLap": "0:15.403",
+      "lastLap": "0:15.403",
+      "qualiPosition": 1
+     },
+     {
+      "number": "114",
+      "position": 2,
+      "lapsComplete": 2,
+      "firstName": "Samuel",
+      "lastName": "Stirnat (GER)",
+      "totalTime": "1:12.799",
+      "bestLap": "0:15.787",
+      "lastLap": "0:15.787",
+      "qualiPosition": 3
+     },
+     {
+      "number": "90",
+      "position": 1,
+      "lapsComplete": 2,
+      "firstName": "Tobias",
+      "lastName": "Krupka (CZE)",
+      "totalTime": "0:42.906",
+      "bestLap": "0:16.008",
+      "lastLap": "0:16.008",
+      "qualiPosition": 4
+     },
+     {
+      "number": "95",
+      "position": 4,
+      "lapsComplete": 2,
+      "firstName": "Filipe",
+      "lastName": "Loureiro (POR)",
+      "totalTime": "2:19.118",
+      "bestLap": "0:16.150",
+      "lastLap": "0:16.150",
+      "qualiPosition": 5
+     },
+     {
+      "number": "86",
+      "position": 3,
+      "lapsComplete": 2,
+      "firstName": "Giorgio",
+      "lastName": "Ghisio Erba (ITA)",
+      "totalTime": "1:43.295",
+      "bestLap": "0:15.497",
+      "lastLap": "0:15.497",
+      "qualiPosition": 2
+     }
+    ]
+   },
+   "races": [
+    {
+     "raceName": "Cadet Men Dobbin Sprint-Final",
+     "raceID": 66,
+     "flagStatus": "FINISH",
+     "elapsedTime": "3:01",
+     "timeOfDay": "19:09:39",
+     "lapsComplete": 2,
+     "lapsToGo": 9999,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "111",
+       "position": 5,
+       "lapsComplete": 2,
+       "firstName": "Damien",
+       "lastName": "Silvestre-Striegel (FRA)",
+       "totalTime": "2:52.758",
+       "bestLap": "0:15.403",
+       "lastLap": "0:15.403",
+       "qualiPosition": 1
+      },
+      {
+       "number": "114",
+       "position": 2,
+       "lapsComplete": 2,
+       "firstName": "Samuel",
+       "lastName": "Stirnat (GER)",
+       "totalTime": "1:12.799",
+       "bestLap": "0:15.787",
+       "lastLap": "0:15.787",
+       "qualiPosition": 3
+      },
+      {
+       "number": "90",
+       "position": 1,
+       "lapsComplete": 2,
+       "firstName": "Tobias",
+       "lastName": "Krupka (CZE)",
+       "totalTime": "0:42.906",
+       "bestLap": "0:16.008",
+       "lastLap": "0:16.008",
+       "qualiPosition": 4
+      },
+      {
+       "number": "95",
+       "position": 4,
+       "lapsComplete": 2,
+       "firstName": "Filipe",
+       "lastName": "Loureiro (POR)",
+       "totalTime": "2:19.118",
+       "bestLap": "0:16.150",
+       "lastLap": "0:16.150",
+       "qualiPosition": 5
+      },
+      {
+       "number": "86",
+       "position": 3,
+       "lapsComplete": 2,
+       "firstName": "Giorgio",
+       "lastName": "Ghisio Erba (ITA)",
+       "totalTime": "1:43.295",
+       "bestLap": "0:15.497",
+       "lastLap": "0:15.497",
+       "qualiPosition": 2
+      }
+     ]
+    },
+    {
+     "raceName": "Cadet Women Dobbin Sprint-Final",
+     "raceID": 36,
+     "flagStatus": "FINISH",
+     "elapsedTime": "3:38",
+     "timeOfDay": "19:05:09",
+     "lapsComplete": 2,
+     "lapsToGo": 9999,
+     "trackName": "Arena Geisingen",
+     "trackLength": 0.2,
+     "competitors": [
+      {
+       "number": "14",
+       "position": 3,
+       "lapsComplete": 2,
+       "firstName": "Veronika",
+       "lastName": "Dykastová (CZE)",
+       "totalTime": "2:34.865",
+       "bestLap": "0:16.825",
+       "lastLap": "0:16.825",
+       "qualiPosition": 5
+      },
+      {
+       "number": "59",
+       "position": 4,
+       "lapsComplete": 2,
+       "firstName": "Andrea",
+       "lastName": "Rihova (CZE)",
+       "totalTime": "3:01.834",
+       "bestLap": "0:16.389",
+       "lastLap": "0:16.389",
+       "qualiPosition": 3
+      },
+      {
+       "number": "7",
+       "position": 2,
+       "lapsComplete": 2,
+       "firstName": "Noéline",
+       "lastName": "Brel (FRA)",
+       "totalTime": "2:09.219",
+       "bestLap": "0:16.310",
+       "lastLap": "0:16.310",
+       "qualiPosition": 2
+      },
+      {
+       "number": "40",
+       "position": 1,
+       "lapsComplete": 2,
+       "firstName": "Luna-Marie",
+       "lastName": "Lau (DEN)",
+       "totalTime": "1:47.033",
+       "bestLap": "0:16.769",
+       "lastLap": "0:16.769",
+       "qualiPosition": 4
+      },
+      {
+       "number": "10",
+       "position": 5,
+       "lapsComplete": 2,
+       "firstName": "Sofia Paola",
+       "lastName": "Chiumiento (ITA)",
+       "totalTime": "3:29.612",
+       "bestLap": "0:16.118",
+       "lastLap": "0:16.118",
+       "qualiPosition": 1
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

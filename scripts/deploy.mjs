@@ -7,6 +7,7 @@
 // 2) Create clean ./deploy folder
 // 3) Copy runtime server artifacts
 // 4) Install production-only node_modules into deploy/server
+//    (+ livetracking worker; leaderboard service as one-file bundle without node_modules)
 // 5) Optionally copy portable Node + WinSW from ./tools
 // 6) Emit default WinSW XML + next-step instructions if needed
 
@@ -66,12 +67,16 @@ async function main() {
   const localPackages = ["domain", "p3parser"];
   const serverOutDir = path.join(deployDir, "server");
   const workerOutDir = path.join(deployDir, "apps", "livetracking-worker");
+  const leaderboardBundleDir = path.join(repoRoot, "apps", "leaderboard-service", "bundle");
+  const leaderboardOutDir = path.join(deployDir, "apps", "leaderboard-service");
 
 
   console.log("\n== RaceOffice deploy ==\n");
 
   // 1) Build everything
   run("npm run build:all");
+  // Leaderboard service as a single-file bundle (build:all already built service + frontend).
+  run("npm --workspace @raceoffice/leaderboard-service run bundle");
 
   // 2) Recreate deploy folder
   await fs.rm(deployDir, { recursive: true, force: true });
@@ -128,6 +133,13 @@ async function main() {
       path.join(workerOutDir, "node_modules", "@raceoffice", name)
     );
   }
+
+  // 4c) Copy the leaderboard service.
+  // The server's LeaderboardServiceManager resolves it relative to the deploy root, like the worker:
+  // deploy/apps/leaderboard-service/dist/index.js (+ public/ = leaderboard UI under /leaderboard/ui/).
+  // The bundle contains all dependencies, so there is nothing to install. It is GPL-3.0-or-later
+  // (port of RMonitorLeaderboard); its LICENSE travels with it.
+  await copyDir(leaderboardBundleDir, leaderboardOutDir);
 
 
   // 5) Create standard runtime folders used by service/default config.
@@ -253,6 +265,8 @@ async function main() {
       `  server node_modules\\@raceoffice\\domain present: ${fsSync.existsSync(path.join(serverOutDir, "node_modules", "@raceoffice", "domain"))}`,
       `  worker node_modules\\@raceoffice\\domain present: ${fsSync.existsSync(path.join(workerOutDir, "node_modules", "@raceoffice", "domain"))}`,
       `  worker node_modules\\@raceoffice\\p3parser present: ${fsSync.existsSync(path.join(workerOutDir, "node_modules", "@raceoffice", "p3parser"))}`,
+      `  leaderboard service present: ${fsSync.existsSync(path.join(leaderboardOutDir, "dist", "index.js"))}`,
+      `  leaderboard UI present: ${fsSync.existsSync(path.join(leaderboardOutDir, "public", "index.html"))}`,
 
 
       "",
@@ -262,6 +276,9 @@ async function main() {
       "",
       "Open application:",
       "  http://localhost:8787/",
+      "  Leaderboard: http://localhost:8787/leaderboard/ui/",
+      "  (the server starts the leaderboard service itself; config and recordings are stored",
+      "  in a folder \"leaderboard\" next to the database, e.g. C:\\ProgramData\\RaceOffice\\data\\leaderboard)",
       "",
       "Update existing installation (new version rollout):",
       "  1) RaceOfficeServer.exe stop",

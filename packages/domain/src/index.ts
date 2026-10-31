@@ -89,6 +89,26 @@ export type {
 } from "./raceStatusFeed.js";
 export { pickCurrentRace } from "./raceStatusFeed.js";
 
+// Display helpers for the live feed (scoring + leaderboard frontend).
+export {
+  computeStandings,
+  formatDeltaSeconds,
+  formatLeaderTime,
+  nationOf,
+  parseTimeToSeconds,
+  stripIocSuffix,
+  type StandingRow,
+} from "./liveTime.js";
+
+// Leaderboard service protocol (WebSocket race stream, service status).
+export type {
+  LeaderboardPassing,
+  LeaderboardServiceStatus,
+  LeaderboardSource,
+  LeaderboardWsClientMessage,
+  LeaderboardWsMessage,
+} from "./leaderboardProtocol.js";
+
 // LiveTracking domain model (phase 0 baseline).
 export * from "./livetracking/index.js";
 

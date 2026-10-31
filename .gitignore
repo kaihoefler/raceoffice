@@ -15,6 +15,7 @@ tools/
 deploy/
 apps/server/dist
 apps/server/public
+apps/leaderboard-service/public
 raceoffice.db
 
 # Editor directories and files
@@ -45,5 +46,6 @@ packages/rmonitor/test/fixtures/golden-local/
 # Leaderboard service runtime data: uploaded/recorded RMonitor files and runtime config.
 apps/server/data/leaderboard/
 apps/leaderboard-service/data/
-# Leaderboard frontend build output (served by the leaderboard service).
-apps/leaderboard-service/public/
+
+# Leaderboard service release folder (npm run bundle:leaderboard-service).
+apps/leaderboard-service/bundle/

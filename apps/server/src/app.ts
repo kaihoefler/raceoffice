@@ -3,6 +3,7 @@ import websocket from "@fastify/websocket";
 import { FastifySSEPlugin } from "fastify-sse-v2";
 import cors from "@fastify/cors";
 import os from "node:os";
+import path from "node:path";
 
 import {
   isTimingStatusDocument,
@@ -29,6 +30,13 @@ import {
   registerP3TestClientRoutes,
 } from "./services/p3TestClientRoutes.js";
 import { P3TestClientService } from "./services/p3TestClientService.js";
+import { LeaderboardServiceManager } from "./services/leaderboardServiceManager.js";
+import {
+  LEADERBOARD_SERVICE_ENDPOINTS,
+  LeaderboardIntegration,
+  registerLeaderboardRoutes,
+  type LeaderboardMode,
+} from "./services/leaderboardRoutes.js";
 import {
   P3_DISCOVERY_SERVICE_ENDPOINTS,
   registerP3DiscoveryRoutes,
@@ -56,6 +64,7 @@ export const PUBLIC_SERVICE_ENDPOINTS = [
   },
 
   ...LIVE_TRACKING_WORKER_SERVICE_ENDPOINTS,
+  ...LEADERBOARD_SERVICE_ENDPOINTS,
   ...P3_TEST_CLIENT_SERVICE_ENDPOINTS,
   ...P3_DISCOVERY_SERVICE_ENDPOINTS,
 ] as const;
@@ -70,6 +79,19 @@ export type BuildAppOptions = {
   /** URL the LiveTracking worker uses to reach this server. */
   liveTrackingServerUrl: string;
   logger?: FastifyServerOptions["logger"];
+  /** Leaderboard integration (doc/leaderboard-integration/05-worker-und-steuerung.md). */
+  leaderboard?: {
+    mode: LeaderboardMode;
+    externalUrl: string | null;
+    /** Port of the managed service on 127.0.0.1. */
+    internalPort: number;
+    /** Data dir of the managed service (config, recordings). */
+    dataDir: string;
+    /** Start the managed service together with the server. */
+    autoStart: boolean;
+    /** Built leaderboard frontend (default: apps/leaderboard-service/public in the repo). */
+    uiDir?: string | undefined;
+  };
 };
 
 /**
@@ -167,6 +189,37 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     warn: (obj, msg) => app.log.warn(obj as any, msg),
   });
 
+  // --- Leaderboard service (managed process + proxy /leaderboard/*)
+  const leaderboardOptions = options.leaderboard ?? {
+    mode: "managed" as const,
+    externalUrl: null,
+    internalPort: 8790,
+    dataDir: path.join(path.dirname(options.dbPath), "leaderboard"),
+    autoStart: false,
+    uiDir: undefined,
+  };
+  const leaderboardManager = new LeaderboardServiceManager({
+    repoRoot: options.repoRoot,
+    dataDir: leaderboardOptions.dataDir,
+    port: leaderboardOptions.internalPort,
+    logger: {
+      info: (obj, msg) => app.log.info(obj as any, msg),
+      warn: (obj, msg) => app.log.warn(obj as any, msg),
+    },
+  });
+  const leaderboard = new LeaderboardIntegration({
+    mode: leaderboardOptions.mode,
+    externalUrl: leaderboardOptions.externalUrl,
+    manager: leaderboardManager,
+    uiDir: leaderboardOptions.uiDir ?? path.join(options.repoRoot, "apps", "leaderboard-service", "public"),
+  });
+  await registerLeaderboardRoutes(app, leaderboard);
+  if (leaderboardOptions.mode === "managed" && leaderboardOptions.autoStart) {
+    app.addHook("onReady", async () => {
+      void leaderboardManager.start();
+    });
+  }
+
   // --- Health
   app.get("/health", async () => ({ ok: true }));
 
@@ -215,6 +268,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   app.addHook("onClose", async () => {
     // Stopping the worker still writes the runtime doc, so close the db last.
     liveTrackingWorkerManager.stop();
+    await leaderboardManager.stop();
     p3TestClientService.disconnect("server shutting down");
     docStore.close();
   });

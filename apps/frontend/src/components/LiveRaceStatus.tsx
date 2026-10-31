@@ -4,7 +4,7 @@
 // - Verbindungsstatus (connected / paused / no response)
 // - Flag-Status (GREEN / PURPLE / FINISH / ...)
 // - Tabelle der Fahrer:innen (Platz, Bib, Name, Zeit/Delta)
-// - Settings-Dialog: URL + Polling-Intervall + Pause
+// - Settings-Dialog (LiveSourceDialog): Quelle, Leaderboard-Service, Polling-Intervall, Pause
 // - Optional: “Activate Sync” (z.B. für PointsScoring Sync)
 // - Optional: Button “create starters” für unbekannte Bibs aus Live-Daten
 //
@@ -20,17 +20,12 @@ import {
   Button,
   Chip,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogTitle,
-  FormControlLabel,
-  Switch,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
-  TextField,
   ToggleButton,
   Tooltip,
   Typography,
@@ -43,6 +38,7 @@ import PauseIcon from "@mui/icons-material/Pause";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 
 import { useRaceStatus } from "../providers/RaceStatusProvider";
+import LiveSourceDialog from "./LiveSourceDialog";
 
 import type { AgeGroup, Athlete, Race, RaceResult, RaceStatusCompetitor } from "@raceoffice/domain";
 
@@ -165,14 +161,15 @@ export default function LiveRaceStatus({
     errorCount,
     currentRace,
     updatedAt,
-    url,
-    pollIntervalMs,
+    endpoint,
+    leaderboard,
     effectivePollIntervalMs,
     paused,
-    setUrl,
-    setPollIntervalMs,
     setPaused,
   } = useRaceStatus();
+
+  // Replay of the leaderboard service: must never be scored by accident.
+  const isReplay = leaderboard?.service?.source === "player" && endpoint.startsWith("/leaderboard");
 
 
   // -----------------------
@@ -180,18 +177,6 @@ export default function LiveRaceStatus({
   // -----------------------
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Draft States: solange Dialog offen ist, ändern wir erst “Entwurf” und übernehmen via Apply.
-  const [draftUrl, setDraftUrl] = useState(url);
-  const [draftPollMs, setDraftPollMs] = useState<number>(pollIntervalMs);
-  const [draftPaused, setDraftPaused] = useState<boolean>(paused);
-
-  // Wenn Dialog geöffnet wird, Drafts auf aktuelle Werte syncen.
-  useEffect(() => {
-    if (!settingsOpen) return;
-    setDraftUrl(url);
-    setDraftPollMs(pollIntervalMs);
-    setDraftPaused(paused);
-  }, [settingsOpen, url, pollIntervalMs, paused]);
 
   // -----------------------
   // Connection State (derived)
@@ -459,7 +444,7 @@ export default function LiveRaceStatus({
 
             {/* Connection label ist klickbar -> öffnet Settings */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
-              <Tooltip title={url} placement="top" arrow>
+              <Tooltip title={endpoint} placement="top" arrow>
                 <Typography
                   variant="caption"
                   noWrap
@@ -507,6 +492,7 @@ export default function LiveRaceStatus({
                 {elapsedTimeText}
               </Typography>
             ) : null}
+            {isReplay ? <Chip size="small" color="warning" label="REPLAY" sx={{ fontWeight: 700 }} /> : null}
             <Chip size="small" label={flagTrim || "—"} variant={flagChipVariant} sx={flagChipSx} />
           </Box>
 
@@ -515,52 +501,13 @@ export default function LiveRaceStatus({
         {/* Warnung, wenn nicht connected und nicht paused */}
         {!isConnected && !isPaused ? (
           <Alert severity="warning" sx={{ mb: 1 }}>
-            Live status service not responding ({url}){error ? `: ${error}` : ""}
+            Live status service not responding ({endpoint}){error ? `: ${error}` : ""}
             {errorCount > 0 ? ` • fails in a row: ${errorCount}` : ""}
             {errorCount >= 10 ? ` • slowed polling: ${effectivePollIntervalMs}ms` : ""}
           </Alert>
         ) : null}
 
-        {/* Settings Dialog (auch im Idle-State verfügbar) */}
-        <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>Race status connection</DialogTitle>
-          <DialogContent sx={{ pt: 2 }}>
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
-              <TextField label="URL" value={draftUrl} onChange={(e) => setDraftUrl(e.target.value)} fullWidth size="small" />
-
-              <TextField
-                label="Refresh rate (ms)"
-                type="number"
-                value={draftPollMs}
-                onChange={(e) => setDraftPollMs(Number(e.target.value))}
-                fullWidth
-                size="small"
-                slotProps={{ htmlInput: { min: 250, max: 60000, step: 250 } }}
-                helperText="Min 250ms, max 60000ms"
-              />
-
-              <FormControlLabel
-                control={<Switch checked={draftPaused} onChange={(e) => setDraftPaused(e.target.checked)} />}
-                label="Paused"
-              />
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setSettingsOpen(false)}>Cancel</Button>
-            <Button
-              variant="contained"
-              onClick={() => {
-                // Apply übernimmt Drafts in den Provider
-                setUrl(draftUrl);
-                setPollIntervalMs(draftPollMs);
-                setPaused(draftPaused);
-                setSettingsOpen(false);
-              }}
-            >
-              Apply
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <LiveSourceDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
         {createRaceDialog}
 
@@ -586,7 +533,7 @@ export default function LiveRaceStatus({
 
           {/* Connection label (zeigt connected/paused/no response) und öffnet Settings beim Klick */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
-            <Tooltip title={url} placement="top" arrow>
+            <Tooltip title={endpoint} placement="top" arrow>
               <Typography
                 variant="caption"
                 noWrap
@@ -637,6 +584,7 @@ export default function LiveRaceStatus({
               {elapsedTimeText}
             </Typography>
           ) : null}
+          {isReplay ? <Chip size="small" color="warning" label="REPLAY" sx={{ fontWeight: 700 }} /> : null}
           <Chip size="small" label={flagTrim || "—"} variant={flagChipVariant} sx={flagChipSx} />
         </Box>
 
@@ -645,61 +593,14 @@ export default function LiveRaceStatus({
       {/* Warnung, wenn der Service “nicht reagiert” (aber wir nicht pausiert haben) */}
       {!isConnected && !isPaused ? (
         <Alert severity="warning" sx={{ mb: 1 }}>
-          Live status service not responding ({url}){error ? `: ${error}` : ""}
+          Live status service not responding ({endpoint}){error ? `: ${error}` : ""}
           {errorCount > 0 ? ` • fails in a row: ${errorCount}` : ""}
           {/* Bei vielen Fehlern kann der Provider das Polling drosseln -> Info anzeigen */}
           {errorCount >= 10 ? ` • slowed polling: ${effectivePollIntervalMs}ms` : ""}
         </Alert>
       ) : null}
 
-      {/* Settings Dialog: gleiche Konfiguration wie im Idle-State.
-          Hier bewusst “immer im Tree”, damit der Dialog beim Öffnen keinen UI-Sprung erzeugt. */}
-      <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Race status connection</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
-            <TextField
-              label="URL"
-              value={draftUrl}
-              onChange={(e) => setDraftUrl(e.target.value)}
-              fullWidth
-              size="small"
-            />
-
-            <TextField
-              label="Refresh rate (ms)"
-              type="number"
-              value={draftPollMs}
-              onChange={(e) => setDraftPollMs(Number(e.target.value))}
-              fullWidth
-              size="small"
-              slotProps={{ htmlInput: { min: 250, max: 60000, step: 250 } }}
-              helperText="Min 250ms, max 60000ms"
-            />
-
-            <FormControlLabel
-              control={<Switch checked={draftPaused} onChange={(e) => setDraftPaused(e.target.checked)} />}
-              label="Paused"
-            />
-          </Box>
-        </DialogContent>
-
-        <DialogActions>
-          <Button onClick={() => setSettingsOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={() => {
-              // Draft-Werte in den Provider übernehmen
-              setUrl(draftUrl);
-              setPollIntervalMs(draftPollMs);
-              setPaused(draftPaused);
-              setSettingsOpen(false);
-            }}
-          >
-            Apply
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <LiveSourceDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Subheader Zeile: Race-Name links, Lap-Infos rechts */}
       <Box

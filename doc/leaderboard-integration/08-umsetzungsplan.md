@@ -1,0 +1,134 @@
+# 08 – Umsetzungsplan
+
+## Implementierungsstatus
+
+| Komponente | Status |
+|---|---|
+| Konzept (`doc/leaderboard-integration/`) | **fertig** |
+| `packages/rmonitor` | **fertig**: Parser, Store, `toRaceTO`, Recording-Format, `LineDecoder`, `FakeOrbitsFeeder`, `$COR`-Korrekturen. Golden-Tests ohne Abweichung: 10 Aufnahmen im Repo (davon 4 anonymisierte Ausschnitte) und lokal 15 komplette Wettkampftage (8 719 Haltepunkte). |
+| Domain: optionale `RaceTO`-Felder, `leaderboardProtocol.ts` | **fertig** (nur Typen) |
+| `apps/leaderboard-service` (headless, Docker) | **fertig**: REST kompatibel, WS mit Snapshot/Patch und Heartbeat-Ticks, Control-API, Recorder, Player (Lücken überspringen, Leerlauf zwischen Rennen verkürzen), Config, Token. Integrationstests inkl. Golden-Vergleich über TCP. Upload per `PUT` statt Multipart. Bundle und Docker in P6. |
+| RaceOffice-Integration (Manager, Proxy, WS im Scoring) | **fertig**: `LeaderboardServiceManager` (Token, Restart-Policy), eigener Proxy HTTP+WS unter `/leaderboard/*`, Modi managed/external/off zur Laufzeit umschaltbar (`POST /leaderboard-service/mode`), Scoring-Quelle „Automatisch / Leaderboard-Service / Java (Notfall) / eigene URL“ mit WS und Polling-Fallback, REPLAY-Hinweis. Proxy ohne neue Abhängigkeit statt `@fastify/http-proxy`. Refactor `ManagedProcess` nicht gemacht (optional). |
+| `apps/leaderboard-frontend`: Leaderboard + Control Center | **fertig**: Rangliste (Flaggen-Banner, Kacheln, Spaltenauswahl mit Presets, Abstand/Intervall, Positionswechsel, Bestrunden, Zielfoto-Markierung, PURPLE-Regel, Stale-Anzeige, Kiosk/Vollbild/Skalierung/Dunkelmodus/Zeilenhöhe, mobil reduzierte Spalten) und Control Center (Orbits mit Verlauf, Service mit kopierbaren Endpunkten, Recorder, Player mit Upload/Tempo/Seek, Token-Dialog). Darstellungshelfer nach `packages/domain/src/liveTime.ts` verschoben. Nicht umgesetzt: Spalten PIC/Class/Avg (nicht im `RaceTO`). |
+| Start Signal, Lap Counter, Finish Line Log | **fertig**: Start Signal (Flaggenfarbe, Startaufstellung bei PURPLE, „START“ in den ersten 5 s, ruhige FINISH-Anzeige auf Schwarz mit schmalem Zielflaggen-Band), Lap Counter (Noch/Gefahren, Verzögerung per Einstellung oder `?delay=`, LAST LAP mit Glocke, FINISH wie beim Start Signal), Finish Line Log (Ringpuffer 500 Durchfahrten je Rennen im Service, `GET /api/race/:id/passings`, WS `/ws/race/current/passings`; Reihenfolge nach Überfahrzeit, Position und Runde aus dem folgenden `$G` inkl. Umsortierung durch Orbits, `$COR` markiert die Durchfahrt; Zeilenhöhe frei, Kompaktansicht, Namen nutzen die freie Breite). Tageszeit immer aus dem letzten Heartbeat. |
+| Deployment und Release (P6) | **fertig**: Single-File-Bundle (`npm run bundle:leaderboard-service`), Windows-Release-ZIP enthält den Service (`deploy/apps/leaderboard-service`), Docker-Image `ghcr.io/kaihoefler/raceoffice-leaderboard` (amd64/arm64) im Release-Workflow, Bundle-Smoke-Test in CI, Doku in [07](07-docker-und-deployment.md) und `doc/build-and-deploy.md`. Lizenz: die drei Leaderboard-Pakete GPL-3.0-or-later. Link aufs Leaderboard in der App-Leiste von RaceOffice. |
+| Ablösung der Java-App | offen: Probelauf bei einer Veranstaltung (Parallelbetrieb), danach Abschaltung. Das Vergleichsskript ist bewusst nicht gebaut. |
+
+---
+
+## Phasen
+
+### P1 – `packages/rmonitor` (Fundament)
+- Tokenizer, Duration-Parse/Format, alle Parser (`$A`/`$COMP`, `$B`, `$C`, `$E`, `$F`, `$G`, `$H`, `$I`, `$J`, `$SP`/`$SR`)
+- `RaceStateStore`, `toRaceTO()`, Recording-Format
+- Port der JUnit-Tests nach vitest
+- Fixtures: Recordings aus dem Java-Repo und weitere lokale Aufnahmen nach `packages/rmonitor/test/fixtures/recordings/`
+- Fake-Orbits-Feeder (Node-TCP-Server): spielt ein Recording zeilengenau ab, hält an Zeilennummern an und lässt sich programmatisch weiterschalten. Er wird in P2 für die Service-Integrationstests wiederverwendet.
+- Golden-Test-Harness: Skript startet die Java-App headless als Client und Server gegen den Feeder (nicht gegen den Java-Player), zieht `/races` an den Haltepunkten und speichert die Fixtures; dazu die Vergleichstests (Details in [03-rmonitor-port.md](03-rmonitor-port.md#6-teststrategie))
+- Erweiterung `packages/domain/src/raceStatusFeed.ts` (optionale Felder) und neues `leaderboardProtocol.ts`
+
+**Fertig, wenn:** Alle Golden-Tests sind grün, oder jede Abweichung ist dokumentiert und begründet.
+
+### P2 – `apps/leaderboard-service` headless → **Meilenstein: ersetzt die Java-App**
+- `RMonitorTcpSource` (Reconnect, Encoding, Chunking), `LineBus`, `Recorder`, `RecordingPlayerSource`
+  - Recorder schreibt die empfangenen Bytes unverändert.
+  - Player mit getrenntem Datei- und Stream-Encoding sowie UTF-8-Erkennung, weil Java-Recordings je nach Recorder-Einstellung windows-1252 oder UTF-8 sind.
+- Store mit `corrections: "apply"` (`$COR`). Korrigierte Zeiten erscheinen im JSON als `timeCorrection` und werden im Leaderboard (P4) als „Zielfoto“ markiert.
+- REST-Kompatibilitätsschicht, `SnapshotPublisher` + WS `/ws/race/*`, `/ws/status`
+- Control-API inkl. Recordings-Upload/-Download, ConfigStore, CLI/ENV, optionaler Token
+- Optional: TCP-Replay-Server
+- Dockerfile, compose-Beispiel, Bundle (tsup/esbuild)
+- Integrationstests:
+  - Fake-Orbits-Feeder aus P1 (Recording) → Service → REST/WS-Assertions
+  - Reconnect-Szenarien
+  - Früher Smoke-Test, solange `RecordingPlayerSource` noch fehlt: Der **Java-Player** (`--headless -p --player-file … --player-stream-encoding windows-1252`) dient als TCP-Quelle für `RMonitorTcpSource`
+
+**Fertig, wenn:** Das bestehende Scoring läuft unverändert gegen den Container (`/races?filter=current`).
+
+### P3 – Integration in RaceOffice
+- `ManagedProcess` (optionaler Refactor von `LiveTrackingWorkerManager`) und `LeaderboardServiceManager`
+- Routen `/leaderboard-service/*`, Proxy `/leaderboard/*` (HTTP + WS), Server-Konfiguration `LEADERBOARD_MODE`/`URL`
+- `RaceStatusProvider`: WS-Transport mit Polling-Fallback, neue Default-URL. Entscheidung zur Stale-Erkennung im WS-Modus.
+- `leaderboardServiceClient.ts`, Dialog „Live-Quelle“ in `LiveRaceStatus`, REPLAY-Hinweis
+
+**Fertig, wenn:** Das Scoring startet den Service, verbindet Orbits und wertet per WS. Ohne Service bleibt das Verhalten wie heute.
+
+### P4 – Leaderboard-Frontend: Leaderboard + Control Center
+- App-Gerüst, `useLeaderboardStream`, `useServiceStatus`, App-Leiste
+- Leaderboard mit Spaltenauswahl, Presets, Gap/Interval, Animationen, Kiosk/Fullscreen, Dark Mode
+- Control Center mit vier Karten
+- Gemeinsame Formatierungshelfer nach `packages/domain` verschieben (aus `LiveRaceStatus.tsx`, `liveTime.ts`)
+
+### P5 – Weitere Sichten
+- Start Signal, Lap Counter (mit Delay), Finish Line Log (Passings-Ringpuffer im Service + WS-Kanal)
+
+### P6 – Deployment und Ablösung
+- `scripts/deploy.mjs`, `doc/build-and-deploy.md`, CI/Release inkl. Multi-Arch-Image
+- Parallelbetrieb mit Vergleichsskript bei einer echten Veranstaltung, danach Abschaltung der Java-App
+
+```mermaid
+gantt
+  dateFormat X
+  axisFormat %s
+  section Kern
+  P1 rmonitor           :p1, 0, 3
+  P2 Service + Docker   :p2, after p1, 4
+  section Integration
+  P3 RaceOffice         :p3, after p2, 3
+  P4 Frontend Kern      :p4, after p2, 4
+  P5 Weitere Sichten    :p5, after p4, 2
+  P6 Deployment         :p6, after p3, 2
+```
+
+*(Relative Aufwände; P3 und P4 können parallel laufen.)*
+
+---
+
+## Teststrategie (Überblick)
+
+| Ebene | Werkzeug | Inhalt |
+|---|---|---|
+| Parser/Modell | vitest | Port der JUnit-Tests, Robustheit (Chunking, kaputte Zeilen, Zeilenenden, windows-1252) |
+| Kompatibilität | vitest + Fixtures | Golden-Tests gegen Java-Referenz-Snapshots, erzeugt mit Fake-Orbits-Feeder → Java-App an festen Zeilennummern |
+| Service | vitest + Fastify `inject` + Fake-Orbits-Feeder | REST, WS (Snapshot/Patch/Resync), Control-API, Player-Seek |
+| Integration RaceOffice | vitest (`packages/test-utils`) | Manager-Start/Stop, Proxy inkl. WS, Fallback auf Polling |
+| Frontend | vitest + Testing Library | Patch-Anwendung, Spaltenlogik, Lap-Counter-Delay |
+| End-to-End | manuell / Recording | Recording → Player (Java-Player oder eigener) → Scoring-Sync einer Elimination und eines Punkterennens |
+
+**Rolle des Java-Players:** Er eignet sich für manuelle und End-to-End-Tests und als frühe TCP-Quelle in P2. Für Golden-Snapshots eignet er sich nicht: Er spielt nach Wanduhrzeit ab, lässt sich headless weder anhalten noch an eine Position setzen und verrät nicht, welche Zeile er zuletzt gesendet hat. Encoding immer explizit auf `windows-1252` setzen.
+
+---
+
+## Risiken
+
+| Risiko | Gegenmaßnahme |
+|---|---|
+| Feinheiten bei Zeitformat und Flag-Mapping weichen von Java ab, das Scoring rechnet falsch | Golden-Tests; `parseTimeToSeconds` gegen alle Formate testen |
+| Zeichenkodierung (Umlaute in Namen) | Encoding konfigurierbar, Default `windows-1252`, fester Test mit `leaderboard-recording_AGI_2022_pts_Sen_Men.txt` (enthält windows-1252-Umlaute) |
+| Golden-Referenz nicht reproduzierbar (Timing, JVM-Default-Encoding) | Feeder mit Haltepunkten statt Java-Player; Java-App mit explizitem Encoding und eigenem Arbeitsverzeichnis |
+| Flaggen außer `Green` und leer sind in den vorhandenen Aufnahmen nicht belegt | Weitere lokale Aufnahmen (Yellow/Red/Finish/Purple, Rennwechsel) als Fixtures aufnehmen |
+| Heartbeat-Timing geht verloren (z. B. Unterdrückung „leerer“ Patches) | Test: Bei Replay in Echtzeit kommt mindestens ein Patch pro Sekunde beim Client an |
+| Der WS-Proxy im RaceOffice-Server wird zum Engpass | Sehr geringe Datenrate (≤ 10 Patches/s). Leaderboard-Bildschirme können direkt auf den Service zeigen. |
+| Docker-Netzwerk ↔ Orbits (Firewall, `host.docker.internal`) | Dokumentation, Connection-Verlauf im Control Center |
+
+---
+
+## Entscheidungen
+
+| Thema | Entscheidung |
+|---|---|
+| Auth | Ein optionaler Control-Token (`LEADERBOARD_CONTROL_TOKEN`) reicht |
+| Orbits-Quellen | Immer nur **eine** Quelle gleichzeitig |
+| Parallelbetrieb | Orbits bedient mehrere Clients; Java-App und neuer Service können für den Vergleich gleichzeitig verbunden sein |
+| Persistenz | Anfangs **keine** Speicherung von Rennen in RaceOffice |
+| Recordings | Aufnahmen aus dem Java-Repo dürfen verwendet werden; weitere lokale Aufnahmen kommen hinzu |
+| Stale-Erkennung | Der `$F`-Heartbeat von Orbits kommt jede Sekunde und erzeugt mindestens einen Patch pro Sekunde. Die bestehende 3-s-Regel in `LiveRaceStatus` bleibt, kein künstlicher Keepalive. |
+| Bündelung | Single-File-Bundle mit esbuild, keine `node_modules` zur Laufzeit |
+| Image | `ghcr.io/kaihoefler/raceoffice-leaderboard`, `linux/amd64` + `linux/arm64` |
+| Lizenz | `packages/rmonitor`, `apps/leaderboard-service`, `apps/leaderboard-frontend` unter GPL-3.0-or-later (wie das Original); der Rest von RaceOffice ist nicht betroffen, der Service läuft als eigener Prozess |
+| Vergleichsskript | Vorerst nicht gebaut; die Golden-Tests über 15 Wettkampftage decken den Vergleich offline ab |
+
+## Offene Punkte
+
+1. **Ablösung:** Probelauf mit Java-App parallel bei einer Veranstaltung, danach Java-App abschalten und Hinweise auf `localhost:8080` aufräumen ([07, Abschnitt 4](07-docker-und-deployment.md#4-ablösung-der-java-app)).
+2. **Später:** Speicherung abgeschlossener Rennen (`RaceTO` bei FINISH) für Nachkontrolle und Export.

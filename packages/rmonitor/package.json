@@ -1,0 +1,42 @@
+{
+  "name": "@raceoffice/rmonitor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RMonitor protocol (Orbits) parser and race state model, ported from RMonitorLeaderboard. Includes a controllable fake Orbits TCP feeder for tests.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "golden:generate": "npm run build && node scripts/generate-golden.mjs",
+    "golden:generate:local": "npm run build && node scripts/generate-golden.mjs --local"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "@raceoffice/domain": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.3"
+  }
+}
