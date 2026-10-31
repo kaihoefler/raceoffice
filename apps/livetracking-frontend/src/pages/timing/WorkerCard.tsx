@@ -1,7 +1,8 @@
 // Control Center card "Worker": start/stop the timing worker.
 //
-// Stopping asks whether a running measurement and the decoder simulator should end too.
-// Otherwise their wish ("läuft") stays stored and both resume with the next worker start.
+// Stopping asks whether a running measurement, the decoder simulator and the decoder connections
+// should end too. Otherwise their wish stays stored and they resume with the next worker start
+// (decoders would reconnect immediately).
 // Order matters: the measurement is stopped by the worker itself (stop command), so the stop is
 // queued first and the worker is stopped once the measurement reports idle (or after a timeout).
 
@@ -28,8 +29,10 @@ import {
   createLiveTrackingCommand,
   enqueueLiveTrackingCommand,
   makeLiveTrackingSessionDocId,
+  TIMING_CONNECTION_DOC_ID,
   TIMING_SIMULATOR_DOC_ID,
   type LiveTrackingSessionDocument,
+  type TimingConnectionDocument,
   type TimingSimulatorDocument,
 } from "@raceoffice/domain";
 
@@ -45,9 +48,11 @@ export function WorkerCard({ online, runtime }: { online: boolean; runtime: Retu
   const [dialogOpen, setDialogOpen] = useState(false);
   const [stopMeasurement, setStopMeasurement] = useState(true);
   const [stopSimulator, setStopSimulator] = useState(true);
+  const [disconnectDecoders, setDisconnectDecoders] = useState(true);
 
   const { data: session, update: updateSession } = useRealtimeDoc<LiveTrackingSessionDocument>(makeLiveTrackingSessionDocId());
   const { data: simulator, update: updateSimulator } = useRealtimeDoc<TimingSimulatorDocument>(TIMING_SIMULATOR_DOC_ID);
+  const { data: connection, update: updateConnection } = useRealtimeDoc<TimingConnectionDocument>(TIMING_CONNECTION_DOC_ID);
   const sessionRef = useRef(session);
   useEffect(() => {
     sessionRef.current = session;
@@ -55,6 +60,7 @@ export function WorkerCard({ online, runtime }: { online: boolean; runtime: Retu
 
   const measurementRunning = session?.state === "running";
   const simulatorRunning = simulator?.running === true;
+  const connectedCount = connection?.connectedDecoderIds.length ?? 0;
 
   const post = async (action: "start" | "stop") => {
     try {
@@ -71,10 +77,11 @@ export function WorkerCard({ online, runtime }: { online: boolean; runtime: Retu
     setBusy(false);
   };
 
-  const stop = async (withMeasurement: boolean, withSimulator: boolean) => {
+  const stop = async (withMeasurement: boolean, withSimulator: boolean, withDecoders: boolean) => {
     setBusy(true);
     setError(null);
     if (withSimulator) updateSimulator((prev) => ({ ...prev, running: false, updatedAt: nowIso() }));
+    if (withDecoders) updateConnection((prev) => ({ ...prev, connectedDecoderIds: [], updatedAt: nowIso() }));
     if (withMeasurement && sessionRef.current?.state === "running") {
       updateSession((prev) => {
         const t = nowIso();
@@ -93,12 +100,13 @@ export function WorkerCard({ online, runtime }: { online: boolean; runtime: Retu
   };
 
   const onStopClick = () => {
-    if (!measurementRunning && !simulatorRunning) {
-      void stop(false, false);
+    if (!measurementRunning && !simulatorRunning && connectedCount === 0) {
+      void stop(false, false, false);
       return;
     }
     setStopMeasurement(true);
     setStopSimulator(true);
+    setDisconnectDecoders(true);
     setDialogOpen(true);
   };
 
@@ -150,6 +158,12 @@ export function WorkerCard({ online, runtime }: { online: boolean; runtime: Retu
               label="Decoder-Simulation beenden"
             />
           ) : null}
+          {connectedCount > 0 ? (
+            <FormControlLabel
+              control={<Checkbox checked={disconnectDecoders} onChange={(e) => setDisconnectDecoders(e.target.checked)} />}
+              label={connectedCount === 1 ? "Verbindung zum Decoder trennen" : `Verbindungen zu ${connectedCount} Decodern trennen`}
+            />
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Abbrechen</Button>
@@ -158,7 +172,7 @@ export function WorkerCard({ online, runtime }: { online: boolean; runtime: Retu
             color="warning"
             onClick={() => {
               setDialogOpen(false);
-              void stop(measurementRunning && stopMeasurement, simulatorRunning && stopSimulator);
+              void stop(measurementRunning && stopMeasurement, simulatorRunning && stopSimulator, connectedCount > 0 && disconnectDecoders);
             }}
           >
             Worker stoppen

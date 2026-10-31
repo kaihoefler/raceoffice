@@ -183,7 +183,7 @@ describe("stopping the worker", () => {
   const runtime = () => ({ ...createLiveTrackingRuntimeDocument(), workerStatus: "running", workerHeartbeatAt: new Date().toISOString(), workerProcessId: 42, workerHost: "test" });
   const simulator = (running: boolean) => ({ kind: "timingSimulator", version: 1, running, config: { decoderId: "0A87E5", transponderIds: ["1"], passingDelay: "1000-2000", startupDelaySecs: 0, announceIp: null }, updatedAt: null });
 
-  it("asks about measurement and simulator, stops the measurement first, then the worker", async () => {
+  it("asks about measurement, simulator and decoders, stops the measurement first, then the worker", async () => {
     const calls: Array<{ url: string; body: unknown }> = [];
     const { server, user } = renderApp({
       route: "/timing/control",
@@ -192,15 +192,19 @@ describe("stopping the worker", () => {
         [makeLiveTrackingRuntimeDocId()]: runtime(),
         [makeLiveTrackingSessionDocId()]: { ...createLiveTrackingSessionDocument({ setupId: "s1", eventId: "" }), state: "running" },
         [TIMING_SIMULATOR_DOC_ID]: simulator(true),
+        [TIMING_CONNECTION_DOC_ID]: { ...createTimingConnectionDocument(), connectedDecoderIds: [P3.id] },
       },
     });
     await user.click(await screen.findByRole("button", { name: "Worker stoppen" }));
     const dialog = await screen.findByRole("dialog", { name: "Worker stoppen" });
     expect(within(dialog).getByRole("checkbox", { name: "Laufende Messung stoppen" })).toBeChecked();
     expect(within(dialog).getByRole("checkbox", { name: "Decoder-Simulation beenden" })).toBeChecked();
+    expect(within(dialog).getByRole("checkbox", { name: "Verbindung zum Decoder trennen" })).toBeChecked();
     await user.click(within(dialog).getByRole("button", { name: "Worker stoppen" }));
 
     await waitFor(() => expect(server.doc(TIMING_SIMULATOR_DOC_ID).data.running).toBe(false));
+    // Otherwise the decoder would reconnect as soon as the worker starts again.
+    await waitFor(() => expect(server.doc(TIMING_CONNECTION_DOC_ID).data.connectedDecoderIds).toEqual([]));
     await waitFor(() => expect(server.doc(makeLiveTrackingSessionDocId()).data.commandQueue.map((c: { intent: string }) => c.intent)).toEqual(["stop"]));
     // The worker is stopped only after the measurement reports idle.
     expect(calls.some((c) => c.url === "/live-tracking/worker/stop")).toBe(false);
